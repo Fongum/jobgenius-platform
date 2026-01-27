@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobGenius Saver</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 12px;
+        min-width: 280px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        margin-bottom: 8px;
+      }
+      button {
+        width: 100%;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 12px;
+        min-height: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <label for="apiBaseUrl">API Base URL</label>
+    <input
+      id="apiBaseUrl"
+      type="text"
+      placeholder="https://jobgenius-platform.vercel.app"
+      autocomplete="off"
+    />
+    <button id="saveJob">Save Job</button>
+    <div id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "JobGenius Saver",
+  "version": "0.1.0",
+  "manifest_version": 3,
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://*.vercel.app/*", "http://localhost:3000/*"]
+}
