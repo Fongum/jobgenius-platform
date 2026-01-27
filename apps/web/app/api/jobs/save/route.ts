@@ -2,11 +2,10 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type SaveJobPayload = {
   title?: string;
-  company?: string;
-  location?: string;
-  description?: string;
   url?: string;
   source?: string;
+  raw_html?: string | null;
+  raw_text?: string | null;
 };
 
 export async function POST(request: Request) {
@@ -32,18 +31,22 @@ export async function POST(request: Request) {
     .from("saved_jobs")
     .insert({
       title: payload.title,
-      company: payload.company ?? null,
-      location: payload.location ?? null,
-      description: payload.description ?? null,
       url: payload.url,
       source: payload.source ?? "extension",
+      raw_html: payload.raw_html ?? null,
+      raw_text: payload.raw_text ?? null,
     })
     .select("id")
     .single();
 
   if (error) {
     if (error.code === "23505") {
-      return Response.json({ success: true, id: null, duplicate: true });
+      return Response.json({
+        success: true,
+        id: null,
+        duplicate: true,
+        needs_attention: false,
+      });
     }
 
     return Response.json(
@@ -52,5 +55,10 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json({ success: true, id: data.id, duplicate: false });
+  return Response.json({
+    success: true,
+    id: data.id,
+    duplicate: false,
+    needs_attention: false,
+  });
 }

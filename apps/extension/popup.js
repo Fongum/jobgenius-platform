@@ -58,11 +58,11 @@ saveButton.addEventListener("click", async () => {
   }
 
   const payload = {
-    title: tab.title || "Untitled",
-    company: null,
-    location: null,
-    description: null,
     url: tab.url,
+    title: tab.title || "Untitled",
+    source: "extension",
+    raw_html: null,
+    raw_text: null,
   };
 
   const apiBaseUrl = normalizeBaseUrl(rawBaseUrl);
@@ -91,6 +91,8 @@ saveButton.addEventListener("click", async () => {
     if (data?.success) {
       if (data.duplicate) {
         setStatus("Job already saved (duplicate).", "success");
+      } else if (data.needs_attention) {
+        setStatus("Saved, needs attention.", "success");
       } else if (data.id) {
         setStatus(`Saved! ID: ${data.id}`, "success");
       } else {
