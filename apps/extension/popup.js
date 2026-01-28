@@ -176,5 +176,9 @@ toggleRunnerButton.addEventListener("click", async () => {
     chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: nextValue });
     toggleRunnerButton.textContent = nextValue ? "Stop Runner" : "Start Runner";
     setStatus(nextValue ? "Runner started." : "Runner stopped.");
+
+    if (nextValue) {
+      chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
+    }
   });
 });

@@ -17,6 +17,7 @@ type PrepRow = {
     technical_topics?: string[];
     behavioral_topics?: string[];
     checklist?: string[];
+    thirty_sixty_ninety?: string[];
   };
   job_posts:
     | {
@@ -146,6 +147,8 @@ export default async function InterviewPrepDetailPage({ params }: PageProps) {
         {renderList(row.content?.behavioral_topics)}
         <h2>Checklist</h2>
         {renderList(row.content?.checklist)}
+        <h2>30/60/90 Day Prompts</h2>
+        {renderList(row.content?.thirty_sixty_ninety)}
       </section>
     </main>
   );

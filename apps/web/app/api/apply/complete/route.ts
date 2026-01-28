@@ -1,5 +1,7 @@
 import { buildContactSuggestions, buildDraftEmail } from "@/lib/outreach";
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
+import { fetchCompanyInfo } from "@/lib/company-info";
+import { getActorFromHeaders } from "@/lib/actor";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -91,10 +93,13 @@ export async function POST(request: Request) {
     message: payload.note ?? "Marked applied.",
   });
 
+  const actor = getActorFromHeaders(request.headers);
+
   await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: "INFO",
     event_type: "APPLIED",
+    actor,
     payload: { note: payload.note ?? null },
   });
 
@@ -111,20 +116,52 @@ export async function POST(request: Request) {
     .single();
 
   if (jobPost && jobSeeker) {
+    let scrapedEmails: string[] = [];
+    if (jobPost.company_website) {
+      const info = await fetchCompanyInfo(jobPost.company_website);
+      scrapedEmails = info.emails;
+      if (info.emails.length > 0 || info.pagesVisited.length > 0) {
+        await supabaseServer.from("company_info").insert({
+          company_website: jobPost.company_website,
+          emails: info.emails,
+          pages_visited: info.pagesVisited,
+        });
+      }
+    }
+
+    const rolePriority = [
+      "Hiring Manager",
+      "Recruiter/TA",
+      "Department Head",
+      "Team Lead/Manager",
+    ];
     const suggestions = buildContactSuggestions({
       companyName: jobPost.company,
       companyWebsite: jobPost.company_website,
     });
 
-    const contactRows = suggestions.map((suggestion) => ({
+    const scrapedContacts = scrapedEmails.slice(0, 2).map((email, index) => ({
       job_seeker_id: jobSeeker.id,
       job_post_id: jobPost.id,
       company_name: jobPost.company ?? null,
-      role: suggestion.role,
-      full_name: suggestion.full_name,
-      email: suggestion.email,
-      source: "generated",
+      role: rolePriority[index] ?? "Recruiter/TA",
+      full_name: null,
+      email,
+      source: "scraped",
     }));
+
+    const contactRows =
+      scrapedContacts.length > 0
+        ? scrapedContacts
+        : suggestions.map((suggestion) => ({
+            job_seeker_id: jobSeeker.id,
+            job_post_id: jobPost.id,
+            company_name: jobPost.company ?? null,
+            role: suggestion.role,
+            full_name: suggestion.full_name,
+            email: suggestion.email,
+            source: "generated",
+          }));
 
     const { data: createdContacts } = await supabaseServer
       .from("outreach_contacts")
@@ -155,6 +192,22 @@ export async function POST(request: Request) {
       await supabaseServer
         .from("outreach_drafts")
         .upsert(draftRows, { onConflict: "job_seeker_id,job_post_id,contact_id" });
+    }
+
+    if (draftRows.length > 0) {
+      await supabaseServer.from("apply_outbox").insert(
+        draftRows.map((draft) => ({
+          job_seeker_id: draft.job_seeker_id,
+          job_post_id: draft.job_post_id,
+          draft_id: null,
+          provider: "stub",
+          status: "PENDING",
+          request_payload: {
+            subject: draft.subject,
+          },
+          updated_at: nowIsoInner,
+        }))
+      );
     }
 
     const prepContent = buildInterviewPrepContent({

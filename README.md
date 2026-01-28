@@ -23,6 +23,11 @@ An autonomous job application, interview prep, and recruiter collaboration platf
 - **Human-in-the-loop**: Captcha/2FA/unknown steps set `NEEDS_ATTENTION` and alert AMs.
 - **Retry model**: 2 retries per run (configurable per run).
 
+## Phase 4 (Execution Layer v1)
+- Extension runner polls `/api/apply/next` and runs ATS adapters (LinkedIn/Greenhouse/Workday).
+- Resume uploads use `job_seekers.resume_url` (best-effort).
+- Company info fetcher stores emails in `company_info` and creates outreach drafts + outbox rows.
+
 ## Demo seed/reset
 - `POST /api/seed/demo` creates a demo AM/jobseeker, two jobs, one READY run, and one NEEDS_ATTENTION run.
 - `POST /api/seed/reset` deletes the demo data.

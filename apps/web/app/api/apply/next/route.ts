@@ -4,6 +4,7 @@ import {
   getNextStep,
 } from "@/lib/apply";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type NextPayload = {
@@ -77,10 +78,13 @@ export async function POST(request: Request) {
     meta: payload.meta ?? {},
   });
 
+  const actor = getActorFromHeaders(request.headers);
+
   await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: payload.success ? "INFO" : "WARN",
     event_type: payload.success ? "STEP_DONE" : "STEP_FAILED",
+    actor,
     payload: {
       step: run.current_step,
       error_code: payload.error_code ?? null,
@@ -133,6 +137,7 @@ export async function POST(request: Request) {
         run_id: run.id,
         level: "WARN",
         event_type: "NEEDS_ATTENTION",
+        actor,
         payload: {
           step: run.current_step,
           error_code: errorCode,
@@ -211,6 +216,7 @@ export async function POST(request: Request) {
       run_id: run.id,
       level: "INFO",
       event_type: "RUN_COMPLETED",
+      actor,
       payload: { step: run.current_step },
     });
 
@@ -246,6 +252,7 @@ export async function POST(request: Request) {
     run_id: run.id,
     level: "INFO",
     event_type: "STEP_STARTED",
+    actor,
     payload: { step: nextStep },
   });
 
@@ -287,10 +294,27 @@ export async function GET(request: Request) {
     );
   }
 
+  const { data: assignments, error: assignmentsError } = await supabaseServer
+    .from("job_seeker_assignments")
+    .select("job_seeker_id")
+    .eq("account_manager_id", amResult.accountManager.id);
+
+  if (assignmentsError) {
+    return Response.json(
+      { success: false, error: "Failed to load job seeker assignments." },
+      { status: 500 }
+    );
+  }
+
+  const assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
+  if (assignedIds.length === 0) {
+    return Response.json({ success: true, status: "IDLE" });
+  }
+
   const { data: runningRuns, error: runningError } = await supabaseServer
     .from("application_runs")
     .select("id")
-    .eq("job_seeker_id", jobSeekerId)
+    .in("job_seeker_id", assignedIds)
     .in("status", ["RUNNING", "RETRYING"]);
 
   if (runningError) {
@@ -344,7 +368,7 @@ export async function GET(request: Request) {
 
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
-    .select("id, status, ats_type, current_step")
+    .select("id, status, ats_type, current_step, attempt_count, max_retries")
     .eq("queue_id", queueRow.id)
     .maybeSingle();
 
@@ -380,8 +404,15 @@ export async function GET(request: Request) {
     run_id: runRecord.id,
     level: "INFO",
     event_type: "RUNNING",
+    actor: getActorFromHeaders(request.headers),
     payload: { step: runRecord.current_step },
   });
+
+  const { data: jobSeeker } = await supabaseServer
+    .from("job_seekers")
+    .select("resume_url")
+    .eq("id", jobSeekerId)
+    .maybeSingle();
 
   return Response.json({
     success: true,
@@ -389,6 +420,13 @@ export async function GET(request: Request) {
     status: "RUNNING",
     ats_type: runRecord.ats_type,
     current_step: runRecord.current_step,
+    attempts: {
+      attempt_count: runRecord.attempt_count ?? 0,
+      max_retries: runRecord.max_retries ?? 2,
+    },
+    resume: {
+      url: jobSeeker?.resume_url ?? null,
+    },
     job: {
       id: jobPost.id,
       url: jobPost.url,

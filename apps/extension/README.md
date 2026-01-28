@@ -28,3 +28,13 @@ Chrome extension for AMs to save jobs and run the Phase 3 automation runner.
 - Supports LinkedIn Easy Apply, Greenhouse, Workday (basic click/fill).
 - Logs events to `/api/apply/event`.
 - Captcha or unknown steps pause the run and flag **Needs Attention** in the dashboard.
+
+## Runner v1 testing
+1. Seed demo data with `POST /api/seed/demo`.
+2. Copy the returned `job_seeker_id` into the extension popup.
+3. Start the runner and watch `/dashboard/jobseekers/[id]/queue`.
+4. Expect either APPLIED or NEEDS_ATTENTION with a reason.
+
+## Local testing notes
+- The runner sends `x-am-email` and `x-runner: extension` headers.
+- Resume uploads use `resume_url` from the job seeker record (best-effort).

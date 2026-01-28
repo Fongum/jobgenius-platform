@@ -64,6 +64,7 @@ export async function GET(
     technical_topics?: string[];
     behavioral_topics?: string[];
     checklist?: string[];
+    thirty_sixty_ninety?: string[];
   };
 
   const jobPost = Array.isArray(prep.job_posts) ? prep.job_posts[0] : prep.job_posts;
@@ -87,6 +88,7 @@ export async function GET(
   appendSection(lines, "Technical Topics", content.technical_topics ?? []);
   appendSection(lines, "Behavioral Topics", content.behavioral_topics ?? []);
   appendSection(lines, "Checklist", content.checklist ?? []);
+  appendSection(lines, "30/60/90 Day Prompts", content.thirty_sixty_ninety ?? []);
 
   const pdfBuffer = buildSimplePdf(lines);
 

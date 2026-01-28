@@ -1,4 +1,5 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type EventPayload = {
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
     run_id: run.id,
     level: payload.level ?? "INFO",
     event_type: payload.event_type,
+    actor: getActorFromHeaders(request.headers),
     payload: {
       step: payload.step ?? run.current_step,
       message: payload.message ?? null,

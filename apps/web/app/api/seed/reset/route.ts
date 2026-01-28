@@ -73,6 +73,11 @@ export async function POST() {
       .eq("job_seeker_id", seeker.id);
 
     await supabaseServer
+      .from("apply_outbox")
+      .delete()
+      .eq("job_seeker_id", seeker.id);
+
+    await supabaseServer
       .from("interview_prep")
       .delete()
       .eq("job_seeker_id", seeker.id);
@@ -93,6 +98,11 @@ export async function POST() {
   if (jobPostIds.length > 0) {
     await supabaseServer.from("job_posts").delete().in("id", jobPostIds);
   }
+
+  await supabaseServer
+    .from("company_info")
+    .delete()
+    .eq("company_website", "https://example.com");
 
   if (am?.id) {
     await supabaseServer.from("account_managers").delete().eq("id", am.id);

@@ -78,6 +78,20 @@ export async function POST(
   const nowIso = new Date().toISOString();
 
   if (!result.ok) {
+    await supabaseServer.from("apply_outbox").insert({
+      job_seeker_id: draft.job_seeker_id,
+      job_post_id: draft.job_post_id,
+      draft_id: draft.id,
+      provider: result.provider,
+      status: "FAILED",
+      request_payload: {
+        to: contact.email,
+        subject: draft.subject ?? "",
+      },
+      response_payload: { detail: result.detail ?? null },
+      updated_at: nowIso,
+    });
+
     await supabaseServer
       .from("outreach_drafts")
       .update({ status: "FAILED", last_error: result.detail ?? "Send failed.", updated_at: nowIso })
@@ -88,6 +102,21 @@ export async function POST(
       { status: 500 }
     );
   }
+
+  await supabaseServer.from("apply_outbox").insert({
+    job_seeker_id: draft.job_seeker_id,
+    job_post_id: draft.job_post_id,
+    draft_id: draft.id,
+    provider: result.provider,
+    status: "SENT",
+    request_payload: {
+      to: contact.email,
+      subject: draft.subject ?? "",
+    },
+    response_payload: { message_id: result.messageId ?? null },
+    updated_at: nowIso,
+    sent_at: nowIso,
+  });
 
   await supabaseServer
     .from("outreach_drafts")

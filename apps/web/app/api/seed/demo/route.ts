@@ -17,6 +17,7 @@ export async function POST() {
     target_titles: ["Software Engineer", "Full Stack Engineer"],
     skills: ["JavaScript", "TypeScript", "React", "Node", "PostgreSQL"],
     resume_text: "Senior full stack engineer with experience in React and Node.",
+    resume_url: "https://example.com/assets/resume.pdf",
   };
 
   const demoJobs = [
@@ -202,6 +203,7 @@ export async function POST() {
         run_id: attentionRun.id,
         level: "WARN",
         event_type: "NEEDS_ATTENTION",
+        actor: "SYSTEM",
         payload: { reason: "CAPTCHA" },
       });
     }

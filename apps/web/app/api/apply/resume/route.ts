@@ -1,4 +1,5 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type ResumePayload = {
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
     run_id: run.id,
     level: "INFO",
     event_type: "RESUMED",
+    actor: getActorFromHeaders(request.headers),
     payload: { note: payload.note ?? null },
   });
 

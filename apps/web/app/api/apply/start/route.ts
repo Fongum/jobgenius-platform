@@ -1,4 +1,5 @@
 import { detectAtsType, getInitialStep } from "@/lib/apply";
+import { getActorFromHeaders } from "@/lib/actor";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -72,11 +73,25 @@ export async function POST(request: Request) {
   }
 
   if (!existingRun) {
-    const { data: runningCountRows, error: runningCountError } =
+  const { data: assignments, error: assignmentsError } = await supabaseServer
+    .from("job_seeker_assignments")
+    .select("job_seeker_id")
+    .eq("account_manager_id", amResult.accountManager.id);
+
+  if (assignmentsError) {
+    return Response.json(
+      { success: false, error: "Failed to load job seeker assignments." },
+      { status: 500 }
+    );
+  }
+
+  const assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
+
+  const { data: runningCountRows, error: runningCountError } =
       await supabaseServer
         .from("application_runs")
         .select("id")
-        .eq("job_seeker_id", queueItem.job_seeker_id)
+        .in("job_seeker_id", assignedIds)
         .in("status", ["RUNNING", "RETRYING"]);
 
     if (runningCountError) {
@@ -163,6 +178,7 @@ export async function POST(request: Request) {
     run_id: createdRun.id,
     level: "INFO",
     event_type: "READY",
+    actor: getActorFromHeaders(request.headers),
     payload: { step: initialStep },
   });
 

@@ -1,4 +1,5 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type PausePayload = {
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
     run_id: run.id,
     level: "WARN",
     event_type: "NEEDS_ATTENTION",
+    actor: getActorFromHeaders(request.headers),
     payload: {
       reason,
       step: payload.step ?? run.current_step,

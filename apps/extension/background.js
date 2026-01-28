@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
 };
 
 const RUNNER_ALARM = "jobgenius-runner";
+const activeRuns = new Set();
 
 function getStorage(keys) {
   return new Promise((resolve) => {
@@ -26,7 +27,7 @@ async function fetchNextJob(apiBaseUrl, amEmail, jobSeekerId) {
 
   const response = await fetch(endpoint, {
     method: "GET",
-    headers: { "x-am-email": amEmail },
+    headers: { "x-am-email": amEmail, "x-runner": "extension" },
   });
 
   if (!response.ok) {
@@ -36,7 +37,7 @@ async function fetchNextJob(apiBaseUrl, amEmail, jobSeekerId) {
   return response.json();
 }
 
-async function runJobInTab(job, runId, apiBaseUrl, amEmail) {
+async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl) {
   const tab = await chrome.tabs.create({ url: job.url, active: false });
 
   await new Promise((resolve) => {
@@ -60,6 +61,7 @@ async function runJobInTab(job, runId, apiBaseUrl, amEmail) {
     apiBaseUrl,
     amEmail,
     job,
+    resumeUrl,
   });
 }
 
@@ -76,6 +78,10 @@ async function pollRunner() {
   }
 
   if (!apiBaseUrl || !amEmail || !jobSeekerId) {
+    return;
+  }
+
+  if (activeRuns.size >= 5) {
     return;
   }
 
@@ -96,7 +102,14 @@ async function pollRunner() {
   }
 
   if (payload.run_id && payload.job?.url) {
-    await runJobInTab(payload.job, payload.run_id, apiBaseUrl, amEmail);
+    activeRuns.add(payload.run_id);
+    await runJobInTab(
+      payload.job,
+      payload.run_id,
+      apiBaseUrl,
+      amEmail,
+      payload.resume?.url ?? null
+    );
   }
 }
 
@@ -120,6 +133,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: true });
     });
     return true;
+  }
+
+  if (message?.type === "RUNNER_RUN_NOW") {
+    pollRunner().then(() => sendResponse({ success: true }));
+    return true;
+  }
+
+  if (message?.type === "RUN_COMPLETE" && message.runId) {
+    activeRuns.delete(message.runId);
+    return false;
   }
 
   return false;
