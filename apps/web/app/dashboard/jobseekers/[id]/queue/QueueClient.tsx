@@ -10,6 +10,14 @@ type QueueItem = {
   score: number;
   decision: string | null;
   created_at: string | null;
+  queue_id: string | null;
+  queue_status: string | null;
+  last_error: string | null;
+  events: Array<{
+    event_type: string;
+    message: string | null;
+    created_at: string;
+  }>;
 };
 
 type QueueClientProps = {
@@ -20,6 +28,7 @@ type QueueClientProps = {
 const tabs = [
   "Recommended",
   "Below threshold",
+  "Needs Attention",
   "Overridden In",
   "Overridden Out",
 ] as const;
@@ -32,10 +41,19 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
 
   const grouped = useMemo(() => {
     const recommended = items.filter(
-      (item) => item.score >= 60 && item.decision !== "OVERRIDDEN_OUT"
+      (item) =>
+        item.score >= 60 &&
+        item.decision !== "OVERRIDDEN_OUT" &&
+        item.queue_status !== "NEEDS_ATTENTION"
     );
     const below = items.filter(
-      (item) => item.score < 60 && item.decision !== "OVERRIDDEN_IN"
+      (item) =>
+        item.score < 60 &&
+        item.decision !== "OVERRIDDEN_IN" &&
+        item.queue_status !== "NEEDS_ATTENTION"
+    );
+    const needsAttention = items.filter(
+      (item) => item.queue_status === "NEEDS_ATTENTION"
     );
     const overriddenIn = items.filter(
       (item) => item.decision === "OVERRIDDEN_IN"
@@ -47,6 +65,7 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
     return {
       Recommended: recommended,
       "Below threshold": below,
+      "Needs Attention": needsAttention,
       "Overridden In": overriddenIn,
       "Overridden Out": overriddenOut,
     };
@@ -101,6 +120,46 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
     }
   }
 
+  async function handleResume(queueId: string) {
+    setBusyId(queueId);
+    try {
+      const response = await fetch("/api/orchestrator/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queue_id: queueId }),
+      });
+
+      if (!response.ok) {
+        console.error("Resume failed.");
+        return;
+      }
+
+      window.location.reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleMark(queueId: string, status: "FAILED" | "CANCELLED") {
+    setBusyId(queueId);
+    try {
+      const response = await fetch("/api/orchestrator/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queue_id: queueId, status }),
+      });
+
+      if (!response.ok) {
+        console.error("Mark failed.");
+        return;
+      }
+
+      window.location.reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <section>
       <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
@@ -133,12 +192,32 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
               {item.location ? ` (${item.location})` : ""}
               <div>Score: {item.score}</div>
               <div>Decision: {item.decision ?? "NONE"}</div>
+              <div>Status: {item.queue_status ?? "NOT_QUEUED"}</div>
               <div>
                 Created:{" "}
                 {item.created_at
                   ? new Date(item.created_at).toLocaleString()
                   : "—"}
               </div>
+              {item.last_error ? (
+                <div style={{ color: "#b91c1c" }}>
+                  Last error: {item.last_error}
+                </div>
+              ) : null}
+              {item.events.length > 0 ? (
+                <div>
+                  Recent events:
+                  <ul>
+                    {item.events.map((event) => (
+                      <li key={`${item.job_post_id}-${event.created_at}`}>
+                        {event.event_type}{" "}
+                        {event.message ? `- ${event.message}` : ""} (
+                        {new Date(event.created_at).toLocaleString()})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
                 <button
                   type="button"
@@ -165,6 +244,35 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
                 >
                   Enqueue Application
                 </button>
+                {item.queue_id ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleResume(item.queue_id as string)}
+                      disabled={busyId === item.queue_id}
+                    >
+                      Resume
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleMark(item.queue_id as string, "FAILED")
+                      }
+                      disabled={busyId === item.queue_id}
+                    >
+                      Mark Failed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleMark(item.queue_id as string, "CANCELLED")
+                      }
+                      disabled={busyId === item.queue_id}
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                ) : null}
               </div>
             </li>
           ))}

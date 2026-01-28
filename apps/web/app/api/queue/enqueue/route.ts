@@ -31,6 +31,7 @@ export async function POST(request: Request) {
     job_post_id: payload.job_post_id,
     job_seeker_id: payload.job_seeker_id,
     status: "QUEUED",
+    updated_at: new Date().toISOString(),
   });
 
   if (error) {
