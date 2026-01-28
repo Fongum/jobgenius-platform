@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type EventPayload = {
   run_id?: string;
+  claim_token?: string;
   level?: "INFO" | "WARN" | "ERROR";
   event_type?: string;
   step?: string;
@@ -11,6 +12,10 @@ type EventPayload = {
   payload?: Record<string, unknown>;
   last_seen_url?: string;
 };
+
+function requiresClaimToken(headers: Headers) {
+  return (headers.get("x-runner") ?? "").toLowerCase() === "extension";
+}
 
 export async function POST(request: Request) {
   let payload: EventPayload;
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
 
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
-    .select("id, job_seeker_id, current_step")
+    .select("id, job_seeker_id, current_step, claim_token")
     .eq("id", payload.run_id)
     .single();
 
@@ -59,6 +64,21 @@ export async function POST(request: Request) {
       { success: false, error: "Not authorized for this job seeker." },
       { status: 403 }
     );
+  }
+
+  if (requiresClaimToken(request.headers)) {
+    if (!payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Missing claim_token." },
+        { status: 400 }
+      );
+    }
+    if (!run.claim_token || run.claim_token !== payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Claim token mismatch." },
+        { status: 409 }
+      );
+    }
   }
 
   await supabaseServer.from("apply_run_events").insert({

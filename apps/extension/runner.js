@@ -19,7 +19,11 @@ async function postJson(url, payload, amEmail) {
 }
 
 async function logEvent(ctx, payload) {
-  return postJson(`${ctx.apiBaseUrl}/api/apply/event`, payload, ctx.amEmail);
+  return postJson(
+    `${ctx.apiBaseUrl}/api/apply/event`,
+    { ...payload, claim_token: ctx.claimToken },
+    ctx.amEmail
+  );
 }
 
 function sleep(ms) {
@@ -53,6 +57,15 @@ function hasSmsOtp() {
   if (text.includes("sms") && text.includes("code")) return true;
   if (text.includes("text message") && text.includes("code")) return true;
   return Boolean(document.querySelector("input[type='tel']"));
+}
+
+function hasEmailOtp() {
+  const text = document.body?.innerText?.toLowerCase() ?? "";
+  if (text.includes("email") && text.includes("code")) return true;
+  if (text.includes("verification") && text.includes("code")) return true;
+  return Boolean(
+    document.querySelector("input[autocomplete='one-time-code'], input[name*='code']")
+  );
 }
 
 async function fillTextInputs(defaultEmail) {
@@ -92,6 +105,40 @@ function requiredFieldsMissing() {
     document.querySelectorAll("input[required], textarea[required], select[required]")
   );
   return requiredInputs.some((input) => !input.value);
+}
+
+async function waitForEmailOtp(ctx, timeoutMs = 60000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(
+        `${ctx.apiBaseUrl}/api/otp/latest?jobSeekerId=${encodeURIComponent(
+          ctx.jobSeekerId
+        )}`,
+        { headers: { "x-am-email": ctx.amEmail, "x-runner": "extension" } }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.code && data?.id) {
+          return { code: data.code, id: data.id };
+        }
+      }
+    } catch {
+      // ignore polling errors
+    }
+    await sleep(3000);
+  }
+
+  return null;
+}
+
+async function markOtpUsed(ctx, otpId) {
+  if (!otpId) return;
+  await postJson(
+    `${ctx.apiBaseUrl}/api/otp/mark-used`,
+    { otp_id: otpId },
+    ctx.amEmail
+  );
 }
 
 const adapters = {
@@ -142,6 +189,10 @@ const adapters = {
         findButtonByText(["next", "review", "submit application", "submit"]);
       if (!nextButton) {
         return { status: "NEEDS_ATTENTION", reason: "SUBMIT_BUTTON_MISSING" };
+      }
+
+      if (ctx.dryRun) {
+        return { status: "NEEDS_ATTENTION", reason: "DRY_RUN_CONFIRM_SUBMIT" };
       }
 
       await logEvent(ctx, {
@@ -200,6 +251,10 @@ const adapters = {
         return { status: "NEEDS_ATTENTION", reason: "SUBMIT_BUTTON_MISSING" };
       }
 
+      if (ctx.dryRun) {
+        return { status: "NEEDS_ATTENTION", reason: "DRY_RUN_CONFIRM_SUBMIT" };
+      }
+
       await logEvent(ctx, {
         run_id: ctx.runId,
         event_type: "STEP_SUBMIT_CLICK",
@@ -221,7 +276,7 @@ const adapters = {
     detect: () => window.location.hostname.toLowerCase().includes("workday"),
     async run(ctx) {
       if (hasSmsOtp()) {
-        return { status: "NEEDS_ATTENTION", reason: "SMS_OTP_REQUIRED" };
+        return { status: "NEEDS_ATTENTION", reason: "OTP_SMS" };
       }
 
       await logEvent(ctx, {
@@ -263,6 +318,10 @@ const adapters = {
         return { status: "NEEDS_ATTENTION", reason: "SUBMIT_BUTTON_MISSING" };
       }
 
+      if (ctx.dryRun) {
+        return { status: "NEEDS_ATTENTION", reason: "DRY_RUN_CONFIRM_SUBMIT" };
+      }
+
       await logEvent(ctx, {
         run_id: ctx.runId,
         event_type: "STEP_SUBMIT_CLICK",
@@ -282,11 +341,29 @@ const adapters = {
   },
 };
 
-async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
+async function runAutomation({
+  runId,
+  claimToken,
+  apiBaseUrl,
+  amEmail,
+  jobSeekerId,
+  job,
+  resumeUrl,
+  dryRun,
+}) {
   const atsType = detectAtsType();
   const adapter = adapters[atsType] ?? null;
 
-  const ctx = { runId, apiBaseUrl, amEmail, defaultEmail: amEmail, resumeUrl };
+  const ctx = {
+    runId,
+    claimToken,
+    apiBaseUrl,
+    amEmail,
+    jobSeekerId,
+    defaultEmail: amEmail,
+    resumeUrl,
+    dryRun: Boolean(dryRun),
+  };
 
   await logEvent(ctx, {
     run_id: runId,
@@ -301,6 +378,7 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
       `${apiBaseUrl}/api/apply/pause`,
       {
         run_id: runId,
+        claim_token: claimToken,
         reason: "UNKNOWN_ATS",
         message: "ATS type not recognized.",
         last_seen_url: window.location.href,
@@ -316,6 +394,7 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
       `${apiBaseUrl}/api/apply/pause`,
       {
         run_id: runId,
+        claim_token: claimToken,
         reason: "CAPTCHA",
         message: "Captcha detected.",
         last_seen_url: window.location.href,
@@ -331,7 +410,8 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
       `${apiBaseUrl}/api/apply/pause`,
       {
         run_id: runId,
-        reason: "SMS_OTP_REQUIRED",
+        claim_token: claimToken,
+        reason: "OTP_SMS",
         message: "SMS verification required.",
         last_seen_url: window.location.href,
       },
@@ -339,6 +419,51 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
     );
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId });
     return;
+  }
+
+  if (hasEmailOtp()) {
+    const otp = await waitForEmailOtp(ctx);
+    if (!otp?.code) {
+      await postJson(
+        `${apiBaseUrl}/api/apply/pause`,
+        {
+          run_id: runId,
+          claim_token: claimToken,
+          reason: "OTP_EMAIL",
+          message: "Email verification code required.",
+          last_seen_url: window.location.href,
+        },
+        amEmail
+      );
+      chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId });
+      return;
+    }
+
+    const otpInput =
+      document.querySelector("input[autocomplete='one-time-code']") ||
+      document.querySelector("input[name*='code']") ||
+      document.querySelector("input[type='text']");
+
+    if (otpInput) {
+      otpInput.focus();
+      otpInput.value = otp.code;
+      otpInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await markOtpUsed(ctx, otp.id);
+    } else {
+      await postJson(
+        `${apiBaseUrl}/api/apply/pause`,
+        {
+          run_id: runId,
+          claim_token: claimToken,
+          reason: "OTP_EMAIL",
+          message: "OTP input not found.",
+          last_seen_url: window.location.href,
+        },
+        amEmail
+      );
+      chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId });
+      return;
+    }
   }
 
   let result;
@@ -349,6 +474,7 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
       `${apiBaseUrl}/api/apply/retry`,
       {
         run_id: runId,
+        claim_token: claimToken,
         note: "Runner error, retry requested.",
       },
       amEmail
@@ -362,6 +488,7 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
       `${apiBaseUrl}/api/apply/complete`,
       {
         run_id: runId,
+        claim_token: claimToken,
         note: "Application submitted by runner.",
         last_seen_url: window.location.href,
       },
@@ -376,6 +503,7 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
       `${apiBaseUrl}/api/apply/pause`,
       {
         run_id: runId,
+        claim_token: claimToken,
         reason: result.reason ?? "UNKNOWN",
         message: "Runner needs attention.",
         last_seen_url: window.location.href,
@@ -390,6 +518,7 @@ async function runAutomation({ runId, apiBaseUrl, amEmail, job, resumeUrl }) {
     `${apiBaseUrl}/api/apply/retry`,
     {
       run_id: runId,
+      claim_token: claimToken,
       note: "Runner retry.",
     },
     amEmail
@@ -402,10 +531,13 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "START_RUN") return;
   runAutomation({
     runId: message.runId,
+    claimToken: message.claimToken,
     apiBaseUrl: message.apiBaseUrl,
     amEmail: message.amEmail,
+    jobSeekerId: message.jobSeekerId,
     job: message.job,
     resumeUrl: message.resumeUrl,
+    dryRun: message.dryRun,
   }).catch((error) => {
     console.error("Runner error:", error);
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: message.runId });

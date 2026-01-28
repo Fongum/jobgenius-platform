@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type PausePayload = {
   run_id?: string;
+  claim_token?: string;
   reason?: string;
   error_code?: string;
   message?: string;
@@ -11,6 +12,10 @@ type PausePayload = {
   step?: string;
   dom_hint?: string;
 };
+
+function requiresClaimToken(headers: Headers) {
+  return (headers.get("x-runner") ?? "").toLowerCase() === "extension";
+}
 
 export async function POST(request: Request) {
   let payload: PausePayload;
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
 
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
-    .select("id, queue_id, current_step, job_seeker_id, ats_type")
+    .select("id, queue_id, current_step, job_seeker_id, ats_type, claim_token")
     .eq("id", payload.run_id)
     .single();
 
@@ -59,6 +64,21 @@ export async function POST(request: Request) {
       { success: false, error: "Not authorized for this job seeker." },
       { status: 403 }
     );
+  }
+
+  if (requiresClaimToken(request.headers)) {
+    if (!payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Missing claim_token." },
+        { status: 400 }
+      );
+    }
+    if (!run.claim_token || run.claim_token !== payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Claim token mismatch." },
+        { status: 409 }
+      );
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -92,6 +112,9 @@ export async function POST(request: Request) {
       last_error: payload.message ?? "Needs attention.",
       last_error_code: payload.error_code ?? reason,
       last_seen_url: payload.last_seen_url ?? null,
+      locked_at: null,
+      locked_by: null,
+      claim_token: null,
       updated_at: nowIso,
     })
     .eq("id", run.id);

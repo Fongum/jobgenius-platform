@@ -3,6 +3,7 @@ const STORAGE_KEYS = {
   amEmail: "amEmail",
   jobSeekerId: "jobSeekerId",
   runnerEnabled: "runnerEnabled",
+  dryRun: "dryRun",
 };
 
 const RUNNER_ALARM = "jobgenius-runner";
@@ -37,7 +38,7 @@ async function fetchNextJob(apiBaseUrl, amEmail, jobSeekerId) {
   return response.json();
 }
 
-async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl) {
+async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl, claimToken, jobSeekerId, dryRun) {
   const tab = await chrome.tabs.create({ url: job.url, active: false });
 
   await new Promise((resolve) => {
@@ -58,10 +59,13 @@ async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl) {
   chrome.tabs.sendMessage(tab.id, {
     type: "START_RUN",
     runId,
+    claimToken,
     apiBaseUrl,
     amEmail,
+    jobSeekerId,
     job,
     resumeUrl,
+    dryRun: Boolean(dryRun),
   });
 }
 
@@ -71,6 +75,7 @@ async function pollRunner() {
     amEmail,
     jobSeekerId,
     runnerEnabled,
+    dryRun,
   } = await getStorage(Object.values(STORAGE_KEYS));
 
   if (!runnerEnabled) {
@@ -108,7 +113,10 @@ async function pollRunner() {
       payload.run_id,
       apiBaseUrl,
       amEmail,
-      payload.resume?.url ?? null
+      payload.resume?.url ?? null,
+      payload.claim_token ?? null,
+      payload.job_seeker_id ?? jobSeekerId,
+      dryRun
     );
   }
 }

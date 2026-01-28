@@ -6,6 +6,7 @@ import {
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
+import { randomUUID } from "crypto";
 
 type NextPayload = {
   run_id?: string;
@@ -333,31 +334,78 @@ export async function GET(request: Request) {
     });
   }
 
-  const { data: queueRow, error: queueError } = await supabaseServer
-    .from("application_queue")
-    .select(
-      "id, job_post_id, status, job_posts (id, url, title, company, source)"
-    )
+  const { data: nextRun, error: nextRunError } = await supabaseServer
+    .from("application_runs")
+    .select("id, queue_id, job_post_id, ats_type, status, current_step, attempt_count, max_retries")
     .eq("job_seeker_id", jobSeekerId)
-    .in("status", ["READY", "QUEUED"])
-    .order("created_at", { ascending: true })
+    .in("status", ["READY", "RETRYING"])
+    .is("locked_at", null)
+    .order("updated_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
-  if (queueError) {
+  if (nextRunError) {
     return Response.json(
-      { success: false, error: "Failed to load queue." },
+      { success: false, error: "Failed to load next run." },
       { status: 500 }
     );
   }
 
-  if (!queueRow) {
+  if (!nextRun) {
     return Response.json({ success: true, status: "IDLE" });
   }
 
-  const jobPost = Array.isArray(queueRow.job_posts)
-    ? queueRow.job_posts[0]
-    : queueRow.job_posts;
+  const nowIso = new Date().toISOString();
+  const claimToken = randomUUID();
+  const actor = getActorFromHeaders(request.headers);
+  const lockedBy = `${actor}:${amResult.accountManager.email}`;
+
+  const { data: lockedRun, error: lockError } = await supabaseServer
+    .from("application_runs")
+    .update({
+      status: "RUNNING",
+      locked_at: nowIso,
+      locked_by: lockedBy,
+      claim_token: claimToken,
+      updated_at: nowIso,
+    })
+    .eq("id", nextRun.id)
+    .is("locked_at", null)
+    .in("status", ["READY", "RETRYING"])
+    .select("id, queue_id, ats_type, current_step, attempt_count, max_retries, job_post_id")
+    .single();
+
+  if (lockError || !lockedRun) {
+    return Response.json({ success: true, status: "IDLE" });
+  }
+
+  if (lockedRun.queue_id) {
+    await supabaseServer
+      .from("application_queue")
+      .update({ status: "RUNNING", updated_at: nowIso })
+      .eq("id", lockedRun.queue_id);
+  }
+
+  await supabaseServer.from("apply_run_events").insert({
+    run_id: lockedRun.id,
+    level: "INFO",
+    event_type: "RUNNING",
+    actor,
+    payload: { step: lockedRun.current_step },
+  });
+
+  const [{ data: jobSeeker }, { data: jobPost }] = await Promise.all([
+    supabaseServer
+      .from("job_seekers")
+      .select("resume_url")
+      .eq("id", jobSeekerId)
+      .maybeSingle(),
+    supabaseServer
+      .from("job_posts")
+      .select("id, url, title, company, source")
+      .eq("id", lockedRun.job_post_id)
+      .single(),
+  ]);
 
   if (!jobPost?.id) {
     return Response.json(
@@ -366,63 +414,17 @@ export async function GET(request: Request) {
     );
   }
 
-  const { data: run, error: runError } = await supabaseServer
-    .from("application_runs")
-    .select("id, status, ats_type, current_step, attempt_count, max_retries")
-    .eq("queue_id", queueRow.id)
-    .maybeSingle();
-
-  if (runError) {
-    return Response.json(
-      { success: false, error: "Failed to load run." },
-      { status: 500 }
-    );
-  }
-
-  let runRecord = run;
-  const nowIso = new Date().toISOString();
-  if (!runRecord) {
-    return Response.json(
-      { success: false, error: "Run missing. Start from dashboard first." },
-      { status: 409 }
-    );
-  }
-
-  if (runRecord.status !== "RUNNING") {
-    await supabaseServer
-      .from("application_runs")
-      .update({ status: "RUNNING", updated_at: nowIso })
-      .eq("id", runRecord.id);
-  }
-
-  await supabaseServer
-    .from("application_queue")
-    .update({ status: "RUNNING", updated_at: nowIso })
-    .eq("id", queueRow.id);
-
-  await supabaseServer.from("apply_run_events").insert({
-    run_id: runRecord.id,
-    level: "INFO",
-    event_type: "RUNNING",
-    actor: getActorFromHeaders(request.headers),
-    payload: { step: runRecord.current_step },
-  });
-
-  const { data: jobSeeker } = await supabaseServer
-    .from("job_seekers")
-    .select("resume_url")
-    .eq("id", jobSeekerId)
-    .maybeSingle();
-
   return Response.json({
     success: true,
-    run_id: runRecord.id,
+    run_id: lockedRun.id,
+    claim_token: claimToken,
     status: "RUNNING",
-    ats_type: runRecord.ats_type,
-    current_step: runRecord.current_step,
+    ats_type: lockedRun.ats_type,
+    current_step: lockedRun.current_step,
+    job_seeker_id: jobSeekerId,
     attempts: {
-      attempt_count: runRecord.attempt_count ?? 0,
-      max_retries: runRecord.max_retries ?? 2,
+      attempt_count: lockedRun.attempt_count ?? 0,
+      max_retries: lockedRun.max_retries ?? 2,
     },
     resume: {
       url: jobSeeker?.resume_url ?? null,

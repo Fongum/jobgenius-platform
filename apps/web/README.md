@@ -21,3 +21,10 @@ Example:
 curl -X POST http://localhost:3000/api/seed/demo
 curl -X POST http://localhost:3000/api/seed/reset
 ```
+
+## Runner dry run + OTP
+- Extension popup: enable "Dry run (no submit)" to pause at submit with reason `DRY_RUN_CONFIRM_SUBMIT`.
+- Dashboard attention: click "Resume (real submit)" to allow the runner to submit.
+- OTP email flow:
+  - AM can `POST /api/otp/submit` with a code (channel EMAIL/SMS).
+  - Runner polls `GET /api/otp/latest?jobSeekerId=...` for email OTP and marks it used via `POST /api/otp/mark-used`.

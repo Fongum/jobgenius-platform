@@ -66,6 +66,9 @@ export async function POST(request: Request) {
       last_error: null,
       last_error_code: null,
       needs_attention_reason: null,
+      locked_at: null,
+      locked_by: null,
+      claim_token: null,
       updated_at: nowIso,
     })
     .eq("id", run.id);

@@ -2,9 +2,11 @@ const storageKey = "apiBaseUrl";
 const amEmailKey = "amEmail";
 const jobSeekerKey = "jobSeekerId";
 const runnerKey = "runnerEnabled";
+const dryRunKey = "dryRun";
 const apiBaseUrlInput = document.getElementById("apiBaseUrl");
 const amEmailInput = document.getElementById("amEmail");
 const jobSeekerInput = document.getElementById("jobSeekerId");
+const dryRunInput = document.getElementById("dryRun");
 const saveButton = document.getElementById("saveJob");
 const toggleRunnerButton = document.getElementById("toggleRunner");
 const statusEl = document.getElementById("status");
@@ -45,6 +47,12 @@ chrome.storage.local.get([jobSeekerKey], (result) => {
   }
 });
 
+chrome.storage.local.get([dryRunKey], (result) => {
+  if (dryRunInput) {
+    dryRunInput.checked = Boolean(result[dryRunKey]);
+  }
+});
+
 chrome.storage.local.get([runnerKey], (result) => {
   toggleRunnerButton.textContent = result[runnerKey]
     ? "Stop Runner"
@@ -66,6 +74,12 @@ amEmailInput.addEventListener("input", () => {
 jobSeekerInput.addEventListener("input", () => {
   chrome.storage.local.set({ [jobSeekerKey]: jobSeekerInput.value.trim() });
 });
+
+if (dryRunInput) {
+  dryRunInput.addEventListener("change", () => {
+    chrome.storage.local.set({ [dryRunKey]: dryRunInput.checked });
+  });
+}
 
 saveButton.addEventListener("click", async () => {
   const apiBaseUrl = getApiBaseUrlFromInput();

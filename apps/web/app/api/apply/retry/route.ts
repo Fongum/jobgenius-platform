@@ -4,8 +4,13 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type RetryPayload = {
   run_id?: string;
+  claim_token?: string;
   note?: string;
 };
+
+function requiresClaimToken(headers: Headers) {
+  return (headers.get("x-runner") ?? "").toLowerCase() === "extension";
+}
 
 export async function POST(request: Request) {
   let payload: RetryPayload;
@@ -28,7 +33,9 @@ export async function POST(request: Request) {
 
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
-    .select("id, queue_id, ats_type, current_step, job_seeker_id, attempt_count, max_retries")
+    .select(
+      "id, queue_id, ats_type, current_step, job_seeker_id, attempt_count, max_retries, claim_token"
+    )
     .eq("id", payload.run_id)
     .single();
 
@@ -56,6 +63,21 @@ export async function POST(request: Request) {
     );
   }
 
+  if (requiresClaimToken(request.headers)) {
+    if (!payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Missing claim_token." },
+        { status: 400 }
+      );
+    }
+    if (!run.claim_token || run.claim_token !== payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Claim token mismatch." },
+        { status: 409 }
+      );
+    }
+  }
+
   const nowIso = new Date().toISOString();
   const nextAttempt = (run.attempt_count ?? 0) + 1;
   if (nextAttempt > (run.max_retries ?? 2)) {
@@ -73,6 +95,9 @@ export async function POST(request: Request) {
       last_error: null,
       last_error_code: null,
       attempt_count: nextAttempt,
+      locked_at: null,
+      locked_by: null,
+      claim_token: null,
       updated_at: nowIso,
     })
     .eq("id", run.id);

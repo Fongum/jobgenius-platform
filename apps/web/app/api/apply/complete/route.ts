@@ -7,9 +7,14 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type CompletePayload = {
   run_id?: string;
+  claim_token?: string;
   note?: string;
   last_seen_url?: string;
 };
+
+function requiresClaimToken(headers: Headers) {
+  return (headers.get("x-runner") ?? "").toLowerCase() === "extension";
+}
 
 export async function POST(request: Request) {
   let payload: CompletePayload;
@@ -32,7 +37,9 @@ export async function POST(request: Request) {
 
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
-    .select("id, queue_id, job_seeker_id, job_post_id, ats_type, current_step")
+    .select(
+      "id, queue_id, job_seeker_id, job_post_id, ats_type, current_step, claim_token"
+    )
     .eq("id", payload.run_id)
     .single();
 
@@ -60,6 +67,21 @@ export async function POST(request: Request) {
     );
   }
 
+  if (requiresClaimToken(request.headers)) {
+    if (!payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Missing claim_token." },
+        { status: 400 }
+      );
+    }
+    if (!run.claim_token || run.claim_token !== payload.claim_token) {
+      return Response.json(
+        { success: false, error: "Claim token mismatch." },
+        { status: 409 }
+      );
+    }
+  }
+
   const nowIso = new Date().toISOString();
 
   const { error } = await supabaseServer
@@ -68,6 +90,9 @@ export async function POST(request: Request) {
       status: "APPLIED",
       needs_attention_reason: null,
       last_seen_url: payload.last_seen_url ?? null,
+      locked_at: null,
+      locked_by: null,
+      claim_token: null,
       updated_at: nowIso,
     })
     .eq("id", run.id);

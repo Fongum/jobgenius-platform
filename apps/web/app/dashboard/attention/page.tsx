@@ -50,6 +50,9 @@ const atsOptions = ["LINKEDIN", "GREENHOUSE", "WORKDAY"];
 const reasonOptions = [
   "CAPTCHA",
   "OTP_REQUIRED",
+  "OTP_EMAIL",
+  "OTP_SMS",
+  "DRY_RUN_CONFIRM_SUBMIT",
   "NAVIGATION_ERROR",
   "VALIDATION_ERROR",
   "UNKNOWN",
