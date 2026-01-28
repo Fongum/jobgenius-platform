@@ -44,7 +44,22 @@
       placeholder="https://jobgenius-platform.vercel.app"
       autocomplete="off"
     />
+    <label for="amEmail">AM Email (x-am-email)</label>
+    <input
+      id="amEmail"
+      type="email"
+      placeholder="am@jobgenius.ai"
+      autocomplete="off"
+    />
+    <label for="jobSeekerId">Active Job Seeker ID</label>
+    <input
+      id="jobSeekerId"
+      type="text"
+      placeholder="UUID"
+      autocomplete="off"
+    />
     <button id="saveJob">Save Job</button>
+    <button id="toggleRunner">Start Runner</button>
     <div id="status"></div>
     <script src="popup.js"></script>
   </body>

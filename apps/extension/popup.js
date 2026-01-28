@@ -1,6 +1,12 @@
 const storageKey = "apiBaseUrl";
+const amEmailKey = "amEmail";
+const jobSeekerKey = "jobSeekerId";
+const runnerKey = "runnerEnabled";
 const apiBaseUrlInput = document.getElementById("apiBaseUrl");
+const amEmailInput = document.getElementById("amEmail");
+const jobSeekerInput = document.getElementById("jobSeekerId");
 const saveButton = document.getElementById("saveJob");
+const toggleRunnerButton = document.getElementById("toggleRunner");
 const statusEl = document.getElementById("status");
 
 function setStatus(message, tone = "neutral") {
@@ -27,6 +33,24 @@ chrome.storage.local.get([storageKey], (result) => {
   }
 });
 
+chrome.storage.local.get([amEmailKey], (result) => {
+  if (result[amEmailKey]) {
+    amEmailInput.value = result[amEmailKey];
+  }
+});
+
+chrome.storage.local.get([jobSeekerKey], (result) => {
+  if (result[jobSeekerKey]) {
+    jobSeekerInput.value = result[jobSeekerKey];
+  }
+});
+
+chrome.storage.local.get([runnerKey], (result) => {
+  toggleRunnerButton.textContent = result[runnerKey]
+    ? "Stop Runner"
+    : "Start Runner";
+});
+
 function persistBaseUrlFromInput() {
   const value = getApiBaseUrlFromInput();
   chrome.storage.local.set({ [storageKey]: value });
@@ -35,8 +59,17 @@ function persistBaseUrlFromInput() {
 apiBaseUrlInput.addEventListener("input", persistBaseUrlFromInput);
 apiBaseUrlInput.addEventListener("blur", persistBaseUrlFromInput);
 
+amEmailInput.addEventListener("input", () => {
+  chrome.storage.local.set({ [amEmailKey]: amEmailInput.value.trim() });
+});
+
+jobSeekerInput.addEventListener("input", () => {
+  chrome.storage.local.set({ [jobSeekerKey]: jobSeekerInput.value.trim() });
+});
+
 saveButton.addEventListener("click", async () => {
   const apiBaseUrl = getApiBaseUrlFromInput();
+  const amEmail = amEmailInput.value.trim();
 
   if (!apiBaseUrl) {
     setStatus("Please set the API Base URL first.", "error");
@@ -48,7 +81,12 @@ saveButton.addEventListener("click", async () => {
     return;
   }
 
-  chrome.storage.local.set({ [storageKey]: apiBaseUrl });
+  if (!amEmail) {
+    setStatus("Please set the AM email header.", "error");
+    return;
+  }
+
+  chrome.storage.local.set({ [storageKey]: apiBaseUrl, [amEmailKey]: amEmail });
   console.log("Using API base URL:", apiBaseUrl);
   setStatus(`Using: ${apiBaseUrl}. Saving...`);
 
@@ -113,4 +151,30 @@ saveButton.addEventListener("click", async () => {
   } catch (error) {
     setStatus("Network error while saving job.", "error");
   }
+});
+
+toggleRunnerButton.addEventListener("click", async () => {
+  chrome.storage.local.get([runnerKey], (result) => {
+    const enabled = Boolean(result[runnerKey]);
+    const nextValue = !enabled;
+    const apiBaseUrl = getApiBaseUrlFromInput();
+    const amEmail = amEmailInput.value.trim();
+    const jobSeekerId = jobSeekerInput.value.trim();
+
+    if (nextValue) {
+      if (!apiBaseUrl || !isValidBaseUrl(apiBaseUrl)) {
+        setStatus("Set a valid API Base URL before starting.", "error");
+        return;
+      }
+      if (!amEmail || !jobSeekerId) {
+        setStatus("Set AM Email and Job Seeker ID before starting.", "error");
+        return;
+      }
+    }
+
+    chrome.storage.local.set({ [runnerKey]: nextValue });
+    chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: nextValue });
+    toggleRunnerButton.textContent = nextValue ? "Stop Runner" : "Start Runner";
+    setStatus(nextValue ? "Runner started." : "Runner stopped.");
+  });
 });

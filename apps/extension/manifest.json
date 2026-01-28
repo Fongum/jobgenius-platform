@@ -5,6 +5,16 @@
   "action": {
     "default_popup": "popup.html"
   },
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://*.vercel.app/*", "http://localhost:3000/*"]
+  "permissions": ["activeTab", "storage", "scripting", "alarms", "tabs"],
+  "host_permissions": [
+    "https://*.vercel.app/*",
+    "http://localhost:3000/*",
+    "https://*.linkedin.com/*",
+    "https://*.greenhouse.io/*",
+    "https://*.workday.com/*",
+    "https://*.myworkdayjobs.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }
