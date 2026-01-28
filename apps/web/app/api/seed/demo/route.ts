@@ -28,6 +28,7 @@ export async function POST() {
       location: "Remote",
       description_text: "Build UI features and collaborate with product teams.",
       source: "seed",
+      ats_type: "LINKEDIN",
     },
     {
       url: "https://example.com/jobs/demo-backend",
@@ -36,6 +37,25 @@ export async function POST() {
       location: "Remote",
       description_text: "Build APIs and data pipelines.",
       source: "seed",
+      ats_type: "GREENHOUSE",
+    },
+    {
+      url: "https://example.com/jobs/demo-platform",
+      title: "Demo Platform Engineer",
+      company: "DemoCorp",
+      location: "Remote",
+      description_text: "Build infra tools and platform services.",
+      source: "seed",
+      ats_type: "WORKDAY",
+    },
+    {
+      url: "https://example.com/jobs/demo-qa",
+      title: "Demo QA Engineer",
+      company: "DemoCorp",
+      location: "Remote",
+      description_text: "Create test plans and own QA automation.",
+      source: "seed",
+      ats_type: "GREENHOUSE",
     },
   ];
 
@@ -86,7 +106,17 @@ export async function POST() {
   for (const job of demoJobs) {
     const { data: jobData, error: jobError } = await supabaseServer
       .from("job_posts")
-      .upsert(job, { onConflict: "url" })
+      .upsert(
+        {
+          url: job.url,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          description_text: job.description_text,
+          source: job.source,
+        },
+        { onConflict: "url" }
+      )
       .select("id")
       .single();
 
@@ -127,65 +157,108 @@ export async function POST() {
       {
         job_post_id: jobIds[1],
         job_seeker_id: jsData.id,
-        score: 58,
+        score: 74,
         reasons: {
-          skills: 60,
-          title_similarity: 55,
+          skills: 75,
+          title_similarity: 72,
           location: 70,
-          seniority: 50,
+          seniority: 65,
+          work_type: 85,
+        },
+      },
+      {
+        job_post_id: jobIds[2],
+        job_seeker_id: jsData.id,
+        score: 69,
+        reasons: {
+          skills: 70,
+          title_similarity: 68,
+          location: 70,
+          seniority: 60,
           work_type: 80,
+        },
+      },
+      {
+        job_post_id: jobIds[3],
+        job_seeker_id: jsData.id,
+        score: 55,
+        reasons: {
+          skills: 58,
+          title_similarity: 50,
+          location: 65,
+          seniority: 50,
+          work_type: 75,
         },
       },
     ],
     { onConflict: "job_post_id,job_seeker_id" }
   );
 
-  const { data: queueItem, error: queueError } = await supabaseServer
-    .from("application_queue")
-    .insert({
-      job_post_id: jobIds[0],
-      job_seeker_id: jsData.id,
-      status: "READY",
-      category: "matched",
-      updated_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  const runIds: Record<string, string> = {};
 
-  if (queueError || !queueItem) {
-    return Response.json(
-      { success: false, error: "Failed to seed queue." },
-      { status: 500 }
-    );
-  }
+  const nowIso = new Date().toISOString();
+  for (let index = 0; index < 3; index += 1) {
+    const demoJob = demoJobs[index];
+    const queueInsert = await supabaseServer
+      .from("application_queue")
+      .insert({
+        job_post_id: jobIds[index],
+        job_seeker_id: jsData.id,
+        status: "READY",
+        category: "matched",
+        updated_at: nowIso,
+      })
+      .select("id")
+      .single();
 
-  const { data: existingRun } = await supabaseServer
-    .from("application_runs")
-    .select("id")
-    .eq("queue_id", queueItem.id)
-    .maybeSingle();
+    if (queueInsert.error || !queueInsert.data) {
+      return Response.json(
+        { success: false, error: "Failed to seed queue." },
+        { status: 500 }
+      );
+    }
 
-  if (!existingRun) {
-    await supabaseServer.from("application_runs").insert({
-      queue_id: queueItem.id,
-      job_seeker_id: jsData.id,
-      job_post_id: jobIds[0],
-      ats_type: "LINKEDIN",
-      status: "READY",
-      current_step: "OPEN_JOB",
-      updated_at: new Date().toISOString(),
-    });
+    const { data: existingRun } = await supabaseServer
+      .from("application_runs")
+      .select("id")
+      .eq("queue_id", queueInsert.data.id)
+      .maybeSingle();
+
+    if (!existingRun) {
+      const { data: runData, error: runError } = await supabaseServer
+        .from("application_runs")
+        .insert({
+          queue_id: queueInsert.data.id,
+          job_seeker_id: jsData.id,
+          job_post_id: jobIds[index],
+          ats_type: demoJob.ats_type,
+          status: "READY",
+          current_step: "OPEN_JOB",
+          updated_at: nowIso,
+        })
+        .select("id")
+        .single();
+
+      if (runError || !runData) {
+        return Response.json(
+          { success: false, error: "Failed to seed runs." },
+          { status: 500 }
+        );
+      }
+
+      runIds[demoJob.ats_type] = runData.id;
+    }
   }
 
   const { data: attentionQueue } = await supabaseServer
     .from("application_queue")
     .insert({
-      job_post_id: jobIds[1],
+      job_post_id: jobIds[3],
       job_seeker_id: jsData.id,
       status: "NEEDS_ATTENTION",
       category: "needs_attention",
-      last_error: "Captcha detected.",
-      updated_at: new Date().toISOString(),
+      last_error: "SMS OTP required.",
+      updated_at: nowIso,
     })
     .select("id")
     .single();
@@ -196,25 +269,26 @@ export async function POST() {
       .insert({
         queue_id: attentionQueue.id,
         job_seeker_id: jsData.id,
-        job_post_id: jobIds[1],
-        ats_type: "GREENHOUSE",
+        job_post_id: jobIds[3],
+        ats_type: demoJobs[3].ats_type,
         status: "NEEDS_ATTENTION",
         current_step: "SUBMIT",
-        needs_attention_reason: "CAPTCHA",
-        last_error: "Captcha detected.",
-        last_error_code: "CAPTCHA",
-        updated_at: new Date().toISOString(),
+        needs_attention_reason: "SMS_OTP",
+        last_error: "SMS OTP required.",
+        last_error_code: "SMS_OTP",
+        updated_at: nowIso,
       })
       .select("id")
       .single();
 
     if (attentionRun) {
+      runIds["NEEDS_ATTENTION"] = attentionRun.id;
       await supabaseServer.from("apply_run_events").insert({
         run_id: attentionRun.id,
         level: "WARN",
         event_type: "NEEDS_ATTENTION",
         actor: "SYSTEM",
-        payload: { reason: "CAPTCHA" },
+        payload: { reason: "SMS_OTP" },
       });
     }
   }
@@ -224,6 +298,7 @@ export async function POST() {
     account_manager_id: amData.id,
     job_seeker_id: jsData.id,
     job_post_ids: jobIds,
+    run_ids: runIds,
     saved_job_url: demoJobs[0].url,
   });
 }

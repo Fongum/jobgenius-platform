@@ -8,9 +8,10 @@
 ## Demo fixture
 - `POST /api/seed/demo` creates:
   - demo AM + job seeker
-  - 2 job posts
+  - 4 job posts
   - 1 saved job
-  - 1 READY run + 1 NEEDS_ATTENTION run
+  - 3 READY runs (LinkedIn, Greenhouse, Workday)
+  - 1 NEEDS_ATTENTION run (SMS OTP)
 - `POST /api/seed/reset` removes the demo data.
 
-Response includes `job_seeker_id` and `job_post_ids` to speed QA.
+Response includes `job_seeker_id`, `job_post_ids`, and `run_ids`.
