@@ -9,14 +9,18 @@ function extractSalaryNumbers(text: string) {
   const numbers: number[] = [];
   const lower = text.toLowerCase();
 
-  const kMatches = lower.matchAll(/\$?\s?(\d{2,3})\s?k\b/g);
-  for (const match of kMatches) {
+  const kRegex = /\$?\s?(\d{2,3})\s?k\b/g;
+  let match = kRegex.exec(lower);
+  while (match) {
     numbers.push(Number.parseInt(match[1], 10) * 1000);
+    match = kRegex.exec(lower);
   }
 
-  const fullMatches = lower.matchAll(/\$?\s?(\d{2,3})[,\s]?(\d{3})\b/g);
-  for (const match of fullMatches) {
+  const fullRegex = /\$?\s?(\d{2,3})[,\s]?(\d{3})\b/g;
+  match = fullRegex.exec(lower);
+  while (match) {
     numbers.push(Number.parseInt(`${match[1]}${match[2]}`, 10));
+    match = fullRegex.exec(lower);
   }
 
   return numbers;

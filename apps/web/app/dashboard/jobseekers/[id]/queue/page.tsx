@@ -11,6 +11,23 @@ type QueueItem = {
   } | null;
 };
 
+type MatchRow = {
+  job_post_id: string;
+  score: number;
+  job_posts:
+    | {
+        title: string;
+        company: string | null;
+        location: string | null;
+      }
+    | Array<{
+        title: string;
+        company: string | null;
+        location: string | null;
+      }>
+    | null;
+};
+
 type JobSeeker = {
   id: string;
   full_name: string | null;
@@ -59,12 +76,23 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
     ])
   );
 
-  const items = (scores ?? []).map((scoreRow) => ({
+  const rows = (scores ?? []) as MatchRow[];
+
+  const items = rows.map((scoreRow) => ({
     job_post_id: scoreRow.job_post_id,
     score: scoreRow.score,
-    title: scoreRow.job_posts?.title ?? "Untitled",
-    company: scoreRow.job_posts?.company ?? null,
-    location: scoreRow.job_posts?.location ?? null,
+    title:
+      (Array.isArray(scoreRow.job_posts)
+        ? scoreRow.job_posts[0]?.title
+        : scoreRow.job_posts?.title) ?? "Untitled",
+    company:
+      (Array.isArray(scoreRow.job_posts)
+        ? scoreRow.job_posts[0]?.company
+        : scoreRow.job_posts?.company) ?? null,
+    location:
+      (Array.isArray(scoreRow.job_posts)
+        ? scoreRow.job_posts[0]?.location
+        : scoreRow.job_posts?.location) ?? null,
     decision: decisionMap.get(scoreRow.job_post_id) ?? null,
   }));
 
