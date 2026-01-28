@@ -15,6 +15,7 @@ type AttentionRow = {
   needs_attention_reason: string | null;
   last_seen_url: string | null;
   updated_at: string;
+  attention_payload?: Record<string, unknown> | null;
   job_posts:
     | {
         title: string;
@@ -169,6 +170,15 @@ export default function AttentionClient({ rows, amEmail }: AttentionClientProps)
         const isOtpEmail = reason === "OTP_EMAIL" || reason === "OTP_REQUIRED";
         const isOtpSms = reason === "OTP_SMS" || reason === "SMS_OTP";
         const otpChannel = isOtpSms ? "SMS" : "EMAIL";
+        const missingFields = Array.isArray(
+          (row.attention_payload as Record<string, unknown> | null)?.missing_fields
+        )
+          ? ((row.attention_payload as Record<string, unknown>).missing_fields as Array<{
+              label?: string;
+              type?: string;
+              options?: string[] | null;
+            }>)
+          : [];
 
         return (
           <li
@@ -197,6 +207,22 @@ export default function AttentionClient({ rows, amEmail }: AttentionClientProps)
             {row.last_error ? <div>Last error: {row.last_error}</div> : null}
             {row.last_seen_url ? <div>Last URL: {row.last_seen_url}</div> : null}
             <div>Updated: {new Date(row.updated_at).toLocaleString()}</div>
+            {reason === "REQUIRED_FIELDS" && missingFields.length > 0 && (
+              <div style={{ marginTop: "8px" }}>
+                <strong>Missing required fields:</strong>
+                <ul>
+                  {missingFields.map((field, index) => (
+                    <li key={`${row.id}-missing-${index}`}>
+                      {field.label ?? "Unknown"}{" "}
+                      {field.type ? `(${field.type})` : ""}
+                      {field.options && field.options.length > 0
+                        ? ` [${field.options.join(", ")}]`
+                        : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {(isOtpEmail || isOtpSms) && (
               <div style={{ marginTop: "8px" }}>
                 <label>

@@ -15,6 +15,7 @@ type RunRow = {
   needs_attention_reason: string | null;
   last_seen_url: string | null;
   updated_at: string;
+  attention_payload?: Record<string, unknown> | null;
   job_posts:
     | {
         title: string;
@@ -135,6 +136,28 @@ export default async function AttentionPage({ searchParams }: PageProps) {
 
   const rows = (runRows ?? []) as RunRow[];
 
+  const runIds = rows.map((row) => row.id);
+  const payloadByRun: Record<string, Record<string, unknown>> = {};
+  if (runIds.length > 0) {
+    const { data: eventRows } = await supabaseServer
+      .from("apply_run_events")
+      .select("run_id, payload, ts")
+      .in("run_id", runIds)
+      .eq("event_type", "NEEDS_ATTENTION")
+      .order("ts", { ascending: false });
+
+    for (const event of eventRows ?? []) {
+      if (!payloadByRun[event.run_id]) {
+        payloadByRun[event.run_id] = event.payload ?? {};
+      }
+    }
+  }
+
+  const enrichedRows = rows.map((row) => ({
+    ...row,
+    attention_payload: payloadByRun[row.id] ?? null,
+  }));
+
   return (
     <main>
       <h1>Needs Attention</h1>
@@ -164,7 +187,7 @@ export default async function AttentionPage({ searchParams }: PageProps) {
         </label>
         <button type="submit">Filter</button>
       </form>
-      <AttentionClient rows={rows} amEmail={amEmail} />
+      <AttentionClient rows={enrichedRows} amEmail={amEmail} />
     </main>
   );
 }

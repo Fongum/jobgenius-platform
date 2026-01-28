@@ -11,6 +11,7 @@ type PausePayload = {
   last_seen_url?: string;
   step?: string;
   dom_hint?: string;
+  meta?: Record<string, unknown>;
 };
 
 function requiresClaimToken(headers: Headers) {
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
     step: run.current_step,
     event_type: "NEEDS_ATTENTION",
     message: payload.message ?? "Needs attention.",
-    meta: { reason },
+    meta: { reason, ...(payload.meta ?? {}) },
   });
 
   if (run.queue_id) {
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
       message: payload.message ?? null,
       last_seen_url: payload.last_seen_url ?? null,
       dom_hint: payload.dom_hint ?? null,
+      ...(payload.meta ?? {}),
     },
   });
 

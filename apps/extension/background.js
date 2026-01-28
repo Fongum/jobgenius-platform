@@ -53,7 +53,15 @@ async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl, claimToke
 
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    files: ["runner.js"],
+    files: [
+      "runner/dom.js",
+      "runner/adapters/base.js",
+      "runner/adapters/linkedin_easy_apply.js",
+      "runner/adapters/greenhouse.js",
+      "runner/adapters/workday.js",
+      "runner/engine.js",
+      "runner/index.js",
+    ],
   });
 
   chrome.tabs.sendMessage(tab.id, {
