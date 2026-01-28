@@ -1,3 +1,4 @@
+import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type OverridePayload = {
@@ -6,8 +7,6 @@ type OverridePayload = {
   decision?: "OVERRIDDEN_IN" | "OVERRIDDEN_OUT";
   note?: string;
 };
-
-const THRESHOLD = 60;
 
 export async function POST(request: Request) {
   let payload: OverridePayload;
@@ -38,13 +37,43 @@ export async function POST(request: Request) {
     );
   }
 
+  const amResult = await getAccountManagerFromRequest(request.headers);
+  if ("error" in amResult) {
+    return Response.json({ success: false, error: amResult.error }, { status: 401 });
+  }
+
+  const hasAccess = await hasJobSeekerAccess(
+    amResult.accountManager.id,
+    payload.job_seeker_id
+  );
+
+  if (!hasAccess) {
+    return Response.json(
+      { success: false, error: "Not authorized for this job seeker." },
+      { status: 403 }
+    );
+  }
+
+  const { data: seeker, error: seekerError } = await supabaseServer
+    .from("job_seekers")
+    .select("match_threshold")
+    .eq("id", payload.job_seeker_id)
+    .single();
+
+  if (seekerError || !seeker) {
+    return Response.json(
+      { success: false, error: "Job seeker not found." },
+      { status: 404 }
+    );
+  }
+
   const { error } = await supabaseServer
     .from("job_routing_decisions")
     .upsert(
       {
         job_post_id: payload.job_post_id,
         job_seeker_id: payload.job_seeker_id,
-        threshold: THRESHOLD,
+        threshold: seeker.match_threshold ?? 60,
         decision: payload.decision,
         decided_by: "AM",
         note: payload.note ?? null,

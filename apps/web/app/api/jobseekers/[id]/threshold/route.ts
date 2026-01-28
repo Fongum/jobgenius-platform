@@ -1,14 +1,15 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
-type EnqueuePayload = {
-  job_post_id?: string;
-  job_seeker_id?: string;
-  category?: string;
+type ThresholdPayload = {
+  match_threshold?: number;
 };
 
-export async function POST(request: Request) {
-  let payload: EnqueuePayload;
+export async function PATCH(
+  request: Request,
+  context: { params: { id: string } }
+) {
+  let payload: ThresholdPayload;
 
   try {
     payload = await request.json();
@@ -19,12 +20,18 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!payload?.job_post_id || !payload?.job_seeker_id) {
+  const jobSeekerId = context.params.id;
+  if (!jobSeekerId) {
     return Response.json(
-      {
-        success: false,
-        error: "Missing required fields: job_post_id, job_seeker_id.",
-      },
+      { success: false, error: "Missing job seeker id." },
+      { status: 400 }
+    );
+  }
+
+  const threshold = payload.match_threshold;
+  if (typeof threshold !== "number" || threshold < 0 || threshold > 100) {
+    return Response.json(
+      { success: false, error: "Invalid match_threshold value." },
       { status: 400 }
     );
   }
@@ -36,7 +43,7 @@ export async function POST(request: Request) {
 
   const hasAccess = await hasJobSeekerAccess(
     amResult.accountManager.id,
-    payload.job_seeker_id
+    jobSeekerId
   );
 
   if (!hasAccess) {
@@ -46,17 +53,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const { error } = await supabaseServer.from("application_queue").insert({
-    job_post_id: payload.job_post_id,
-    job_seeker_id: payload.job_seeker_id,
-    status: "QUEUED",
-    category: payload.category ?? "manual",
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabaseServer
+    .from("job_seekers")
+    .update({ match_threshold: threshold })
+    .eq("id", jobSeekerId);
 
   if (error) {
     return Response.json(
-      { success: false, error: "Failed to enqueue application." },
+      { success: false, error: "Failed to update threshold." },
       { status: 500 }
     );
   }

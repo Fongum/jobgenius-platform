@@ -1,12 +1,10 @@
-import {
-  buildExecutionContract,
-  detectAtsType,
-  getInitialStep,
-} from "@/lib/apply";
+import { detectAtsType, getInitialStep } from "@/lib/apply";
+import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type StartPayload = {
   queue_id?: string;
+  max_retries?: number;
 };
 
 const MAX_CONCURRENCY = 5;
@@ -43,6 +41,23 @@ export async function POST(request: Request) {
     );
   }
 
+  const amResult = await getAccountManagerFromRequest(request.headers);
+  if ("error" in amResult) {
+    return Response.json({ success: false, error: amResult.error }, { status: 401 });
+  }
+
+  const hasAccess = await hasJobSeekerAccess(
+    amResult.accountManager.id,
+    queueItem.job_seeker_id
+  );
+
+  if (!hasAccess) {
+    return Response.json(
+      { success: false, error: "Not authorized for this job seeker." },
+      { status: 403 }
+    );
+  }
+
   const { data: existingRun, error: existingError } = await supabaseServer
     .from("application_runs")
     .select("id, status, ats_type, current_step")
@@ -62,7 +77,7 @@ export async function POST(request: Request) {
         .from("application_runs")
         .select("id")
         .eq("job_seeker_id", queueItem.job_seeker_id)
-        .eq("status", "RUNNING");
+        .in("status", ["RUNNING", "RETRYING"]);
 
     if (runningCountError) {
       return Response.json(
@@ -83,14 +98,13 @@ export async function POST(request: Request) {
   }
 
   if (existingRun) {
-    const contract = buildExecutionContract({
-      runId: existingRun.id,
+    return Response.json({
+      success: true,
+      run_id: existingRun.id,
       status: existingRun.status,
-      atsType: existingRun.ats_type,
-      currentStep: existingRun.current_step,
+      ats_type: existingRun.ats_type,
+      current_step: existingRun.current_step,
     });
-
-    return Response.json({ success: true, ...contract });
   }
 
   const { data: jobPost, error: jobPostError } = await supabaseServer
@@ -117,8 +131,10 @@ export async function POST(request: Request) {
       job_seeker_id: queueItem.job_seeker_id,
       job_post_id: queueItem.job_post_id,
       ats_type: atsType,
-      status: "RUNNING",
+      status: "READY",
       current_step: initialStep,
+      max_retries:
+        typeof payload.max_retries === "number" ? payload.max_retries : undefined,
       updated_at: nowIso,
     })
     .select("id, status, ats_type, current_step")
@@ -133,22 +149,28 @@ export async function POST(request: Request) {
 
   await supabaseServer
     .from("application_queue")
-    .update({ status: "RUNNING", updated_at: nowIso })
+    .update({ status: "READY", category: "in_progress", updated_at: nowIso })
     .eq("id", queueItem.id);
 
   await supabaseServer.from("application_step_events").insert({
     run_id: createdRun.id,
     step: initialStep,
-    event_type: "STEP_STARTED",
-    message: "Execution started.",
+    event_type: "READY",
+    message: "Run ready for execution.",
   });
 
-  const contract = buildExecutionContract({
-    runId: createdRun.id,
+  await supabaseServer.from("apply_run_events").insert({
+    run_id: createdRun.id,
+    level: "INFO",
+    event_type: "READY",
+    payload: { step: initialStep },
+  });
+
+  return Response.json({
+    success: true,
+    run_id: createdRun.id,
     status: createdRun.status,
-    atsType: createdRun.ats_type,
-    currentStep: createdRun.current_step,
+    ats_type: createdRun.ats_type,
+    current_step: createdRun.current_step,
   });
-
-  return Response.json({ success: true, ...contract });
 }

@@ -1,5 +1,6 @@
 import { getAmEmailFromHeaders } from "@/lib/am";
 import { supabaseServer } from "@/lib/supabase/server";
+import AttentionClient from "./AttentionClient";
 
 type RunRow = {
   id: string;
@@ -11,6 +12,7 @@ type RunRow = {
   current_step: string;
   last_error: string | null;
   last_error_code: string | null;
+  needs_attention_reason: string | null;
   last_seen_url: string | null;
   updated_at: string;
   job_posts:
@@ -43,6 +45,15 @@ type PageProps = {
     reason?: string;
   };
 };
+
+const atsOptions = ["LINKEDIN", "GREENHOUSE", "WORKDAY"];
+const reasonOptions = [
+  "CAPTCHA",
+  "OTP_REQUIRED",
+  "NAVIGATION_ERROR",
+  "VALIDATION_ERROR",
+  "UNKNOWN",
+];
 
 export default async function AttentionPage({ searchParams }: PageProps) {
   const amEmail = getAmEmailFromHeaders();
@@ -98,7 +109,7 @@ export default async function AttentionPage({ searchParams }: PageProps) {
   let query = supabaseServer
     .from("application_runs")
     .select(
-      "id, job_seeker_id, job_post_id, queue_id, ats_type, status, current_step, last_error, last_error_code, last_seen_url, updated_at, job_posts (title, company, location), job_seekers (full_name, email)"
+      "id, job_seeker_id, job_post_id, queue_id, ats_type, status, current_step, last_error, last_error_code, needs_attention_reason, last_seen_url, updated_at, job_posts (title, company, location), job_seekers (full_name, email)"
     )
     .in("job_seeker_id", seekerIds)
     .eq("status", "NEEDS_ATTENTION");
@@ -128,63 +139,29 @@ export default async function AttentionPage({ searchParams }: PageProps) {
       <form method="get" style={{ display: "flex", gap: "8px" }}>
         <label>
           ATS{" "}
-          <input name="ats_type" defaultValue={atsFilter ?? ""} placeholder="LINKEDIN" />
+          <select name="ats_type" defaultValue={atsFilter ?? ""}>
+            <option value="">All</option>
+            {atsOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Reason{" "}
-          <input name="reason" defaultValue={reasonFilter ?? ""} placeholder="CAPTCHA" />
+          <select name="reason" defaultValue={reasonFilter ?? ""}>
+            <option value="">All</option>
+            {reasonOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </label>
         <button type="submit">Filter</button>
       </form>
-      {rows.length === 0 ? (
-        <p>No items need attention.</p>
-      ) : (
-        <ul style={{ display: "grid", gap: "12px" }}>
-          {rows.map((row) => {
-            const post = Array.isArray(row.job_posts)
-              ? row.job_posts[0]
-              : row.job_posts;
-            const seeker = Array.isArray(row.job_seekers)
-              ? row.job_seekers[0]
-              : row.job_seekers;
-
-            return (
-              <li
-                key={row.id}
-                style={{
-                  border: "1px solid #e5e7eb",
-                  padding: "12px",
-                  borderRadius: "8px",
-                }}
-              >
-                <strong>{post?.title ?? "Untitled"}</strong>
-                {post?.company ? ` - ${post.company}` : ""}
-                {post?.location ? ` (${post.location})` : ""}
-                <div>
-                  Job seeker: {seeker?.full_name ?? "Unknown"}{" "}
-                  {seeker?.email ? `(${seeker.email})` : ""}
-                </div>
-                <div>ATS: {row.ats_type}</div>
-                <div>Step: {row.current_step}</div>
-                <div>Status: {row.status}</div>
-                {row.last_error_code ? (
-                  <div>Reason: {row.last_error_code}</div>
-                ) : null}
-                {row.last_error ? <div>Last error: {row.last_error}</div> : null}
-                {row.last_seen_url ? (
-                  <div>Last URL: {row.last_seen_url}</div>
-                ) : null}
-                <div>
-                  Updated: {new Date(row.updated_at).toLocaleString()}
-                </div>
-                <a href={`/dashboard/jobseekers/${row.job_seeker_id}/queue`}>
-                  View Queue
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <AttentionClient rows={rows} amEmail={amEmail} />
     </main>
   );
 }

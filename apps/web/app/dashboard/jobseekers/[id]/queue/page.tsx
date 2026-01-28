@@ -2,19 +2,10 @@ import { getAmEmailFromHeaders } from "@/lib/am";
 import { supabaseServer } from "@/lib/supabase/server";
 import QueueClient from "./QueueClient";
 
-type QueueItem = {
-  job_post_id: string;
-  score: number;
-  job_posts: {
-    title: string;
-    company: string | null;
-    location: string | null;
-  } | null;
-};
-
 type MatchRow = {
   job_post_id: string;
   score: number;
+  reasons: Record<string, number> | null;
   job_posts:
     | {
         title: string;
@@ -35,12 +26,14 @@ type JobSeeker = {
   id: string;
   full_name: string | null;
   email: string | null;
+  match_threshold: number | null;
 };
 
 type QueueRow = {
   id: string;
   job_post_id: string;
   status: string;
+  category: string | null;
   last_error: string | null;
   created_at: string;
 };
@@ -48,12 +41,16 @@ type QueueRow = {
 type RunRow = {
   id: string;
   queue_id: string;
+  ats_type: string;
   status: string;
   current_step: string;
   step_attempts: number;
   total_attempts: number;
+  max_step_retries: number;
+  last_error: string | null;
   last_error_code: string | null;
   last_seen_url: string | null;
+  needs_attention_reason: string | null;
 };
 
 type StepEventRow = {
@@ -114,7 +111,7 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
 
   const { data: jobSeeker, error: jobSeekerError } = await supabaseServer
     .from("job_seekers")
-    .select("id, full_name, email")
+    .select("id, full_name, email, match_threshold")
     .eq("id", jobSeekerId)
     .single();
 
@@ -124,7 +121,9 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
 
   const { data: scores, error: scoresError } = await supabaseServer
     .from("job_match_scores")
-    .select("job_post_id, score, job_posts (title, company, location, created_at)")
+    .select(
+      "job_post_id, score, reasons, job_posts (title, company, location, created_at)"
+    )
     .eq("job_seeker_id", jobSeekerId);
 
   if (scoresError) {
@@ -142,7 +141,7 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
 
   const { data: queueRows, error: queueError } = await supabaseServer
     .from("application_queue")
-    .select("id, job_post_id, status, last_error, created_at")
+    .select("id, job_post_id, status, category, last_error, created_at")
     .eq("job_seeker_id", jobSeekerId);
 
   if (queueError) {
@@ -159,7 +158,7 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
     const { data: runRows, error: runsError } = await supabaseServer
       .from("application_runs")
       .select(
-        "id, queue_id, status, current_step, step_attempts, total_attempts, last_error_code, last_seen_url"
+        "id, queue_id, ats_type, status, current_step, step_attempts, total_attempts, max_step_retries, last_error, last_error_code, last_seen_url, needs_attention_reason"
       )
       .in("queue_id", queueIds);
 
@@ -209,6 +208,7 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
   const items = rows.map((scoreRow) => ({
     job_post_id: scoreRow.job_post_id,
     score: scoreRow.score,
+    reasons: scoreRow.reasons ?? null,
     title:
       (Array.isArray(scoreRow.job_posts)
         ? scoreRow.job_posts[0]?.title
@@ -228,8 +228,11 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
     decision: decisionMap.get(scoreRow.job_post_id) ?? null,
     queue_id: queueMap.get(scoreRow.job_post_id)?.id ?? null,
     queue_status: queueMap.get(scoreRow.job_post_id)?.status ?? null,
+    queue_category: queueMap.get(scoreRow.job_post_id)?.category ?? null,
     last_error: queueMap.get(scoreRow.job_post_id)?.last_error ?? null,
     run_id: runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.id ?? null,
+    ats_type:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.ats_type ?? null,
     run_status:
       runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.status ?? null,
     current_step:
@@ -241,6 +244,15 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
     total_attempts:
       runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.total_attempts ??
       null,
+    max_step_retries:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")
+        ?.max_step_retries ?? null,
+    run_last_error:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.last_error ??
+      null,
+    needs_attention_reason:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")
+        ?.needs_attention_reason ?? null,
     last_error_code:
       runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.last_error_code ??
       null,
@@ -261,7 +273,12 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
         {jobSeeker.email ? `(${jobSeeker.email})` : ""}
       </p>
       <p>TODO: Replace AM email header with real auth.</p>
-      <QueueClient jobSeekerId={jobSeeker.id} items={items} />
+      <QueueClient
+        jobSeekerId={jobSeeker.id}
+        matchThreshold={jobSeeker.match_threshold ?? 60}
+        amEmail={amEmail}
+        items={items}
+      />
     </main>
   );
 }

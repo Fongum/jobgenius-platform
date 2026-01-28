@@ -1,14 +1,13 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
-type MarkPayload = {
+type RetryPayload = {
   run_id?: string;
-  status?: "FAILED" | "CANCELLED";
   note?: string;
 };
 
 export async function POST(request: Request) {
-  let payload: MarkPayload;
+  let payload: RetryPayload;
 
   try {
     payload = await request.json();
@@ -19,31 +18,22 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!payload?.run_id || !payload.status) {
+  if (!payload?.run_id) {
     return Response.json(
-      { success: false, error: "Missing run_id or status." },
+      { success: false, error: "Missing run_id." },
       { status: 400 }
     );
   }
-
-  if (!["FAILED", "CANCELLED"].includes(payload.status)) {
-    return Response.json(
-      { success: false, error: "Invalid status value." },
-      { status: 400 }
-    );
-  }
-
-  const nowIso = new Date().toISOString();
 
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
-    .select("id, queue_id, current_step, job_seeker_id")
+    .select("id, queue_id, ats_type, current_step, job_seeker_id, attempt_count, max_retries")
     .eq("id", payload.run_id)
     .single();
 
   if (runError || !run) {
     return Response.json(
-      { success: false, error: "Run not found." },
+      { success: false, error: "Application run not found." },
       { status: 404 }
     );
   }
@@ -65,18 +55,30 @@ export async function POST(request: Request) {
     );
   }
 
+  const nowIso = new Date().toISOString();
+  const nextAttempt = (run.attempt_count ?? 0) + 1;
+  if (nextAttempt > (run.max_retries ?? 2)) {
+    return Response.json(
+      { success: false, error: "Max retries exceeded." },
+      { status: 409 }
+    );
+  }
+
   const { error } = await supabaseServer
     .from("application_runs")
     .update({
-      status: payload.status,
-      last_error: payload.note ?? null,
+      status: "RETRYING",
+      step_attempts: 0,
+      last_error: null,
+      last_error_code: null,
+      attempt_count: nextAttempt,
       updated_at: nowIso,
     })
     .eq("id", run.id);
 
   if (error) {
     return Response.json(
-      { success: false, error: "Failed to update run." },
+      { success: false, error: "Failed to retry run." },
       { status: 500 }
     );
   }
@@ -84,25 +86,29 @@ export async function POST(request: Request) {
   await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
-    event_type: "STEP_FAILED",
-    message: payload.note ?? `Marked ${payload.status}.`,
+    event_type: "RETRY",
+    message: payload.note ?? "Retry requested by AM.",
+  });
+
+  await supabaseServer.from("apply_run_events").insert({
+    run_id: run.id,
+    level: "INFO",
+    event_type: "RETRY",
+    payload: { note: payload.note ?? null },
   });
 
   if (run.queue_id) {
-    const category = "failed";
     await supabaseServer
       .from("application_queue")
-      .update({ status: payload.status, category, updated_at: nowIso })
+      .update({ status: "READY", category: "in_progress", updated_at: nowIso })
       .eq("id", run.queue_id);
-
-    await supabaseServer
-      .from("attention_items")
-      .update({
-        status: payload.status === "CANCELLED" ? "DISMISSED" : "RESOLVED",
-        resolved_at: nowIso,
-      })
-      .eq("queue_id", run.queue_id);
   }
 
-  return Response.json({ success: true });
+  return Response.json({
+    success: true,
+    run_id: run.id,
+    status: "RETRYING",
+    ats_type: run.ats_type,
+    current_step: run.current_step,
+  });
 }

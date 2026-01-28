@@ -50,6 +50,20 @@ export async function GET(
       { status: 403 }
     );
   }
+  const { data: jobSeeker, error: jobSeekerError } = await supabaseServer
+    .from("job_seekers")
+    .select("match_threshold")
+    .eq("id", jobSeekerId)
+    .single();
+
+  if (jobSeekerError || !jobSeeker) {
+    return Response.json(
+      { success: false, error: "Job seeker not found." },
+      { status: 404 }
+    );
+  }
+
+  const matchThreshold = jobSeeker.match_threshold ?? 60;
   const { searchParams } = new URL(request.url);
   const tab = (searchParams.get("tab") ?? "recommended") as TabValue;
 
@@ -63,7 +77,7 @@ export async function GET(
   const { data: scores, error: scoresError } = await supabaseServer
     .from("job_match_scores")
     .select(
-      "job_post_id, score, job_posts (title, company, location, created_at)"
+      "job_post_id, score, reasons, job_posts (title, company, location, created_at)"
     )
     .eq("job_seeker_id", jobSeekerId);
 
@@ -95,7 +109,7 @@ export async function GET(
 
   const { data: queueItems, error: queueError } = await supabaseServer
     .from("application_queue")
-    .select("id, job_post_id, status, last_error")
+    .select("id, job_post_id, status, category, last_error")
     .eq("job_seeker_id", jobSeekerId);
 
   if (queueError) {
@@ -113,19 +127,23 @@ export async function GET(
   let runs: Array<{
     id: string;
     queue_id: string;
+    ats_type: string;
     status: string;
     current_step: string;
     step_attempts: number;
     total_attempts: number;
+    max_step_retries: number;
+    last_error: string | null;
     last_error_code: string | null;
     last_seen_url: string | null;
+    needs_attention_reason: string | null;
   }> = [];
 
   if (queueIds.length > 0) {
     const { data: runRows, error: runError } = await supabaseServer
       .from("application_runs")
       .select(
-        "id, queue_id, status, current_step, step_attempts, total_attempts, last_error_code, last_seen_url"
+        "id, queue_id, ats_type, status, current_step, step_attempts, total_attempts, max_step_retries, last_error, last_error_code, last_seen_url, needs_attention_reason"
       )
       .in("queue_id", queueIds);
 
@@ -152,6 +170,7 @@ export async function GET(
     return {
       job_post_id: scoreRow.job_post_id,
       score: scoreRow.score,
+      reasons: scoreRow.reasons ?? null,
       title: post?.title ?? "Untitled",
       company: post?.company ?? null,
       location: post?.location ?? null,
@@ -159,28 +178,33 @@ export async function GET(
       decision: decisionMap.get(scoreRow.job_post_id) ?? null,
       queue_id: queueItem?.id ?? null,
       queue_status: queueItem?.status ?? null,
+      queue_category: queueItem?.category ?? null,
       last_error: queueItem?.last_error ?? null,
       run_id: run?.id ?? null,
+      ats_type: run?.ats_type ?? null,
       run_status: run?.status ?? null,
       current_step: run?.current_step ?? null,
       step_attempts: run?.step_attempts ?? null,
       total_attempts: run?.total_attempts ?? null,
+      max_step_retries: run?.max_step_retries ?? null,
+      run_last_error: run?.last_error ?? null,
       last_error_code: run?.last_error_code ?? null,
       last_seen_url: run?.last_seen_url ?? null,
+      needs_attention_reason: run?.needs_attention_reason ?? null,
     };
   });
 
   const filtered = rows.filter((row) => {
     if (tab === "recommended") {
       return (
-        row.score >= 60 &&
+        row.score >= matchThreshold &&
         row.decision !== "OVERRIDDEN_OUT" &&
         row.run_status !== "NEEDS_ATTENTION"
       );
     }
     if (tab === "below") {
       return (
-        row.score < 60 &&
+        row.score < matchThreshold &&
         row.decision !== "OVERRIDDEN_IN" &&
         row.run_status !== "NEEDS_ATTENTION"
       );

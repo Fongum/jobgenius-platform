@@ -1,0 +1,93 @@
+import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { supabaseServer } from "@/lib/supabase/server";
+
+type EventPayload = {
+  run_id?: string;
+  level?: "INFO" | "WARN" | "ERROR";
+  event_type?: string;
+  step?: string;
+  message?: string;
+  payload?: Record<string, unknown>;
+  last_seen_url?: string;
+};
+
+export async function POST(request: Request) {
+  let payload: EventPayload;
+
+  try {
+    payload = await request.json();
+  } catch {
+    return Response.json(
+      { success: false, error: "Invalid JSON body." },
+      { status: 400 }
+    );
+  }
+
+  if (!payload?.run_id || !payload.event_type) {
+    return Response.json(
+      { success: false, error: "Missing run_id or event_type." },
+      { status: 400 }
+    );
+  }
+
+  const { data: run, error: runError } = await supabaseServer
+    .from("application_runs")
+    .select("id, job_seeker_id, current_step")
+    .eq("id", payload.run_id)
+    .single();
+
+  if (runError || !run) {
+    return Response.json(
+      { success: false, error: "Run not found." },
+      { status: 404 }
+    );
+  }
+
+  const amResult = await getAccountManagerFromRequest(request.headers);
+  if ("error" in amResult) {
+    return Response.json({ success: false, error: amResult.error }, { status: 401 });
+  }
+
+  const hasAccess = await hasJobSeekerAccess(
+    amResult.accountManager.id,
+    run.job_seeker_id
+  );
+
+  if (!hasAccess) {
+    return Response.json(
+      { success: false, error: "Not authorized for this job seeker." },
+      { status: 403 }
+    );
+  }
+
+  await supabaseServer.from("apply_run_events").insert({
+    run_id: run.id,
+    level: payload.level ?? "INFO",
+    event_type: payload.event_type,
+    payload: {
+      step: payload.step ?? run.current_step,
+      message: payload.message ?? null,
+      last_seen_url: payload.last_seen_url ?? null,
+      ...(payload.payload ?? {}),
+    },
+  });
+
+  if (payload.step || payload.message) {
+    await supabaseServer.from("application_step_events").insert({
+      run_id: run.id,
+      step: payload.step ?? run.current_step,
+      event_type: payload.event_type,
+      message: payload.message ?? null,
+      meta: payload.payload ?? {},
+    });
+  }
+
+  if (payload.last_seen_url) {
+    await supabaseServer
+      .from("application_runs")
+      .update({ last_seen_url: payload.last_seen_url, updated_at: new Date().toISOString() })
+      .eq("id", run.id);
+  }
+
+  return Response.json({ success: true });
+}
