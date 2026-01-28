@@ -7,6 +7,7 @@ create table if not exists public.apply_plans (
 
 alter table public.apply_plans enable row level security;
 
+drop policy if exists "am_select_apply_plans" on public.apply_plans;
 create policy "am_select_apply_plans"
   on public.apply_plans
   for select
@@ -23,6 +24,7 @@ create policy "am_select_apply_plans"
     )
   );
 
+drop policy if exists "am_insert_apply_plans" on public.apply_plans;
 create policy "am_insert_apply_plans"
   on public.apply_plans
   for insert
