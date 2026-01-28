@@ -100,6 +100,16 @@ export async function POST() {
     jobIds.push(jobData.id);
   }
 
+  await supabaseServer.from("saved_jobs").upsert(
+    {
+      url: demoJobs[0].url,
+      title: demoJobs[0].title,
+      company: demoJobs[0].company,
+      location: demoJobs[0].location,
+    },
+    { onConflict: "url" }
+  );
+
   await supabaseServer.from("job_match_scores").upsert(
     [
       {
@@ -214,5 +224,6 @@ export async function POST() {
     account_manager_id: amData.id,
     job_seeker_id: jsData.id,
     job_post_ids: jobIds,
+    saved_job_url: demoJobs[0].url,
   });
 }
