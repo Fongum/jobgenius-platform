@@ -13,6 +13,10 @@ function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
 }
 
+function getApiBaseUrlFromInput() {
+  return normalizeBaseUrl(apiBaseUrlInput.value.trim());
+}
+
 function isValidBaseUrl(value) {
   return /^https?:\/\//i.test(value);
 }
@@ -23,25 +27,30 @@ chrome.storage.local.get([storageKey], (result) => {
   }
 });
 
-apiBaseUrlInput.addEventListener("input", () => {
-  const value = apiBaseUrlInput.value.trim();
+function persistBaseUrlFromInput() {
+  const value = getApiBaseUrlFromInput();
   chrome.storage.local.set({ [storageKey]: value });
-});
+}
+
+apiBaseUrlInput.addEventListener("input", persistBaseUrlFromInput);
+apiBaseUrlInput.addEventListener("blur", persistBaseUrlFromInput);
 
 saveButton.addEventListener("click", async () => {
-  const rawBaseUrl = apiBaseUrlInput.value.trim();
+  const apiBaseUrl = getApiBaseUrlFromInput();
 
-  if (!rawBaseUrl) {
+  if (!apiBaseUrl) {
     setStatus("Please set the API Base URL first.", "error");
     return;
   }
 
-  if (!isValidBaseUrl(rawBaseUrl)) {
+  if (!isValidBaseUrl(apiBaseUrl)) {
     setStatus("API Base URL must start with http:// or https://", "error");
     return;
   }
 
-  setStatus("Saving...");
+  chrome.storage.local.set({ [storageKey]: apiBaseUrl });
+  console.log("Using API base URL:", apiBaseUrl);
+  setStatus(`Using: ${apiBaseUrl}. Saving...`);
 
   let tab;
   try {
@@ -65,7 +74,6 @@ saveButton.addEventListener("click", async () => {
     raw_text: null,
   };
 
-  const apiBaseUrl = normalizeBaseUrl(rawBaseUrl);
   const endpoint = `${apiBaseUrl}/api/jobs/save`;
 
   try {
