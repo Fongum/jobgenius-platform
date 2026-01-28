@@ -45,8 +45,20 @@ type QueueRow = {
   created_at: string;
 };
 
-type EventRow = {
+type RunRow = {
+  id: string;
   queue_id: string;
+  status: string;
+  current_step: string;
+  step_attempts: number;
+  total_attempts: number;
+  last_error_code: string | null;
+  last_seen_url: string | null;
+};
+
+type StepEventRow = {
+  run_id: string;
+  step: string;
   event_type: string;
   message: string | null;
   created_at: string;
@@ -142,27 +154,46 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
   );
 
   const queueIds = (queueRows ?? []).map((item) => item.id);
-  let events: EventRow[] = [];
+  let runs: RunRow[] = [];
   if (queueIds.length > 0) {
-    const { data: eventRows, error: eventsError } = await supabaseServer
-      .from("application_events")
-      .select("queue_id, event_type, message, created_at")
-      .in("queue_id", queueIds)
-      .order("created_at", { ascending: false });
+    const { data: runRows, error: runsError } = await supabaseServer
+      .from("application_runs")
+      .select(
+        "id, queue_id, status, current_step, step_attempts, total_attempts, last_error_code, last_seen_url"
+      )
+      .in("queue_id", queueIds);
 
-    if (eventsError) {
-      throw new Error("Failed to load application events.");
+    if (runsError) {
+      throw new Error("Failed to load application runs.");
     }
 
-    events = (eventRows ?? []) as EventRow[];
+    runs = (runRows ?? []) as RunRow[];
   }
 
-  const eventsByQueue = new Map<string, EventRow[]>();
-  for (const event of events) {
-    const existing = eventsByQueue.get(event.queue_id) ?? [];
+  const runMap = new Map(runs.map((run) => [run.queue_id, run]));
+
+  const runIds = runs.map((run) => run.id);
+  let stepEvents: StepEventRow[] = [];
+  if (runIds.length > 0) {
+    const { data: stepEventRows, error: stepEventError } = await supabaseServer
+      .from("application_step_events")
+      .select("run_id, step, event_type, message, created_at")
+      .in("run_id", runIds)
+      .order("created_at", { ascending: false });
+
+    if (stepEventError) {
+      throw new Error("Failed to load application step events.");
+    }
+
+    stepEvents = (stepEventRows ?? []) as StepEventRow[];
+  }
+
+  const eventsByRun = new Map<string, StepEventRow[]>();
+  for (const event of stepEvents) {
+    const existing = eventsByRun.get(event.run_id) ?? [];
     if (existing.length < 3) {
       existing.push(event);
-      eventsByQueue.set(event.queue_id, existing);
+      eventsByRun.set(event.run_id, existing);
     }
   }
 
@@ -198,7 +229,28 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
     queue_id: queueMap.get(scoreRow.job_post_id)?.id ?? null,
     queue_status: queueMap.get(scoreRow.job_post_id)?.status ?? null,
     last_error: queueMap.get(scoreRow.job_post_id)?.last_error ?? null,
-    events: eventsByQueue.get(queueMap.get(scoreRow.job_post_id)?.id ?? "") ?? [],
+    run_id: runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.id ?? null,
+    run_status:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.status ?? null,
+    current_step:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.current_step ??
+      null,
+    step_attempts:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.step_attempts ??
+      null,
+    total_attempts:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.total_attempts ??
+      null,
+    last_error_code:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.last_error_code ??
+      null,
+    last_seen_url:
+      runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.last_seen_url ??
+      null,
+    events:
+      eventsByRun.get(
+        runMap.get(queueMap.get(scoreRow.job_post_id)?.id ?? "")?.id ?? ""
+      ) ?? [],
   }));
 
   return (

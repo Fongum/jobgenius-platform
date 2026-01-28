@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 const TAB_VALUES = [
   "recommended",
   "below",
+  "needs_attention",
   "overridden_in",
   "overridden_out",
 ] as const;
@@ -108,12 +109,45 @@ export async function GET(
     (queueItems ?? []).map((item) => [item.job_post_id, item])
   );
 
+  const queueIds = (queueItems ?? []).map((item) => item.id);
+  let runs: Array<{
+    id: string;
+    queue_id: string;
+    status: string;
+    current_step: string;
+    step_attempts: number;
+    total_attempts: number;
+    last_error_code: string | null;
+    last_seen_url: string | null;
+  }> = [];
+
+  if (queueIds.length > 0) {
+    const { data: runRows, error: runError } = await supabaseServer
+      .from("application_runs")
+      .select(
+        "id, queue_id, status, current_step, step_attempts, total_attempts, last_error_code, last_seen_url"
+      )
+      .in("queue_id", queueIds);
+
+    if (runError) {
+      return Response.json(
+        { success: false, error: "Failed to load application runs." },
+        { status: 500 }
+      );
+    }
+
+    runs = (runRows ?? []) as typeof runs;
+  }
+
+  const runMap = new Map(runs.map((run) => [run.queue_id, run]));
+
   const rows = (scores ?? []).map((scoreRow) => {
     const post = Array.isArray(scoreRow.job_posts)
       ? scoreRow.job_posts[0]
       : scoreRow.job_posts;
 
     const queueItem = queueMap.get(scoreRow.job_post_id);
+    const run = queueItem ? runMap.get(queueItem.id) : undefined;
 
     return {
       job_post_id: scoreRow.job_post_id,
@@ -126,15 +160,33 @@ export async function GET(
       queue_id: queueItem?.id ?? null,
       queue_status: queueItem?.status ?? null,
       last_error: queueItem?.last_error ?? null,
+      run_id: run?.id ?? null,
+      run_status: run?.status ?? null,
+      current_step: run?.current_step ?? null,
+      step_attempts: run?.step_attempts ?? null,
+      total_attempts: run?.total_attempts ?? null,
+      last_error_code: run?.last_error_code ?? null,
+      last_seen_url: run?.last_seen_url ?? null,
     };
   });
 
   const filtered = rows.filter((row) => {
     if (tab === "recommended") {
-      return row.score >= 60 && row.decision !== "OVERRIDDEN_OUT";
+      return (
+        row.score >= 60 &&
+        row.decision !== "OVERRIDDEN_OUT" &&
+        row.run_status !== "NEEDS_ATTENTION"
+      );
     }
     if (tab === "below") {
-      return row.score < 60 && row.decision !== "OVERRIDDEN_IN";
+      return (
+        row.score < 60 &&
+        row.decision !== "OVERRIDDEN_IN" &&
+        row.run_status !== "NEEDS_ATTENTION"
+      );
+    }
+    if (tab === "needs_attention") {
+      return row.run_status === "NEEDS_ATTENTION";
     }
     if (tab === "overridden_in") {
       return row.decision === "OVERRIDDEN_IN";
