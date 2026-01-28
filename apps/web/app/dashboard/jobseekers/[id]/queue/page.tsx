@@ -19,11 +19,13 @@ type MatchRow = {
         title: string;
         company: string | null;
         location: string | null;
+        created_at: string | null;
       }
     | Array<{
         title: string;
         company: string | null;
         location: string | null;
+        created_at: string | null;
       }>
     | null;
 };
@@ -53,7 +55,7 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
 
   const { data: scores, error: scoresError } = await supabaseServer
     .from("job_match_scores")
-    .select("job_post_id, score, job_posts (title, company, location)")
+    .select("job_post_id, score, job_posts (title, company, location, created_at)")
     .eq("job_seeker_id", jobSeekerId);
 
   if (scoresError) {
@@ -93,6 +95,10 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
       (Array.isArray(scoreRow.job_posts)
         ? scoreRow.job_posts[0]?.location
         : scoreRow.job_posts?.location) ?? null,
+    created_at:
+      (Array.isArray(scoreRow.job_posts)
+        ? scoreRow.job_posts[0]?.created_at
+        : scoreRow.job_posts?.created_at) ?? null,
     decision: decisionMap.get(scoreRow.job_post_id) ?? null,
   }));
 
@@ -103,6 +109,7 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
         {jobSeeker.full_name ?? "Job Seeker"}{" "}
         {jobSeeker.email ? `(${jobSeeker.email})` : ""}
       </p>
+      <p>TODO: Replace AM email header with real auth.</p>
       <QueueClient jobSeekerId={jobSeeker.id} items={items} />
     </main>
   );

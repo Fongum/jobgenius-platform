@@ -9,6 +9,7 @@ type QueueItem = {
   location: string | null;
   score: number;
   decision: string | null;
+  created_at: string | null;
 };
 
 type QueueClientProps = {
@@ -77,9 +78,32 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
     }
   }
 
+  async function handleEnqueue(jobPostId: string) {
+    setBusyId(jobPostId);
+    try {
+      const response = await fetch("/api/queue/enqueue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: jobSeekerId,
+          job_post_id: jobPostId,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Enqueue failed.");
+        return;
+      }
+
+      window.location.reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <section>
-      <div>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
         {tabs.map((tab) => (
           <button
             key={tab}
@@ -94,31 +118,54 @@ export default function QueueClient({ jobSeekerId, items }: QueueClientProps) {
       {list.length === 0 ? (
         <p>No jobs in this category.</p>
       ) : (
-        <ul>
+        <ul style={{ display: "grid", gap: "12px" }}>
           {list.map((item) => (
-            <li key={item.job_post_id}>
+            <li
+              key={item.job_post_id}
+              style={{
+                border: "1px solid #e5e7eb",
+                padding: "12px",
+                borderRadius: "8px",
+              }}
+            >
               <strong>{item.title}</strong>
               {item.company ? ` - ${item.company}` : ""}
               {item.location ? ` (${item.location})` : ""}
-              {" - "}Score: {item.score}
-              {" - "}Decision: {item.decision ?? "NONE"}
-              {" - "}
-              <button
-                type="button"
-                onClick={() => handleOverride(item.job_post_id, "OVERRIDDEN_IN")}
-                disabled={busyId === item.job_post_id}
-              >
-                Override In
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleOverride(item.job_post_id, "OVERRIDDEN_OUT")
-                }
-                disabled={busyId === item.job_post_id}
-              >
-                Override Out
-              </button>
+              <div>Score: {item.score}</div>
+              <div>Decision: {item.decision ?? "NONE"}</div>
+              <div>
+                Created:{" "}
+                {item.created_at
+                  ? new Date(item.created_at).toLocaleString()
+                  : "—"}
+              </div>
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOverride(item.job_post_id, "OVERRIDDEN_IN")
+                  }
+                  disabled={busyId === item.job_post_id}
+                >
+                  Override In
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOverride(item.job_post_id, "OVERRIDDEN_OUT")
+                  }
+                  disabled={busyId === item.job_post_id}
+                >
+                  Override Out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleEnqueue(item.job_post_id)}
+                  disabled={busyId === item.job_post_id}
+                >
+                  Enqueue Application
+                </button>
+              </div>
             </li>
           ))}
         </ul>

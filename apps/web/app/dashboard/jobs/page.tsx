@@ -14,6 +14,7 @@ type JobsPageProps = {
   searchParams?: {
     source?: string;
     company?: string;
+    title?: string;
     sort?: string;
   };
 };
@@ -21,6 +22,7 @@ type JobsPageProps = {
 export default async function JobsPage({ searchParams }: JobsPageProps) {
   const sourceFilter = searchParams?.source?.trim();
   const companyFilter = searchParams?.company?.trim();
+  const titleFilter = searchParams?.title?.trim();
   const sort = searchParams?.sort === "asc" ? "asc" : "desc";
 
   let query = supabaseServer
@@ -35,6 +37,10 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 
   if (companyFilter) {
     query = query.ilike("company", `%${companyFilter}%`);
+  }
+
+  if (titleFilter) {
+    query = query.ilike("title", `%${titleFilter}%`);
   }
 
   const { data, error, count } = await query
@@ -65,6 +71,14 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
             name="company"
             defaultValue={companyFilter ?? ""}
             placeholder="Search company"
+          />
+        </label>
+        <label>
+          Title{" "}
+          <input
+            name="title"
+            defaultValue={titleFilter ?? ""}
+            placeholder="Search title"
           />
         </label>
         <label>
