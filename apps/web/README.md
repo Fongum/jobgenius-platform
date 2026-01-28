@@ -15,3 +15,9 @@
 - `POST /api/seed/reset` removes the demo data.
 
 Response includes `job_seeker_id`, `job_post_ids`, and `run_ids`.
+
+Example:
+```bash
+curl -X POST http://localhost:3000/api/seed/demo
+curl -X POST http://localhost:3000/api/seed/reset
+```
