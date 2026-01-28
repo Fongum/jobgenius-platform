@@ -28,6 +28,12 @@ An autonomous job application, interview prep, and recruiter collaboration platf
 - Resume uploads use `job_seekers.resume_url` (best-effort).
 - Company info fetcher stores emails in `company_info` and creates outreach drafts + outbox rows.
 
+## Cloud Runner (Phase 5.0)
+- Service lives in `apps/runner`
+- Uses Playwright to execute apply runs 24/7 via `/api/apply/next-global`
+- Configure env: `JOBGENIUS_API_BASE_URL`, `RUNNER_AM_EMAIL`, `RUNNER_ID`, `RUNNER_POLL_INTERVAL_MS`, `RUNNER_CONCURRENCY`
+- Local run: `npm install` then `npm run start`
+
 ## Demo seed/reset
 - `POST /api/seed/demo` creates a demo AM/jobseeker, two jobs, one READY run, and one NEEDS_ATTENTION run.
 - `POST /api/seed/reset` deletes the demo data.

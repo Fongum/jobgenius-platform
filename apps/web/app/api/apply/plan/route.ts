@@ -2,7 +2,8 @@ import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-acces
 import { supabaseServer } from "@/lib/supabase/server";
 
 function requiresClaimToken(headers: Headers) {
-  return (headers.get("x-runner") ?? "").toLowerCase() === "extension";
+  const runner = (headers.get("x-runner") ?? "").toLowerCase();
+  return runner === "extension" || runner === "cloud";
 }
 
 export async function GET(request: Request) {

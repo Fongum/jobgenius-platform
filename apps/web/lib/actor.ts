@@ -3,6 +3,9 @@ export function getActorFromHeaders(headers?: Headers) {
   if (source.toLowerCase() === "extension") {
     return "EXTENSION";
   }
+  if (source.toLowerCase() === "cloud") {
+    return "CLOUD_RUNNER";
+  }
   if (source.toLowerCase() === "am_ui") {
     return "AM_UI";
   }
