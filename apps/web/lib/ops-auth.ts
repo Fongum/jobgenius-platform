@@ -18,7 +18,19 @@ function normalizeList(value?: string | null) {
     .filter(Boolean);
 }
 
-export function isOpsApiKey(headersSource?: Headers) {
+function getOpsKeyFromUrl(url?: string) {
+  if (!url) {
+    return null;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get("ops_key");
+  } catch {
+    return null;
+  }
+}
+
+export function isOpsApiKey(headersSource?: Headers, url?: string) {
   const configuredKey = process.env.OPS_API_KEY;
   if (!configuredKey) {
     return false;
@@ -29,8 +41,13 @@ export function isOpsApiKey(headersSource?: Headers) {
     authHeader && authHeader.toLowerCase().startsWith("bearer ")
       ? authHeader.slice(7).trim()
       : null;
+  const queryKey = getOpsKeyFromUrl(url);
 
-  return directKey === configuredKey || bearer === configuredKey;
+  return (
+    directKey === configuredKey ||
+    bearer === configuredKey ||
+    queryKey === configuredKey
+  );
 }
 
 export function isServiceKey(headersSource?: Headers) {
@@ -58,8 +75,12 @@ export function isOpsAdmin(headersSource?: Headers) {
   return adminList.includes(email);
 }
 
-export function requireOpsAuth(headersSource?: Headers) {
-  if (isOpsApiKey(headersSource) || isServiceKey(headersSource) || isOpsAdmin(headersSource)) {
+export function requireOpsAuth(headersSource?: Headers, url?: string) {
+  if (
+    isOpsApiKey(headersSource, url) ||
+    isServiceKey(headersSource) ||
+    isOpsAdmin(headersSource)
+  ) {
     return { ok: true } as const;
   }
   return { ok: false, error: "Not authorized." } as const;

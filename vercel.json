@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/ops/alerts/run?ops_key=${OPS_API_KEY}",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/ops/retention/run?ops_key=${OPS_API_KEY}",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

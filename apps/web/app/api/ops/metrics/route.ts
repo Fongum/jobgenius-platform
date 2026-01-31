@@ -2,7 +2,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
 
 export async function GET(request: Request) {
-  const auth = requireOpsAuth(request.headers);
+  const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return Response.json({ success: false, error: auth.error }, { status: 401 });
   }

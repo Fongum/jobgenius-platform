@@ -20,6 +20,7 @@ Long-running Playwright worker that polls the JobGenius API for runs and execute
 - `RUNNER_OTP_SMS_THRESHOLD` (default 3)
 - `RUNNER_REQUIRED_FIELDS_THRESHOLD` (default 5)
 - `RUNNER_METRICS_INTERVAL_MS` (default 60000)
+- `RUNNER_DRY_RUN` (default false)
 
 ## Local run
 ```bash

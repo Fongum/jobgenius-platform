@@ -24,8 +24,8 @@ async function sendSlackAlert(text: string) {
   }
 }
 
-export async function POST(request: Request) {
-  const auth = requireOpsAuth(request.headers);
+async function runAlerts(request: Request) {
+  const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return Response.json({ success: false, error: auth.error }, { status: 401 });
   }
@@ -164,4 +164,12 @@ export async function POST(request: Request) {
   }
 
   return Response.json({ success: true, created: inserted?.length ?? 0, alerts: inserted });
+}
+
+export async function POST(request: Request) {
+  return runAlerts(request);
+}
+
+export async function GET(request: Request) {
+  return runAlerts(request);
 }

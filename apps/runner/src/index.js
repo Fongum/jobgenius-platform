@@ -22,6 +22,9 @@ const HEARTBEAT_INTERVAL_MS = Number(process.env.RUNNER_HEARTBEAT_INTERVAL_MS ??
 const STATE_MAX_AGE_DAYS = Number(process.env.STATE_MAX_AGE_DAYS ?? 14);
 const REAUTH_FAILURE_THRESHOLD = Number(process.env.RUNNER_REAUTH_FAILURE_THRESHOLD ?? 2);
 const OPS_API_KEY = process.env.OPS_API_KEY ?? "";
+const RUNNER_DRY_RUN = ["1", "true", "yes", "on"].includes(
+  String(process.env.RUNNER_DRY_RUN ?? "").toLowerCase()
+);
 const CIRCUIT_WINDOW_MS = Number(process.env.RUNNER_CIRCUIT_WINDOW_MS ?? 30 * 60 * 1000);
 const CIRCUIT_COOLDOWN_MS = Number(process.env.RUNNER_CIRCUIT_COOLDOWN_MS ?? 30 * 60 * 1000);
 const CAPTCHA_THRESHOLD = Number(process.env.RUNNER_CAPTCHA_THRESHOLD ?? 3);
@@ -486,7 +489,7 @@ async function executeRun(run) {
       adapter,
       page,
       context,
-      dryRun: false,
+      dryRun: RUNNER_DRY_RUN,
       onProgress,
     });
 
@@ -606,7 +609,7 @@ async function start() {
   logLine({
     level: "INFO",
     step: "BOOT",
-    msg: `Runner started (interval=${POLL_INTERVAL_MS}ms, concurrency=${CONCURRENCY}).`,
+    msg: `Runner started (interval=${POLL_INTERVAL_MS}ms, concurrency=${CONCURRENCY}, dryRun=${RUNNER_DRY_RUN}).`,
   });
   await pollOnce();
   setInterval(() => {

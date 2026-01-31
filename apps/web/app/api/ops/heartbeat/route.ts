@@ -7,7 +7,7 @@ type HeartbeatPayload = {
 };
 
 export async function POST(request: Request) {
-  const auth = requireOpsAuth(request.headers);
+  const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return Response.json({ success: false, error: auth.error }, { status: 401 });
   }
