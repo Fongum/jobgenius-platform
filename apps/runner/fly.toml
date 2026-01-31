@@ -1,0 +1,14 @@
+app = "jobgenius-runner"
+primary_region = "iad"
+
+[env]
+  STORAGE_STATE_PATH = "/data/.state"
+  RUNNER_POLL_INTERVAL_MS = "60000"
+  RUNNER_CONCURRENCY = "2"
+
+[mounts]
+  source = "runner_state"
+  destination = "/data"
+
+[processes]
+  app = "sh -c \"RUNNER_ID=${RUNNER_ID:-$HOSTNAME} npm start\""

@@ -19,6 +19,7 @@ export async function runPlan({
   page,
   context,
   dryRun,
+  onProgress,
 }) {
   const ctx = {
     runId: run.run_id,
@@ -36,6 +37,12 @@ export async function runPlan({
     step: ctx.currentStep,
     last_seen_url: page.url(),
   }, amEmail, claimToken, runnerId);
+  onProgress?.({
+    type: "RUNNER_STARTED",
+    runId: ctx.runId,
+    atsType: ctx.atsType,
+    step: ctx.currentStep,
+  });
 
   if (!adapter) {
     await pauseRun(apiBaseUrl, {
@@ -45,6 +52,13 @@ export async function runPlan({
       last_seen_url: page.url(),
       step: "DETECT_ATS",
     }, amEmail, claimToken, runnerId);
+    onProgress?.({
+      type: "PAUSED",
+      reason: "UNKNOWN_ATS",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: "DETECT_ATS",
+    });
     return;
   }
 
@@ -56,6 +70,13 @@ export async function runPlan({
       last_seen_url: page.url(),
       step: "DETECT_ATS",
     }, amEmail, claimToken, runnerId);
+    onProgress?.({
+      type: "PAUSED",
+      reason: "CAPTCHA",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: "DETECT_ATS",
+    });
     return;
   }
 
@@ -67,6 +88,13 @@ export async function runPlan({
       last_seen_url: page.url(),
       step: "DETECT_ATS",
     }, amEmail, claimToken, runnerId);
+    onProgress?.({
+      type: "PAUSED",
+      reason: "OTP_SMS",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: "DETECT_ATS",
+    });
     return;
   }
 
@@ -78,6 +106,13 @@ export async function runPlan({
       last_seen_url: page.url(),
       step: "DETECT_ATS",
     }, amEmail, claimToken, runnerId);
+    onProgress?.({
+      type: "PAUSED",
+      reason: "OTP_EMAIL",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: "DETECT_ATS",
+    });
     return;
   }
 
@@ -90,6 +125,12 @@ export async function runPlan({
       message: `Starting ${step.name}.`,
       last_seen_url: page.url(),
     }, amEmail, claimToken, runnerId);
+    onProgress?.({
+      type: "STEP_STARTED",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: step.name,
+    });
 
     if (step.name === "OPEN_URL") {
       continue;
@@ -105,6 +146,13 @@ export async function runPlan({
           last_seen_url: page.url(),
           step: step.name,
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "PAUSED",
+          reason: "UNKNOWN_ATS",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
         return;
       }
       continue;
@@ -120,6 +168,13 @@ export async function runPlan({
           last_seen_url: page.url(),
           step: step.name,
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "PAUSED",
+          reason: result.reason ?? "APPLY_BUTTON_MISSING",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
         return;
       }
       continue;
@@ -142,6 +197,13 @@ export async function runPlan({
           last_seen_url: page.url(),
           step: step.name,
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "PAUSED",
+          reason: result.reason ?? "FILL_FAILED",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
         return;
       }
       continue;
@@ -164,6 +226,14 @@ export async function runPlan({
             step: step.name,
           },
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "PAUSED",
+          reason: "REQUIRED_FIELDS",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+          meta: { missing_fields: missingFields },
+        });
         return;
       }
       continue;
@@ -178,6 +248,13 @@ export async function runPlan({
           last_seen_url: page.url(),
           step: step.name,
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "PAUSED",
+          reason: "DRY_RUN_CONFIRM_SUBMIT",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
         return;
       }
       const result = await adapter.submit(page, ctx);
@@ -189,6 +266,13 @@ export async function runPlan({
           last_seen_url: page.url(),
           step: step.name,
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "PAUSED",
+          reason: result.reason ?? "SUBMIT_BUTTON_MISSING",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
         return;
       }
       continue;
@@ -202,6 +286,12 @@ export async function runPlan({
           note: "Application submitted by cloud runner.",
           last_seen_url: page.url(),
         }, amEmail, claimToken, runnerId);
+        onProgress?.({
+          type: "COMPLETED",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
         logLine({ level: "INFO", runId: ctx.runId, step: step.name, msg: "Applied" });
         return;
       }
@@ -213,6 +303,13 @@ export async function runPlan({
         last_seen_url: page.url(),
         step: step.name,
       }, amEmail, claimToken, runnerId);
+      onProgress?.({
+        type: "PAUSED",
+        reason: "REQUIRES_REVIEW",
+        runId: ctx.runId,
+        atsType: ctx.atsType,
+        step: step.name,
+      });
       return;
     }
   }
@@ -221,4 +318,10 @@ export async function runPlan({
     run_id: ctx.runId,
     note: "Plan exhausted without confirmation.",
   }, amEmail, claimToken, runnerId);
+  onProgress?.({
+    type: "RETRIED",
+    reason: "PLAN_EXHAUSTED",
+    runId: ctx.runId,
+    atsType: ctx.atsType,
+  });
 }
