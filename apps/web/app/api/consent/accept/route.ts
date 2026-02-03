@@ -2,6 +2,7 @@ import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-acces
 import { supabaseServer } from "@/lib/supabase/server";
 
 type ConsentPayload = {
+  job_seeker_id?: string;
   jobseeker_id?: string;
   consent_type?: string;
   version?: string;
@@ -20,7 +21,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!payload?.jobseeker_id || !payload.consent_type || !payload.version || !payload.text_hash) {
+  const jobSeekerId = payload?.job_seeker_id ?? payload?.jobseeker_id;
+
+  if (!jobSeekerId || !payload.consent_type || !payload.version || !payload.text_hash) {
     return Response.json(
       { success: false, error: "Missing consent fields." },
       { status: 400 }
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
 
   const hasAccess = await hasJobSeekerAccess(
     amResult.accountManager.id,
-    payload.jobseeker_id
+    jobSeekerId
   );
 
   if (!hasAccess) {
@@ -44,8 +47,20 @@ export async function POST(request: Request) {
     );
   }
 
+  const { data: existing } = await supabaseServer
+    .from("jobseeker_consents")
+    .select("id")
+    .eq("jobseeker_id", jobSeekerId)
+    .eq("consent_type", payload.consent_type)
+    .eq("version", payload.version)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return Response.json({ success: true, already_recorded: true });
+  }
+
   const { error } = await supabaseServer.from("jobseeker_consents").insert({
-    jobseeker_id: payload.jobseeker_id,
+    jobseeker_id: jobSeekerId,
     consent_type: payload.consent_type,
     accepted_at: new Date().toISOString(),
     version: payload.version,

@@ -3,8 +3,10 @@ const tabs = [
   { label: "Queue (Global)", href: "/dashboard/queue" },
   { label: "Needs Attention", href: "/dashboard/attention" },
   { label: "Applied / Completed", href: "/dashboard/applied" },
-  { label: "Draft Outreach", href: "/dashboard/outreach" },
+  { label: "Outreach CRM", href: "/dashboard/outreach" },
   { label: "Interview Prep", href: "/dashboard/interview-prep" },
+  { label: "Interviews", href: "/dashboard/interviews" },
+  { label: "Interview Slots", href: "/dashboard/interview-slots" },
 ];
 
 export default function DashboardPage() {

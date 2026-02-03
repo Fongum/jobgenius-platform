@@ -1,3 +1,5 @@
+import { ResendEmailProvider } from "@/lib/email/providers/resend";
+
 export type EmailSendRequest = {
   from: string;
   to: string[];
@@ -14,17 +16,51 @@ export type EmailSendResult = {
   detail?: string;
 };
 
+export type EmailSendInput = {
+  from: string;
+  to: string[];
+  subject: string;
+  html?: string | null;
+  text?: string | null;
+  replyTo?: string | null;
+  headers?: Record<string, string>;
+  metadata?: Record<string, string | number | boolean>;
+};
+
+export type EmailSendOutput = {
+  ok: boolean;
+  provider: string;
+  provider_message_id?: string;
+  detail?: string;
+};
+
 export interface EmailSendAdapter {
+  sendEmail(request: EmailSendInput): Promise<EmailSendOutput>;
   send(request: EmailSendRequest): Promise<EmailSendResult>;
 }
 
 class StubEmailAdapter implements EmailSendAdapter {
-  async send(request: EmailSendRequest): Promise<EmailSendResult> {
+  async sendEmail(request: EmailSendInput): Promise<EmailSendOutput> {
     return {
       ok: true,
       provider: "stub",
-      messageId: `stub-${Date.now()}`,
+      provider_message_id: `stub-${Date.now()}`,
       detail: `Stubbed send to ${request.to.join(", ")}`,
+    };
+  }
+
+  async send(request: EmailSendRequest): Promise<EmailSendResult> {
+    const result = await this.sendEmail({
+      from: request.from,
+      to: request.to,
+      subject: request.subject,
+      text: request.body,
+    });
+    return {
+      ok: result.ok,
+      provider: result.provider,
+      messageId: result.provider_message_id,
+      detail: result.detail,
     };
   }
 }
@@ -32,8 +68,8 @@ class StubEmailAdapter implements EmailSendAdapter {
 export function getEmailAdapter(): EmailSendAdapter {
   const provider = process.env.EMAIL_SEND_PROVIDER ?? "stub";
 
-  if (provider === "stub") {
-    return new StubEmailAdapter();
+  if (provider === "resend") {
+    return new ResendEmailProvider();
   }
 
   return new StubEmailAdapter();

@@ -95,7 +95,7 @@ async function runAlerts(request: Request) {
     }
   }
 
-  for (const [runnerId, ts] of latestByRunner.entries()) {
+  latestByRunner.forEach((ts, runnerId) => {
     const ageMinutes = (now - new Date(ts).getTime()) / 60000;
     if (ageMinutes > heartbeatStaleMinutes) {
       alertsToInsert.push({
@@ -105,7 +105,7 @@ async function runAlerts(request: Request) {
         meta: { runner_id: runnerId, last_ts: ts },
       });
     }
-  }
+  });
 
   if (alertsToInsert.length === 0) {
     return Response.json({ success: true, created: 0 });

@@ -4,6 +4,8 @@ import { fetchCompanyInfo } from "@/lib/company-info";
 import { getActorFromHeaders } from "@/lib/actor";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
+import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
+import { applicationAckEmail } from "@/lib/email-templates/application-ack";
 
 type CompletePayload = {
   run_id?: string;
@@ -254,6 +256,28 @@ export async function POST(request: Request) {
       },
       { onConflict: "job_seeker_id,job_post_id" }
     );
+
+    // Send application acknowledgement email to the job seeker
+    if (jobSeeker.email) {
+      const ackTemplate = applicationAckEmail({
+        candidateName: jobSeeker.full_name ?? "Candidate",
+        jobTitle: jobPost.title,
+        company: jobPost.company,
+      });
+
+      await sendAndLogEmail({
+        to: jobSeeker.email,
+        subject: ackTemplate.subject,
+        html: ackTemplate.html,
+        text: ackTemplate.text,
+        template_key: "application_ack",
+        job_seeker_id: jobSeeker.id,
+        job_post_id: jobPost.id,
+        application_queue_id: run.queue_id ?? undefined,
+      }).catch(() => {
+        // Non-blocking: email failure should not break the application flow
+      });
+    }
   }
 
   return Response.json({

@@ -77,7 +77,7 @@ export async function GET(
   const { data: scores, error: scoresError } = await supabaseServer
     .from("job_match_scores")
     .select(
-      "job_post_id, score, reasons, job_posts (title, company, location, created_at)"
+      "job_post_id, score, confidence, recommendation, reasons, job_posts (title, company, location, created_at)"
     )
     .eq("job_seeker_id", jobSeekerId);
 
@@ -170,6 +170,8 @@ export async function GET(
     return {
       job_post_id: scoreRow.job_post_id,
       score: scoreRow.score,
+      confidence: scoreRow.confidence ?? null,
+      recommendation: scoreRow.recommendation ?? null,
       reasons: scoreRow.reasons ?? null,
       title: post?.title ?? "Untitled",
       company: post?.company ?? null,

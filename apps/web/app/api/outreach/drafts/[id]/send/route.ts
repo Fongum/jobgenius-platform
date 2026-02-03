@@ -1,5 +1,6 @@
 import { getEmailAdapter } from "@/lib/email/adapter";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { assertOutreachConsent, getRecruiterOptOut } from "@/lib/outreach-consent";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function POST(
@@ -46,6 +47,14 @@ export async function POST(
     );
   }
 
+  const consentCheck = await assertOutreachConsent(draft.job_seeker_id);
+  if (!consentCheck.ok) {
+    return Response.json(
+      { success: false, error: consentCheck.error },
+      { status: 412 }
+    );
+  }
+
   const contact = Array.isArray(draft.outreach_contacts)
     ? draft.outreach_contacts[0]
     : draft.outreach_contacts;
@@ -67,12 +76,37 @@ export async function POST(
     );
   }
 
+  const { data: existingRecruiter } = await supabaseServer
+    .from("recruiters")
+    .select("id")
+    .eq("email", contact.email)
+    .maybeSingle();
+
+  if (existingRecruiter?.id) {
+    const optOutStatus = await getRecruiterOptOut(existingRecruiter.id);
+    if (optOutStatus.optedOut) {
+      return Response.json(
+        { success: false, error: "Recruiter opted out from outreach automation." },
+        { status: 409 }
+      );
+    }
+  }
+
+  const fromEmail = process.env.OUTREACH_FROM_EMAIL;
+  if (!fromEmail) {
+    return Response.json(
+      { success: false, error: "Missing OUTREACH_FROM_EMAIL." },
+      { status: 500 }
+    );
+  }
+
   const adapter = getEmailAdapter();
-  const result = await adapter.send({
-    from: jobSeeker.email,
+  const result = await adapter.sendEmail({
+    from: fromEmail,
     to: [contact.email],
     subject: draft.subject ?? "",
-    body: draft.body ?? "",
+    text: draft.body ?? "",
+    replyTo: jobSeeker.email ?? undefined,
   });
 
   const nowIso = new Date().toISOString();
@@ -113,7 +147,7 @@ export async function POST(
       to: contact.email,
       subject: draft.subject ?? "",
     },
-    response_payload: { message_id: result.messageId ?? null },
+    response_payload: { message_id: result.provider_message_id ?? null },
     updated_at: nowIso,
     sent_at: nowIso,
   });
@@ -123,5 +157,5 @@ export async function POST(
     .update({ status: "SENT", sent_at: nowIso, updated_at: nowIso, last_error: null })
     .eq("id", draft.id);
 
-  return Response.json({ success: true, provider: result.provider, message_id: result.messageId });
+  return Response.json({ success: true, provider: result.provider, message_id: result.provider_message_id ?? null });
 }

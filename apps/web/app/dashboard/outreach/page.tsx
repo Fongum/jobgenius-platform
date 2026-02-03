@@ -2,6 +2,12 @@ import { getAmEmailFromHeaders } from "@/lib/am";
 import { supabaseServer } from "@/lib/supabase/server";
 import OutreachClient from "./OutreachClient";
 
+const REQUIRED_OUTREACH_CONSENTS = [
+  "OUTREACH_AUTOMATION",
+  "OUTREACH_CONTACT_AUTHORIZATION",
+  "OUTREACH_DATA_USAGE",
+];
+
 type DraftRow = {
   id: string;
   job_seeker_id: string;
@@ -46,13 +52,26 @@ type DraftRow = {
     | null;
 };
 
+type JobSeekerRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+type ConsentRow = {
+  jobseeker_id: string;
+  consent_type: string;
+  accepted_at: string;
+  version: string;
+};
+
 export default async function OutreachPage() {
   const amEmail = getAmEmailFromHeaders();
 
   if (!amEmail) {
     return (
       <main>
-        <h1>Draft Outreach</h1>
+        <h1>Outreach CRM</h1>
         <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
       </main>
     );
@@ -67,7 +86,7 @@ export default async function OutreachPage() {
   if (amError || !accountManager) {
     return (
       <main>
-        <h1>Draft Outreach</h1>
+        <h1>Outreach CRM</h1>
         <p>Account manager not found for {amEmail}.</p>
       </main>
     );
@@ -89,7 +108,7 @@ export default async function OutreachPage() {
   if (seekerIds.length === 0) {
     return (
       <main>
-        <h1>Draft Outreach</h1>
+        <h1>Outreach CRM</h1>
         <p>No assigned job seekers.</p>
       </main>
     );
@@ -107,11 +126,53 @@ export default async function OutreachPage() {
     throw new Error("Failed to load outreach drafts.");
   }
 
+  const { data: jobSeekers } = await supabaseServer
+    .from("job_seekers")
+    .select("id, full_name, email")
+    .in("id", seekerIds);
+
+  const { data: consentRows } = await supabaseServer
+    .from("jobseeker_consents")
+    .select("jobseeker_id, consent_type, accepted_at, version")
+    .in("jobseeker_id", seekerIds)
+    .in("consent_type", REQUIRED_OUTREACH_CONSENTS)
+    .order("accepted_at", { ascending: false });
+
+  const consentStatusBySeeker: Record<
+    string,
+    Record<string, { accepted_at: string; version: string }>
+  > = {};
+  (consentRows ?? []).forEach((row) => {
+    const typedRow = row as ConsentRow;
+    if (!consentStatusBySeeker[typedRow.jobseeker_id]) {
+      consentStatusBySeeker[typedRow.jobseeker_id] = {};
+    }
+    if (!consentStatusBySeeker[typedRow.jobseeker_id][typedRow.consent_type]) {
+      consentStatusBySeeker[typedRow.jobseeker_id][typedRow.consent_type] = {
+        accepted_at: typedRow.accepted_at,
+        version: typedRow.version,
+      };
+    }
+  });
+
   return (
     <main>
-      <h1>Draft Outreach</h1>
+      <h1>Outreach CRM</h1>
       <p>Account Manager: {amEmail}</p>
-      <OutreachClient drafts={(drafts ?? []) as DraftRow[]} amEmail={amEmail} />
+      <nav style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
+        <a href="/dashboard/outreach/recruiters">Recruiters</a>
+        <a href="/dashboard/outreach/follow-ups">Follow-ups Due</a>
+        <a href="/dashboard/outreach/conversion">Conversion</a>
+        <a href="/dashboard/outreach">Drafts</a>
+      </nav>
+      <h2>Draft Outreach</h2>
+      <OutreachClient
+        drafts={(drafts ?? []) as DraftRow[]}
+        amEmail={amEmail}
+        requiredConsents={REQUIRED_OUTREACH_CONSENTS}
+        jobSeekers={(jobSeekers ?? []) as JobSeekerRow[]}
+        consentStatus={consentStatusBySeeker}
+      />
     </main>
   );
 }
