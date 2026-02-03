@@ -3,71 +3,614 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>JobGenius Saver</title>
+    <title>JobGenius</title>
     <style>
       :root {
-        color-scheme: light;
+        --indigo-50: #eef2ff;
+        --indigo-100: #e0e7ff;
+        --indigo-500: #6366f1;
+        --indigo-600: #4f46e5;
+        --indigo-700: #4338ca;
+        --blue-50: #eff6ff;
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-400: #9ca3af;
+        --gray-500: #6b7280;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-900: #111827;
+        --green-500: #22c55e;
+        --green-600: #16a34a;
+        --red-500: #ef4444;
+        --red-600: #dc2626;
+        --white: #ffffff;
       }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
       body {
-        font-family: Arial, sans-serif;
-        margin: 12px;
-        min-width: 280px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        min-width: 340px;
+        max-width: 340px;
+        background: linear-gradient(135deg, var(--blue-50) 0%, var(--indigo-100) 100%);
+        color: var(--gray-900);
       }
+
+      .header {
+        background: var(--white);
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--gray-200);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .logo {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--indigo-600);
+      }
+
+      .version {
+        font-size: 11px;
+        color: var(--gray-400);
+        background: var(--gray-100);
+        padding: 2px 8px;
+        border-radius: 10px;
+      }
+
+      .content {
+        padding: 16px 20px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .tab {
+        flex: 1;
+        padding: 10px 12px;
+        border: none;
+        background: var(--white);
+        color: var(--gray-600);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      }
+
+      .tab:hover {
+        background: var(--gray-50);
+      }
+
+      .tab.active {
+        background: var(--indigo-600);
+        color: var(--white);
+      }
+
+      .panel {
+        display: none;
+      }
+
+      .panel.active {
+        display: block;
+      }
+
+      .card {
+        background: var(--white);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+
+      .card-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--gray-700);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .card-title svg {
+        width: 16px;
+        height: 16px;
+        color: var(--indigo-500);
+      }
+
+      .form-group {
+        margin-bottom: 12px;
+      }
+
+      .form-group:last-child {
+        margin-bottom: 0;
+      }
+
       label {
         display: block;
         font-size: 12px;
-        margin-bottom: 4px;
+        font-weight: 500;
+        color: var(--gray-600);
+        margin-bottom: 6px;
       }
-      input {
+
+      input[type="text"],
+      input[type="email"],
+      input[type="url"],
+      select {
         width: 100%;
-        box-sizing: border-box;
-        padding: 6px 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--gray-900);
+        background: var(--white);
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--indigo-500);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      input::placeholder {
+        color: var(--gray-400);
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .checkbox-group input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--indigo-600);
+      }
+
+      .checkbox-group label {
+        margin-bottom: 0;
+        font-weight: 400;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .btn-primary {
+        background: var(--indigo-600);
+        color: var(--white);
+      }
+
+      .btn-primary:hover {
+        background: var(--indigo-700);
+      }
+
+      .btn-secondary {
+        background: var(--white);
+        color: var(--indigo-600);
+        border: 1px solid var(--indigo-200);
+      }
+
+      .btn-secondary:hover {
+        background: var(--indigo-50);
+      }
+
+      .btn-success {
+        background: var(--green-500);
+        color: var(--white);
+      }
+
+      .btn-success:hover {
+        background: var(--green-600);
+      }
+
+      .btn-danger {
+        background: var(--red-500);
+        color: var(--white);
+      }
+
+      .btn-danger:hover {
+        background: var(--red-600);
+      }
+
+      .btn-group {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .btn-group .btn {
+        flex: 1;
+      }
+
+      .status {
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        margin-top: 12px;
+        display: none;
+      }
+
+      .status.visible {
+        display: block;
+      }
+
+      .status.success {
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+      }
+
+      .status.error {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+
+      .status.info {
+        background: var(--indigo-50);
+        color: var(--indigo-700);
+        border: 1px solid var(--indigo-100);
+      }
+
+      .runner-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        background: var(--gray-50);
+        border-radius: 8px;
+        margin-bottom: 12px;
+      }
+
+      .runner-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--gray-400);
+      }
+
+      .runner-indicator.active {
+        background: var(--green-500);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      .runner-text {
+        font-size: 13px;
+        color: var(--gray-600);
+      }
+
+      .runner-text strong {
+        color: var(--gray-900);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .stat {
+        text-align: center;
+        padding: 12px 8px;
+        background: var(--gray-50);
+        border-radius: 8px;
+      }
+
+      .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--indigo-600);
+      }
+
+      .stat-label {
+        font-size: 10px;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        margin-top: 2px;
+      }
+
+      .job-boards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .job-board-tag {
+        font-size: 11px;
+        padding: 4px 8px;
+        background: var(--indigo-50);
+        color: var(--indigo-600);
+        border-radius: 4px;
+      }
+
+      .tip {
+        font-size: 11px;
+        color: var(--gray-500);
+        margin-top: 12px;
+        padding: 10px;
+        background: var(--gray-50);
+        border-radius: 6px;
+        line-height: 1.4;
+      }
+
+      .tip code {
+        background: var(--gray-200);
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 10px;
+      }
+
+      .scrape-options {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--gray-200);
+      }
+
+      .scrape-options-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--gray-700);
         margin-bottom: 8px;
       }
-      button {
-        width: 100%;
-        padding: 8px 10px;
-        cursor: pointer;
+
+      .page-info {
+        background: var(--indigo-50);
+        border: 1px solid var(--indigo-100);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
       }
-      #status {
+
+      .page-info-label {
+        font-size: 10px;
+        color: var(--indigo-500);
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .page-info-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--gray-900);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .page-info-url {
+        font-size: 11px;
+        color: var(--gray-500);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin-top: 2px;
+      }
+
+      .detected-board {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 4px 8px;
+        background: var(--green-500);
+        color: var(--white);
+        border-radius: 4px;
         margin-top: 8px;
-        font-size: 12px;
-        min-height: 16px;
+      }
+
+      .detected-board svg {
+        width: 12px;
+        height: 12px;
       }
     </style>
   </head>
   <body>
-    <label for="apiBaseUrl">API Base URL</label>
-    <input
-      id="apiBaseUrl"
-      type="text"
-      placeholder="https://jobgenius-platform.vercel.app"
-      autocomplete="off"
-    />
-    <label for="amEmail">AM Email (x-am-email)</label>
-    <input
-      id="amEmail"
-      type="email"
-      placeholder="am@jobgenius.ai"
-      autocomplete="off"
-    />
-    <label for="jobSeekerId">Active Job Seeker ID</label>
-    <input
-      id="jobSeekerId"
-      type="text"
-      placeholder="UUID"
-      autocomplete="off"
-    />
-    <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 4px 0 8px;">
-      <input id="dryRun" type="checkbox" />
-      Dry run (no submit)
-    </label>
-    <button id="saveJob">Save Job</button>
-    <button id="toggleRunner">Start Runner</button>
-    <p style="font-size: 11px; color: #6b7280; margin-top: 8px;">
-      Tip: Use <code>/api/seed/demo</code> and paste the returned job_seeker_id here.
-    </p>
-    <div id="status"></div>
+    <div class="header">
+      <div class="logo">JobGenius</div>
+      <span class="version">v0.2.0</span>
+    </div>
+
+    <div class="content">
+      <div class="tabs">
+        <button class="tab active" data-tab="save">Save Job</button>
+        <button class="tab" data-tab="discover">Discover</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </div>
+
+      <!-- Save Job Panel -->
+      <div class="panel active" id="panel-save">
+        <div class="page-info">
+          <div class="page-info-label">Current Page</div>
+          <div class="page-info-title" id="pageTitle">Loading...</div>
+          <div class="page-info-url" id="pageUrl">-</div>
+          <div id="detectedBoard"></div>
+        </div>
+
+        <button class="btn btn-primary" id="saveJob">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Save This Job
+        </button>
+
+        <div class="scrape-options">
+          <div class="scrape-options-title">Quick Scrape Options</div>
+          <div class="btn-group">
+            <button class="btn btn-secondary" id="scrapeVisible">Visible Jobs</button>
+            <button class="btn btn-secondary" id="scrapeAll">All Jobs</button>
+          </div>
+        </div>
+
+        <div id="saveStatus" class="status"></div>
+      </div>
+
+      <!-- Discover Panel -->
+      <div class="panel" id="panel-discover">
+        <div class="card">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            Job Discovery
+          </div>
+
+          <div class="form-group">
+            <label>Search Keywords</label>
+            <input type="text" id="searchKeywords" placeholder="e.g., Software Engineer, React" />
+          </div>
+
+          <div class="form-group">
+            <label>Location</label>
+            <input type="text" id="searchLocation" placeholder="e.g., Remote, New York, NY" />
+          </div>
+
+          <div class="form-group">
+            <label>Job Board</label>
+            <select id="searchBoard">
+              <option value="linkedin">LinkedIn</option>
+              <option value="indeed">Indeed</option>
+              <option value="glassdoor">Glassdoor</option>
+              <option value="dice">Dice</option>
+              <option value="ziprecruiter">ZipRecruiter</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Max Jobs to Scrape</label>
+            <select id="maxJobs">
+              <option value="10">10 jobs</option>
+              <option value="25" selected>25 jobs</option>
+              <option value="50">50 jobs</option>
+              <option value="100">100 jobs</option>
+            </select>
+          </div>
+
+          <button class="btn btn-primary" id="startDiscovery">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Start Discovery
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Supported Job Boards</div>
+          <div class="job-boards">
+            <span class="job-board-tag">LinkedIn</span>
+            <span class="job-board-tag">Indeed</span>
+            <span class="job-board-tag">Glassdoor</span>
+            <span class="job-board-tag">Greenhouse</span>
+            <span class="job-board-tag">Workday</span>
+            <span class="job-board-tag">Lever</span>
+            <span class="job-board-tag">Dice</span>
+            <span class="job-board-tag">ZipRecruiter</span>
+          </div>
+        </div>
+
+        <div id="discoverStatus" class="status"></div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div class="panel" id="panel-settings">
+        <div class="card">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Connection
+          </div>
+
+          <div class="form-group">
+            <label>API Base URL</label>
+            <input type="url" id="apiBaseUrl" placeholder="https://jobgenius-platform.vercel.app" />
+          </div>
+
+          <div class="form-group">
+            <label>AM Email</label>
+            <input type="email" id="amEmail" placeholder="am@jobgenius.ai" />
+          </div>
+
+          <div class="form-group">
+            <label>Job Seeker ID</label>
+            <input type="text" id="jobSeekerId" placeholder="UUID from dashboard" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20v-6M6 20V10M18 20V4"/>
+            </svg>
+            Automation Runner
+          </div>
+
+          <div class="runner-status">
+            <div class="runner-indicator" id="runnerIndicator"></div>
+            <div class="runner-text">
+              Runner: <strong id="runnerStatusText">Stopped</strong>
+            </div>
+          </div>
+
+          <div class="checkbox-group" style="margin-bottom: 12px;">
+            <input type="checkbox" id="dryRun" />
+            <label for="dryRun">Dry run mode (no actual submissions)</label>
+          </div>
+
+          <button class="btn btn-success" id="toggleRunner">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Start Runner
+          </button>
+        </div>
+
+        <div class="tip">
+          <strong>Tip:</strong> Use <code>/api/seed/demo</code> endpoint to create test data and get a job_seeker_id.
+        </div>
+
+        <div id="settingsStatus" class="status"></div>
+      </div>
+    </div>
+
     <script src="popup.js"></script>
   </body>
 </html>

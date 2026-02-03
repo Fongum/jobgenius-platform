@@ -1,18 +1,36 @@
 {
-  "name": "JobGenius Saver",
-  "version": "0.1.0",
+  "name": "JobGenius",
+  "version": "0.2.0",
+  "description": "AI-powered job placement automation - save jobs, discover opportunities, and auto-apply faster.",
   "manifest_version": 3,
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "JobGenius"
   },
-  "permissions": ["activeTab", "storage", "scripting", "alarms", "tabs"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "alarms",
+    "tabs"
+  ],
   "host_permissions": [
     "https://*.vercel.app/*",
     "http://localhost:3000/*",
     "https://*.linkedin.com/*",
+    "https://*.indeed.com/*",
+    "https://*.glassdoor.com/*",
     "https://*.greenhouse.io/*",
     "https://*.workday.com/*",
-    "https://*.myworkdayjobs.com/*"
+    "https://*.myworkdayjobs.com/*",
+    "https://*.lever.co/*",
+    "https://*.dice.com/*",
+    "https://*.ziprecruiter.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.icims.com/*",
+    "https://*.jobvite.com/*",
+    "https://*.breezy.hr/*",
+    "https://*.ashbyhq.com/*"
   ],
   "background": {
     "service_worker": "background.js"
