@@ -56,8 +56,7 @@ create index if not exists auth_sessions_token_idx
   on public.auth_sessions (token_hash);
 
 create index if not exists auth_sessions_expires_idx
-  on public.auth_sessions (expires_at)
-  where expires_at > now();
+  on public.auth_sessions (expires_at);
 
 -- ============================================================================
 -- CREATE PASSWORD RESET TOKENS TABLE

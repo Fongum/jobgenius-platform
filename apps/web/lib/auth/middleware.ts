@@ -173,6 +173,27 @@ export async function requireAM(request: Request): Promise<AuthCheckResult> {
 }
 
 /**
+ * Require admin authentication (role = 'admin' or 'superadmin')
+ */
+export async function requireAdmin(request: Request): Promise<AuthCheckResult> {
+  const result = await authenticateRequest(request);
+
+  if (!result.authenticated) {
+    return result;
+  }
+
+  if (result.user.userType !== "am" || !["admin", "superadmin"].includes(result.user.role ?? "")) {
+    return {
+      authenticated: false,
+      error: "Admin access required.",
+      status: 403,
+    };
+  }
+
+  return result;
+}
+
+/**
  * Require job seeker authentication
  */
 export async function requireJobSeeker(request: Request): Promise<AuthCheckResult> {

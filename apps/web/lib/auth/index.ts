@@ -57,6 +57,7 @@ export {
   authenticateRequest,
   requireAuth,
   requireAM,
+  requireAdmin,
   requireJobSeeker,
   requireJobSeekerAccess,
   type AuthCheckResult,

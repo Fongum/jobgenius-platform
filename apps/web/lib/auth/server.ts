@@ -20,11 +20,40 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+function getJwtRole(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = Buffer.from(payload, "base64").toString("utf8");
+    const parsed = JSON.parse(decoded) as { role?: string };
+    return typeof parsed.role === "string" ? parsed.role : null;
+  } catch {
+    return null;
+  }
+}
+
+const serviceKeyRole = getJwtRole(supabaseServiceKey);
+const serviceKeyPrefix = supabaseServiceKey.slice(0, 6);
+if (!serviceKeyRole) {
+  console.warn("SUPABASE_SERVICE_ROLE_KEY missing role claim", { serviceKeyPrefix });
+} else if (serviceKeyRole !== "service_role") {
+  console.error("SUPABASE_SERVICE_ROLE_KEY is not service_role", {
+    role: serviceKeyRole,
+    serviceKeyPrefix,
+  });
+}
+
 // Service client for admin operations
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
+  },
+  global: {
+    fetch: (url: RequestInfo | URL, init?: RequestInit) => {
+      return fetch(url, { ...init, cache: 'no-store' });
+    },
   },
 });
 
@@ -45,6 +74,9 @@ export function createAuthClient() {
       headers: accessToken
         ? { Authorization: `Bearer ${accessToken}` }
         : undefined,
+      fetch: (url: RequestInfo | URL, init?: RequestInit) => {
+        return fetch(url, { ...init, cache: 'no-store' });
+      },
     },
     auth: {
       autoRefreshToken: false,
@@ -215,6 +247,12 @@ export async function signUp(
   userType: UserType,
   metadata?: { name?: string }
 ): Promise<AuthResult> {
+  if (serviceKeyRole !== "service_role") {
+    return {
+      success: false,
+      error: "Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY must be service_role.",
+    };
+  }
   // Check if email already exists in the appropriate table
   if (userType === "am") {
     const existing = await getAccountManagerByEmail(email);
@@ -243,49 +281,100 @@ export async function signUp(
     return { success: false, error: authError?.message ?? "Failed to create account." };
   }
 
+  const rollbackAuthUser = async (reason: string, details?: unknown) => {
+    console.error("Auth link failed", { reason, email, details });
+    try {
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    } catch (deleteError) {
+      console.error("Failed to delete auth user after link failure", {
+        userId: authData.user.id,
+        deleteError,
+      });
+    }
+  };
+
   // Link auth user to our table
+  let user: AuthUser;
+
   if (userType === "am") {
     // Check if AM record exists (might be pre-created)
     const existing = await getAccountManagerByEmail(email);
     if (existing) {
       // Update existing record with auth_id
-      await supabaseAdmin
+      const { data: updatedAm, error: linkError } = await supabaseAdmin
         .from("account_managers")
         .update({ auth_id: authData.user.id, name: metadata?.name ?? existing.name })
-        .eq("id", existing.id);
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (linkError || !updatedAm) {
+        await rollbackAuthUser("account_managers update failed", linkError);
+        return { success: false, error: `Failed to link account: ${linkError?.message ?? "No data returned"}` };
+      }
+      user = { id: updatedAm.id, email: updatedAm.email, name: updatedAm.name ?? undefined, userType: "am", role: updatedAm.role };
     } else {
       // Create new AM record
-      await supabaseAdmin.from("account_managers").insert({
-        email,
-        name: metadata?.name,
-        auth_id: authData.user.id,
-        role: "am",
-      });
+      const { data: insertedAm, error: linkError } = await supabaseAdmin
+        .from("account_managers")
+        .insert({
+          email,
+          name: metadata?.name,
+          auth_id: authData.user.id,
+          role: "am",
+        })
+        .select()
+        .single();
+      if (linkError || !insertedAm) {
+        await rollbackAuthUser("account_managers insert failed", linkError);
+        return { success: false, error: `Failed to link account: ${linkError?.message ?? "No data returned"}` };
+      }
+      user = { id: insertedAm.id, email: insertedAm.email, name: insertedAm.name ?? undefined, userType: "am", role: insertedAm.role };
     }
   } else {
     // Check if job seeker record exists (might be pre-created by AM)
     const existing = await getJobSeekerByEmail(email);
     if (existing) {
       // Update existing record with auth_id
-      await supabaseAdmin
+      const { data: updatedJs, error: linkError } = await supabaseAdmin
         .from("job_seekers")
         .update({ auth_id: authData.user.id, full_name: metadata?.name ?? existing.full_name })
-        .eq("id", existing.id);
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (linkError || !updatedJs) {
+        await rollbackAuthUser("job_seekers update failed", linkError);
+        return { success: false, error: `Failed to link account: ${linkError?.message ?? "No data returned"}` };
+      }
+      user = { id: updatedJs.id, email: updatedJs.email, name: updatedJs.full_name ?? undefined, userType: "job_seeker" };
     } else {
       // Create new job seeker record
-      await supabaseAdmin.from("job_seekers").insert({
-        email,
-        full_name: metadata?.name,
-        auth_id: authData.user.id,
-        status: "active",
-      });
+      const { data: insertedJs, error: linkError } = await supabaseAdmin
+        .from("job_seekers")
+        .insert({
+          email,
+          full_name: metadata?.name,
+          auth_id: authData.user.id,
+          status: "active",
+        })
+        .select()
+        .single();
+      if (linkError || !insertedJs) {
+        await rollbackAuthUser("job_seekers insert failed", linkError);
+        return { success: false, error: `Failed to link account: ${linkError?.message ?? "No data returned"}` };
+      }
+      user = { id: insertedJs.id, email: insertedJs.email, name: insertedJs.full_name ?? undefined, userType: "job_seeker" };
     }
   }
 
-  // Get the linked user
-  const user = await getUserByAuthId(authData.user.id, userType);
+  // Fallback verification — should not be needed since we use .select() above,
+  // but kept as a safety net
   if (!user) {
-    return { success: false, error: "Failed to link account." };
+    const fallbackUser = await getUserByAuthId(authData.user.id, userType);
+    if (!fallbackUser) {
+      await rollbackAuthUser("getUserByAuthId returned null after link", { authId: authData.user.id, userType });
+      return { success: false, error: "Failed to link account." };
+    }
+    user = fallbackUser;
   }
 
   return {
@@ -312,7 +401,25 @@ export async function signIn(
   }
 
   // Get user from our tables
-  const user = await getUserByAuthId(data.user.id);
+  const preferredType =
+    data.user.user_metadata?.user_type === "am" ||
+    data.user.user_metadata?.user_type === "job_seeker"
+      ? (data.user.user_metadata.user_type as UserType)
+      : undefined;
+
+  let user = await getUserByAuthId(data.user.id, preferredType);
+  if (!user) {
+    user = await linkUserByEmail({
+      authId: data.user.id,
+      email: data.user.email ?? email,
+      preferredType,
+      name:
+        typeof data.user.user_metadata?.name === "string"
+          ? data.user.user_metadata.name
+          : undefined,
+    });
+  }
+
   if (!user) {
     return { success: false, error: "User account not found." };
   }
@@ -338,6 +445,147 @@ export async function signIn(
   };
 
   return { success: true, user, session };
+}
+
+async function linkUserByEmail({
+  authId,
+  email,
+  preferredType,
+  name,
+}: {
+  authId: string;
+  email: string;
+  preferredType?: UserType;
+  name?: string;
+}): Promise<AuthUser | null> {
+  if (preferredType === "am") {
+    return linkAccountManagerByEmail(authId, email, name);
+  }
+  if (preferredType === "job_seeker") {
+    return linkJobSeekerByEmail(authId, email, name);
+  }
+
+  const am = await linkAccountManagerByEmail(authId, email, name);
+  if (am) return am;
+  return linkJobSeekerByEmail(authId, email, name);
+}
+
+async function linkAccountManagerByEmail(
+  authId: string,
+  email: string,
+  name?: string
+): Promise<AuthUser | null> {
+  const { data: am, error } = await supabaseAdmin
+    .from("account_managers")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error || !am) return null;
+
+  if (am.auth_id && am.auth_id !== authId) {
+    console.error("Account manager already linked to another auth user", {
+      email,
+      authId,
+      existingAuthId: am.auth_id,
+    });
+    return null;
+  }
+
+  if (!am.auth_id || (name && !am.name)) {
+    const { data: updatedAm, error: updateError } = await supabaseAdmin
+      .from("account_managers")
+      .update({
+        auth_id: am.auth_id ?? authId,
+        name: am.name ?? name ?? null,
+      })
+      .eq("id", am.id)
+      .select()
+      .single();
+
+    if (updateError || !updatedAm) {
+      console.error("Failed to link account manager by email", {
+        email,
+        authId,
+        updateError,
+      });
+      return null;
+    }
+
+    return {
+      id: updatedAm.id,
+      email: updatedAm.email,
+      name: updatedAm.name ?? undefined,
+      userType: "am",
+      role: updatedAm.role,
+    };
+  }
+
+  return {
+    id: am.id,
+    email: am.email,
+    name: am.name ?? undefined,
+    userType: "am",
+    role: am.role,
+  };
+}
+
+async function linkJobSeekerByEmail(
+  authId: string,
+  email: string,
+  name?: string
+): Promise<AuthUser | null> {
+  const { data: js, error } = await supabaseAdmin
+    .from("job_seekers")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error || !js) return null;
+
+  if (js.auth_id && js.auth_id !== authId) {
+    console.error("Job seeker already linked to another auth user", {
+      email,
+      authId,
+      existingAuthId: js.auth_id,
+    });
+    return null;
+  }
+
+  if (!js.auth_id || (name && !js.full_name)) {
+    const { data: updatedJs, error: updateError } = await supabaseAdmin
+      .from("job_seekers")
+      .update({
+        auth_id: js.auth_id ?? authId,
+        full_name: js.full_name ?? name ?? null,
+      })
+      .eq("id", js.id)
+      .select()
+      .single();
+
+    if (updateError || !updatedJs) {
+      console.error("Failed to link job seeker by email", {
+        email,
+        authId,
+        updateError,
+      });
+      return null;
+    }
+
+    return {
+      id: updatedJs.id,
+      email: updatedJs.email,
+      name: updatedJs.full_name ?? undefined,
+      userType: "job_seeker",
+    };
+  }
+
+  return {
+    id: js.id,
+    email: js.email,
+    name: js.full_name ?? undefined,
+    userType: "job_seeker",
+  };
 }
 
 /**

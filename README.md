@@ -34,6 +34,39 @@ An autonomous job application, interview prep, and recruiter collaboration platf
 - Configure env: `JOBGENIUS_API_BASE_URL`, `RUNNER_AM_EMAIL`, `RUNNER_ID`, `RUNNER_POLL_INTERVAL_MS`, `RUNNER_CONCURRENCY`
 - Local run: `npm install` then `npm run start`
 
+## Outreach CRM + Email (Phase 6)
+- Core CRM entities:
+  - `recruiters`, `recruiter_threads`, `outreach_sequences`, `outreach_messages`
+  - `outreach_plans` (deterministic outreach intelligence + risk scoring)
+  - `recruiter_opt_outs` (compliance/opt-out tracking)
+- Outreach state machine:
+  - Message states: `DRAFTED -> QUEUED -> SENT -> OPENED/REPLIED/BOUNCED/FOLLOWUP_DUE -> CLOSED`
+  - Scheduler auto-creates adaptive follow-ups when no reply thresholds are crossed.
+- Email infrastructure:
+  - `EMAIL_SEND_PROVIDER` (`resend` or `stub`)
+  - `RESEND_API_KEY`
+  - `OUTREACH_FROM_EMAIL`
+  - `OUTREACH_REPLY_TO_EMAIL` (optional)
+  - `OUTREACH_WEBHOOK_SECRET` (for webhook verification)
+  - `OUTREACH_TRACK_BASE_URL` (open tracking pixel base URL)
+- Follow-up automation controls:
+  - `OUTREACH_NO_REPLY_HOURS` (default `72`)
+  - `OUTREACH_OPENED_NO_REPLY_HOURS` (default `36`)
+  - `OUTREACH_MAX_FOLLOWUPS` (default `2`)
+- Consent/compliance gates:
+  - Required consent types default to:
+    - `OUTREACH_AUTOMATION`
+    - `OUTREACH_CONTACT_AUTHORIZATION`
+    - `OUTREACH_DATA_USAGE`
+  - Optional override: `OUTREACH_REQUIRED_CONSENTS=...`
+- Monitoring:
+  - `/api/outreach/scheduler/run` runs via Vercel Cron every 15 minutes (`OPS_API_KEY` required).
+  - `/api/outreach/metrics` exposes conversion + telemetry metrics (ops or authorized AM).
+  - One-time backfill (safe dry-run default):
+    - `GET /api/outreach/backfill/run?ops_key=${OPS_API_KEY}`
+    - Apply changes: `GET /api/outreach/backfill/run?ops_key=${OPS_API_KEY}&dry_run=false`
+  - Dashboard view: `/dashboard/outreach/conversion`.
+
 ## Demo seed/reset
 - `POST /api/seed/demo` creates a demo AM/jobseeker, two jobs, one READY run, and one NEEDS_ATTENTION run.
 - `POST /api/seed/reset` deletes the demo data.

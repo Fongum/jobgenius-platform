@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "discover": "node src/discovery-cli.js",
+    "discover:linkedin": "node src/discovery-cli.js linkedin",
+    "discover:indeed": "node src/discovery-cli.js indeed",
+    "discover:glassdoor": "node src/discovery-cli.js glassdoor"
   },
   "dependencies": {
     "playwright": "^1.41.2"

@@ -141,3 +141,5 @@ apps/runner/.state
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+.vercel
+.env*.local

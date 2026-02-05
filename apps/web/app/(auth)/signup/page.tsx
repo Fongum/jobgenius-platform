@@ -4,8 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+type UserType = "am" | "job_seeker";
+
 export default function SignUpPage() {
   const router = useRouter();
+  const [userType, setUserType] = useState<UserType>("am");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +40,7 @@ export default function SignUpPage() {
           email,
           password,
           name,
-          userType: "am", // Default to account manager signup
+          userType,
         }),
       });
 
@@ -49,8 +52,12 @@ export default function SignUpPage() {
         return;
       }
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Redirect based on user type
+      if (data.user.userType === "job_seeker") {
+        router.push("/portal");
+      } else {
+        router.push("/dashboard");
+      }
     } catch {
       setError("An error occurred. Please try again.");
       setLoading(false);
@@ -68,7 +75,9 @@ export default function SignUpPage() {
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign up as an Account Manager to start managing job seekers.
+            {userType === "am"
+              ? "Sign up as an Account Manager to start managing job seekers."
+              : "Sign up as a Job Seeker to find your next opportunity."}
           </p>
         </div>
 
@@ -78,6 +87,63 @@ export default function SignUpPage() {
               {error}
             </div>
           )}
+
+          {/* User Type Selector */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              I am a
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setUserType("am")}
+                className={`flex flex-col items-center justify-center px-4 py-3 border-2 rounded-lg text-sm font-medium transition-colors ${
+                  userType === "am"
+                    ? "border-blue-600 bg-blue-50 text-blue-700"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                <svg
+                  className="w-6 h-6 mb-1"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                  />
+                </svg>
+                Account Manager
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserType("job_seeker")}
+                className={`flex flex-col items-center justify-center px-4 py-3 border-2 rounded-lg text-sm font-medium transition-colors ${
+                  userType === "job_seeker"
+                    ? "border-blue-600 bg-blue-50 text-blue-700"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                <svg
+                  className="w-6 h-6 mb-1"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+                Job Seeker
+              </button>
+            </div>
+          </div>
 
           <div className="space-y-4">
             <div>
