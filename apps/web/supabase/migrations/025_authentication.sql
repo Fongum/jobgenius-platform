@@ -109,6 +109,63 @@ create index if not exists job_seekers_auth_id_idx
   where auth_id is not null;
 
 -- ============================================================================
+-- RLS POLICIES FOR JOB_SEEKERS (auth operations)
+-- ============================================================================
+
+-- Allow service role full access for signup/login/update operations
+create policy "service_role_all_job_seekers"
+  on public.job_seekers
+  for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+-- Allow job seekers to read their own record
+create policy "job_seeker_select_own"
+  on public.job_seekers
+  for select
+  using (auth_id = auth.uid());
+
+-- Allow job seekers to update their own record
+create policy "job_seeker_update_own"
+  on public.job_seekers
+  for update
+  using (auth_id = auth.uid())
+  with check (auth_id = auth.uid());
+
+-- ============================================================================
+-- RLS POLICIES FOR ACCOUNT_MANAGERS (auth operations)
+-- ============================================================================
+
+-- Enable RLS on account_managers (was missing)
+alter table public.account_managers enable row level security;
+
+-- Allow service role full access for signup/login/update operations
+create policy "service_role_all_account_managers"
+  on public.account_managers
+  for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+-- Allow AMs to read their own record
+create policy "am_select_own"
+  on public.account_managers
+  for select
+  using (auth_id = auth.uid());
+
+-- Allow AMs to update their own record
+create policy "am_update_own"
+  on public.account_managers
+  for update
+  using (auth_id = auth.uid())
+  with check (auth_id = auth.uid());
+
+-- Allow authenticated users to read AM records (for display/lookup purposes)
+create policy "authenticated_select_account_managers"
+  on public.account_managers
+  for select
+  using (auth.role() = 'authenticated');
+
+-- ============================================================================
 -- RLS POLICIES FOR AUTH TABLES
 -- ============================================================================
 
