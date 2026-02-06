@@ -1,0 +1,195 @@
+import Link from "next/link";
+import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+
+export default async function AdminPage() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const isSuperAdmin = user.role === "superadmin";
+
+  // Get counts
+  const { count: amCount } = await supabaseAdmin
+    .from("account_managers")
+    .select("id", { count: "exact", head: true });
+
+  const { count: adminCount } = await supabaseAdmin
+    .from("account_managers")
+    .select("id", { count: "exact", head: true })
+    .in("role", ["admin", "superadmin"]);
+
+  const { count: seekerCount } = await supabaseAdmin
+    .from("job_seekers")
+    .select("id", { count: "exact", head: true });
+
+  const { count: assignedCount } = await supabaseAdmin
+    .from("job_seeker_assignments")
+    .select("id", { count: "exact", head: true });
+
+  const { count: unassignedCount } = await supabaseAdmin
+    .from("job_seekers")
+    .select("id", { count: "exact", head: true })
+    .is("id", null); // This won't work, need a different approach
+
+  // Get unassigned seekers count properly
+  const { data: allSeekerIds } = await supabaseAdmin
+    .from("job_seekers")
+    .select("id");
+  const { data: assignedSeekerIds } = await supabaseAdmin
+    .from("job_seeker_assignments")
+    .select("job_seeker_id");
+
+  const assignedSet = new Set((assignedSeekerIds || []).map((a) => a.job_seeker_id));
+  const unassigned = (allSeekerIds || []).filter((s) => !assignedSet.has(s.id)).length;
+
+  // Get recent AMs
+  const { data: recentAMs } = await supabaseAdmin
+    .from("account_managers")
+    .select("id, name, email, role, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  // Get recent job seekers
+  const { data: recentSeekers } = await supabaseAdmin
+    .from("job_seekers")
+    .select("id, full_name, email, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Administration</h1>
+          <p className="text-gray-600">
+            {isSuperAdmin ? "Super Admin" : "Admin"} Dashboard
+          </p>
+        </div>
+        {isSuperAdmin && (
+          <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">
+            Super Admin
+          </span>
+        )}
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link
+          href="/dashboard/admin/accounts"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Account Managers</div>
+          <div className="mt-1 text-3xl font-bold text-gray-900">{amCount ?? 0}</div>
+          <div className="text-xs text-gray-400 mt-1">{adminCount ?? 0} admins</div>
+        </Link>
+
+        <Link
+          href="/dashboard/admin/job-seekers"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Job Seekers</div>
+          <div className="mt-1 text-3xl font-bold text-blue-600">{seekerCount ?? 0}</div>
+        </Link>
+
+        <Link
+          href="/dashboard/admin/assignments"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Assigned</div>
+          <div className="mt-1 text-3xl font-bold text-green-600">{assignedCount ?? 0}</div>
+        </Link>
+
+        <Link
+          href="/dashboard/admin/assignments"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Unassigned</div>
+          <div className="mt-1 text-3xl font-bold text-orange-600">{unassigned}</div>
+        </Link>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white rounded-lg shadow p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/dashboard/admin/accounts?action=create"
+            className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Create Account Manager
+          </Link>
+          <Link
+            href="/dashboard/admin/assignments"
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Manage Assignments
+          </Link>
+          <Link
+            href="/dashboard/admin/job-seekers"
+            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            View All Job Seekers
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Account Managers */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">Recent Account Managers</h2>
+            <Link href="/dashboard/admin/accounts" className="text-sm text-blue-600 hover:text-blue-800">
+              View all
+            </Link>
+          </div>
+          <div className="divide-y">
+            {(!recentAMs || recentAMs.length === 0) ? (
+              <p className="px-5 py-4 text-sm text-gray-500">No account managers</p>
+            ) : (
+              recentAMs.map((am) => (
+                <div key={am.id} className="px-5 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{am.name || "Unnamed"}</p>
+                    <p className="text-sm text-gray-500">{am.email}</p>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                      am.role === "superadmin"
+                        ? "bg-purple-100 text-purple-800"
+                        : am.role === "admin"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {am.role}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Recent Job Seekers */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">Recent Job Seekers</h2>
+            <Link href="/dashboard/admin/job-seekers" className="text-sm text-blue-600 hover:text-blue-800">
+              View all
+            </Link>
+          </div>
+          <div className="divide-y">
+            {(!recentSeekers || recentSeekers.length === 0) ? (
+              <p className="px-5 py-4 text-sm text-gray-500">No job seekers</p>
+            ) : (
+              recentSeekers.map((seeker) => (
+                <div key={seeker.id} className="px-5 py-3">
+                  <p className="font-medium text-gray-900">{seeker.full_name || "Unnamed"}</p>
+                  <p className="text-sm text-gray-500">{seeker.email}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,139 @@
+import { NextResponse } from "next/server";
+import { requireAM, supabaseAdmin } from "@/lib/auth";
+
+// Check if AM has access to this seeker
+async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("job_seeker_assignments")
+    .select("id")
+    .eq("account_manager_id", amId)
+    .eq("job_seeker_id", seekerId)
+    .maybeSingle();
+  return !!data;
+}
+
+// GET: Get queue items for a seeker
+export async function GET(request: Request) {
+  const auth = await requireAM(request);
+  if (!auth.authenticated) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const job_seeker_id = searchParams.get("job_seeker_id");
+  const status = searchParams.get("status");
+
+  if (!job_seeker_id) {
+    return NextResponse.json({ error: "job_seeker_id is required." }, { status: 400 });
+  }
+
+  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  let query = supabaseAdmin
+    .from("application_queue")
+    .select(`
+      id, status, category, created_at, updated_at, last_error,
+      job_posts (id, title, company, location, url)
+    `)
+    .eq("job_seeker_id", job_seeker_id)
+    .order("created_at", { ascending: false });
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return NextResponse.json({ error: "Failed to load queue." }, { status: 500 });
+  }
+
+  return NextResponse.json({ queue: data });
+}
+
+// POST: Add a job to the queue
+export async function POST(request: Request) {
+  const auth = await requireAM(request);
+  if (!auth.authenticated) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const body = await request.json();
+  const { job_seeker_id, job_post_id, category } = body;
+
+  if (!job_seeker_id || !job_post_id) {
+    return NextResponse.json(
+      { error: "job_seeker_id and job_post_id are required." },
+      { status: 400 }
+    );
+  }
+
+  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  // Check if already in queue
+  const { data: existing } = await supabaseAdmin
+    .from("application_queue")
+    .select("id")
+    .eq("job_seeker_id", job_seeker_id)
+    .eq("job_post_id", job_post_id)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json({ error: "Job already in queue." }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("application_queue")
+    .insert({
+      job_seeker_id,
+      job_post_id,
+      status: "QUEUED",
+      category: category || "manual",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: "Failed to add to queue." }, { status: 500 });
+  }
+
+  return NextResponse.json({ queue_item: data }, { status: 201 });
+}
+
+// DELETE: Remove a job from the queue
+export async function DELETE(request: Request) {
+  const auth = await requireAM(request);
+  if (!auth.authenticated) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  const job_seeker_id = searchParams.get("job_seeker_id");
+
+  if (!id || !job_seeker_id) {
+    return NextResponse.json({ error: "id and job_seeker_id are required." }, { status: 400 });
+  }
+
+  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  // Only allow deleting QUEUED items
+  const { error } = await supabaseAdmin
+    .from("application_queue")
+    .delete()
+    .eq("id", id)
+    .eq("job_seeker_id", job_seeker_id)
+    .eq("status", "QUEUED");
+
+  if (error) {
+    return NextResponse.json({ error: "Failed to remove from queue." }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

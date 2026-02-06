@@ -10,6 +10,8 @@ export interface AuthUser {
   userType: UserType;
   name?: string;
   role?: string; // For AMs: 'am', 'admin', 'superadmin'
+  status?: string; // For AMs: 'pending', 'approved', 'rejected'
+  amCode?: string; // For AMs: unique code for extension login
 }
 
 export interface AccountManager {
@@ -17,6 +19,8 @@ export interface AccountManager {
   email: string;
   name: string | null;
   role: string;
+  status: string;
+  am_code: string | null;
   auth_id: string | null;
   created_at: string;
   last_login_at: string | null;

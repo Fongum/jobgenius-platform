@@ -99,7 +99,7 @@ async function getUserByLegacyEmail(email: string): Promise<AuthUser | null> {
   // Try account managers first
   const { data: am } = await supabaseAdmin
     .from("account_managers")
-    .select("id, email, name, role")
+    .select("id, email, name, role, status, am_code")
     .eq("email", email)
     .single();
 
@@ -110,6 +110,8 @@ async function getUserByLegacyEmail(email: string): Promise<AuthUser | null> {
       name: am.name ?? undefined,
       userType: "am",
       role: am.role,
+      status: am.status,
+      amCode: am.am_code ?? undefined,
     };
   }
 
