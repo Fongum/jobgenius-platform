@@ -29,6 +29,7 @@ const sampleSeeker: JobSeekerProfile = {
   preferred_locations: ["San Francisco", "New York", "Remote"],
   open_to_relocation: false,
   requires_visa_sponsorship: false,
+  location_preferences: [],
 };
 
 const goodMatchJob: JobPost = {

@@ -61,6 +61,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     "address_line1", "address_city", "address_state", "address_zip", "address_country",
     "seniority", "work_type", "salary_min", "salary_max",
     "target_titles", "skills", "education", "work_history", "match_threshold",
+    "match_weights",
+    "preferred_industries", "preferred_company_sizes", "exclude_keywords",
+    "years_experience", "preferred_locations", "open_to_relocation",
+    "requires_visa_sponsorship",
   ];
 
   const updates: Record<string, unknown> = {};

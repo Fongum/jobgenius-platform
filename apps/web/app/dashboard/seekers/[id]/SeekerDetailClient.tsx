@@ -3,6 +3,47 @@
 import { useState } from "react";
 import Link from "next/link";
 
+interface ScoringWeights {
+  skills: number;
+  title: number;
+  experience: number;
+  salary: number;
+  location: number;
+  company_fit: number;
+  max_penalty: number;
+}
+
+const DEFAULT_WEIGHTS: ScoringWeights = {
+  skills: 35,
+  title: 20,
+  experience: 10,
+  salary: 10,
+  location: 15,
+  company_fit: 10,
+  max_penalty: 15,
+};
+
+interface WorkHistoryEntry {
+  title: string;
+  company: string;
+  start_date: string;
+  end_date: string;
+  current: boolean;
+  description: string;
+}
+
+interface EducationEntry {
+  degree: string;
+  school: string;
+  field: string;
+  graduation_year: string;
+}
+
+interface LocationPreference {
+  work_type: string;
+  locations: string[];
+}
+
 interface SeekerData {
   id: string;
   full_name: string | null;
@@ -19,8 +60,39 @@ interface SeekerData {
   portfolio_url: string | null;
   profile_completion: number | null;
   match_threshold: number | null;
-  education: unknown[] | null;
-  work_history: unknown[] | null;
+  match_weights: ScoringWeights | null;
+  education: EducationEntry[] | null;
+  work_history: WorkHistoryEntry[] | null;
+  bio: string | null;
+  years_experience: number | null;
+  preferred_industries: string[] | null;
+  preferred_company_sizes: string[] | null;
+  location_preferences: LocationPreference[] | null;
+  work_type_preferences: string[] | null;
+  employment_type_preferences: string[] | null;
+  open_to_relocation: boolean | null;
+  // Address
+  address_line1: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_zip: string | null;
+  address_country: string | null;
+  // Work authorization
+  authorized_to_work: boolean | null;
+  requires_visa_sponsorship: boolean | null;
+  visa_status: string | null;
+  citizenship_status: string | null;
+  requires_h1b_transfer: boolean | null;
+  needs_employer_sponsorship: boolean | null;
+  // Availability
+  start_date: string | null;
+  notice_period: string | null;
+  available_for_relocation: boolean | null;
+  available_for_travel: boolean | null;
+  willing_to_work_overtime: boolean | null;
+  willing_to_work_weekends: boolean | null;
+  preferred_shift: string | null;
+  open_to_contract: boolean | null;
 }
 
 interface MatchedJob {
@@ -107,6 +179,7 @@ interface Document {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "profile", label: "Profile" },
   { id: "jobs", label: "Jobs" },
   { id: "applications", label: "Applications" },
   { id: "outreach", label: "Outreach" },
@@ -228,11 +301,15 @@ export default function SeekerDetailClient({
               documents={documents}
             />
           )}
+          {activeTab === "profile" && (
+            <ProfileTab seeker={seeker} />
+          )}
           {activeTab === "jobs" && (
             <JobsTab
               matchedJobs={matchedJobs}
               threshold={threshold}
               seekerId={seeker.id}
+              initialWeights={seeker.match_weights}
             />
           )}
           {activeTab === "applications" && (
@@ -381,25 +458,537 @@ function OverviewTab({
   );
 }
 
+function ProfileTab({ seeker }: { seeker: SeekerData }) {
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysis, setAnalysis] = useState<{ analysis: string; rating: string } | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const runAnalysis = async () => {
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    try {
+      const res = await fetch(`/api/am/seekers/${seeker.id}/profile-analysis`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setAnalysisError(data.error || "Failed to analyze profile.");
+        return;
+      }
+      const data = await res.json();
+      setAnalysis(data);
+    } catch {
+      setAnalysisError("Network error.");
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  const completion = seeker.profile_completion ?? 0;
+
+  const boolLabel = (val: boolean | null) =>
+    val === true ? "Yes" : val === false ? "No" : "—";
+
+  return (
+    <div className="space-y-6">
+      {/* Profile Completion */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-gray-900">Profile Completion</h3>
+          <span className="text-lg font-bold text-blue-600">{completion}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-3">
+          <div
+            className={`h-3 rounded-full transition-all ${completion >= 80 ? "bg-green-500" : completion >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+            style={{ width: `${completion}%` }}
+          />
+        </div>
+      </div>
+
+      {/* AI Analysis */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">AI Profile Analysis</h3>
+          <button
+            onClick={runAnalysis}
+            disabled={analysisLoading}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {analysisLoading ? "Analyzing..." : "Analyze Profile"}
+          </button>
+        </div>
+        {analysisError && (
+          <p className="text-sm text-red-600 bg-red-50 p-3 rounded">{analysisError}</p>
+        )}
+        {analysis && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Rating:</span>
+              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${
+                analysis.rating === "Ready" ? "bg-green-100 text-green-800" :
+                analysis.rating === "Needs Work" ? "bg-yellow-100 text-yellow-800" :
+                "bg-red-100 text-red-800"
+              }`}>
+                {analysis.rating}
+              </span>
+            </div>
+            <div className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-4 rounded-lg border">
+              {analysis.analysis}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Personal Info */}
+        <Section title="Personal Information">
+          <dl className="space-y-2">
+            <InfoRow label="Name" value={seeker.full_name} />
+            <InfoRow label="Email" value={seeker.email} />
+            <InfoRow label="Phone" value={seeker.phone || "—"} />
+            <InfoRow label="Location" value={seeker.location || "—"} />
+            <InfoRow label="LinkedIn" value={seeker.linkedin_url} link />
+            <InfoRow label="Portfolio" value={seeker.portfolio_url} link />
+          </dl>
+          {(seeker.address_line1 || seeker.address_city) && (
+            <div className="mt-3 pt-3 border-t">
+              <p className="text-xs font-medium text-gray-500 mb-1">Address</p>
+              <p className="text-sm text-gray-700">
+                {[seeker.address_line1, seeker.address_city, seeker.address_state, seeker.address_zip, seeker.address_country].filter(Boolean).join(", ")}
+              </p>
+            </div>
+          )}
+        </Section>
+
+        {/* Bio */}
+        <Section title="Bio">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">
+            {seeker.bio || "No bio provided."}
+          </p>
+        </Section>
+
+        {/* Job Preferences */}
+        <Section title="Job Preferences">
+          <dl className="space-y-2">
+            <InfoRow label="Seniority" value={seeker.seniority || "—"} />
+            <InfoRow label="Years of Experience" value={seeker.years_experience != null ? String(seeker.years_experience) : "—"} />
+            <InfoRow label="Salary Range" value={
+              seeker.salary_min || seeker.salary_max
+                ? `$${(seeker.salary_min ?? 0).toLocaleString()} – $${(seeker.salary_max ?? 0).toLocaleString()}`
+                : "—"
+            } />
+            <InfoRow label="Open to Relocation" value={boolLabel(seeker.open_to_relocation)} />
+          </dl>
+          {seeker.target_titles && seeker.target_titles.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Target Titles</p>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.target_titles.map((t) => (
+                  <span key={t} className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {seeker.work_type_preferences && seeker.work_type_preferences.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Work Types</p>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.work_type_preferences.map((w) => (
+                  <span key={w} className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full capitalize">{w}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {seeker.employment_type_preferences && seeker.employment_type_preferences.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Employment Types</p>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.employment_type_preferences.map((e) => (
+                  <span key={e} className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full capitalize">{e}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {seeker.location_preferences && seeker.location_preferences.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Location Preferences</p>
+              <div className="space-y-1">
+                {seeker.location_preferences.map((lp, i) => (
+                  <p key={i} className="text-sm text-gray-700">
+                    <span className="font-medium capitalize">{lp.work_type}:</span> {lp.locations.join(", ")}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* Skills */}
+        <Section title="Skills">
+          {seeker.skills && seeker.skills.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {seeker.skills.map((s) => (
+                <span key={s} className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">{s}</span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No skills listed</p>
+          )}
+        </Section>
+
+        {/* Work History */}
+        <Section title="Work History">
+          {seeker.work_history && seeker.work_history.length > 0 ? (
+            <div className="space-y-3">
+              {seeker.work_history.map((entry, i) => (
+                <div key={i} className="p-3 bg-white rounded-lg border">
+                  <p className="font-medium text-gray-900">{entry.title}</p>
+                  <p className="text-sm text-gray-600">{entry.company}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {entry.start_date} – {entry.current ? "Present" : entry.end_date}
+                  </p>
+                  {entry.description && (
+                    <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{entry.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No work history</p>
+          )}
+        </Section>
+
+        {/* Education */}
+        <Section title="Education">
+          {seeker.education && seeker.education.length > 0 ? (
+            <div className="space-y-3">
+              {seeker.education.map((entry, i) => (
+                <div key={i} className="p-3 bg-white rounded-lg border">
+                  <p className="font-medium text-gray-900">{entry.degree}</p>
+                  <p className="text-sm text-gray-600">{entry.school}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {entry.field}{entry.graduation_year ? ` (${entry.graduation_year})` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No education listed</p>
+          )}
+        </Section>
+
+        {/* Industries & Company Sizes */}
+        <Section title="Industries & Company Sizes">
+          {seeker.preferred_industries && seeker.preferred_industries.length > 0 ? (
+            <div className="mb-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Preferred Industries</p>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.preferred_industries.map((ind) => (
+                  <span key={ind} className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">{ind}</span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm mb-2">No preferred industries</p>
+          )}
+          {seeker.preferred_company_sizes && seeker.preferred_company_sizes.length > 0 ? (
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1">Preferred Company Sizes</p>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.preferred_company_sizes.map((sz) => (
+                  <span key={sz} className="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs rounded-full">{sz}</span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No preferred company sizes</p>
+          )}
+        </Section>
+
+        {/* Work Authorization */}
+        <Section title="Work Authorization">
+          <dl className="space-y-2">
+            <InfoRow label="Authorized to Work" value={boolLabel(seeker.authorized_to_work)} />
+            <InfoRow label="Requires Visa Sponsorship" value={boolLabel(seeker.requires_visa_sponsorship)} />
+            <InfoRow label="Citizenship Status" value={seeker.citizenship_status || "—"} />
+            <InfoRow label="Requires H1B Transfer" value={boolLabel(seeker.requires_h1b_transfer)} />
+            <InfoRow label="Needs Employer Sponsorship" value={boolLabel(seeker.needs_employer_sponsorship)} />
+          </dl>
+        </Section>
+
+        {/* Availability */}
+        <Section title="Availability">
+          <dl className="space-y-2">
+            <InfoRow label="Start Date" value={seeker.start_date || "—"} />
+            <InfoRow label="Notice Period" value={seeker.notice_period || "—"} />
+            <InfoRow label="Available for Relocation" value={boolLabel(seeker.available_for_relocation)} />
+            <InfoRow label="Available for Travel" value={boolLabel(seeker.available_for_travel)} />
+            <InfoRow label="Willing to Work Overtime" value={boolLabel(seeker.willing_to_work_overtime)} />
+            <InfoRow label="Willing to Work Weekends" value={boolLabel(seeker.willing_to_work_weekends)} />
+            <InfoRow label="Preferred Shift" value={seeker.preferred_shift || "—"} />
+            <InfoRow label="Open to Contract" value={boolLabel(seeker.open_to_contract)} />
+          </dl>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
 function JobsTab({
   matchedJobs,
   threshold,
   seekerId,
+  initialWeights,
 }: {
   matchedJobs: MatchedJob[];
   threshold: number;
   seekerId: string;
+  initialWeights: ScoringWeights | null;
 }) {
   const [filter, setFilter] = useState<"all" | "above" | "below">("above");
+  const [currentThreshold, setCurrentThreshold] = useState(threshold);
+  const [savingThreshold, setSavingThreshold] = useState(false);
+  const [runningMatch, setRunningMatch] = useState(false);
+  const [showWeights, setShowWeights] = useState(false);
+  const [weights, setWeights] = useState<ScoringWeights>(initialWeights ?? DEFAULT_WEIGHTS);
+  const [savingWeights, setSavingWeights] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const filtered = matchedJobs.filter((m) => {
-    if (filter === "above") return m.score >= threshold && m.routingDecision !== "OVERRIDDEN_OUT";
-    if (filter === "below") return m.score < threshold || m.routingDecision === "OVERRIDDEN_OUT";
+    if (filter === "above") return m.score >= currentThreshold && m.routingDecision !== "OVERRIDDEN_OUT";
+    if (filter === "below") return m.score < currentThreshold || m.routingDecision === "OVERRIDDEN_OUT";
     return true;
   });
 
+  const saveThreshold = async () => {
+    setSavingThreshold(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ match_threshold: currentThreshold }),
+      });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Threshold saved!" });
+      } else {
+        setMessage({ type: "error", text: "Failed to save threshold." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error." });
+    }
+    setSavingThreshold(false);
+  };
+
+  const saveWeights = async () => {
+    setSavingWeights(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ match_weights: weights }),
+      });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Scoring weights saved! Run Match Now to recalculate." });
+      } else {
+        setMessage({ type: "error", text: "Failed to save weights." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error." });
+    }
+    setSavingWeights(false);
+  };
+
+  const resetWeights = () => {
+    setWeights({ ...DEFAULT_WEIGHTS });
+  };
+
+  const updateWeight = (key: keyof ScoringWeights, value: number) => {
+    setWeights((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const totalWeight = weights.skills + weights.title + weights.experience + weights.salary + weights.location + weights.company_fit;
+
+  const runMatchNow = async () => {
+    setRunningMatch(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/match/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_seeker_id: seekerId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessage({ type: "success", text: `Matching complete! Scored ${data.matched} jobs. Refresh to see results.` });
+      } else {
+        setMessage({ type: "error", text: "Failed to run matching." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error." });
+    }
+    setRunningMatch(false);
+  };
+
+  const addToQueue = async (jobPostId: string) => {
+    try {
+      await fetch("/api/am/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_seeker_id: seekerId, job_post_id: jobPostId }),
+      });
+      setMessage({ type: "success", text: "Added to application queue!" });
+    } catch {
+      setMessage({ type: "error", text: "Failed to add to queue." });
+    }
+  };
+
+  const weightLabels: Record<keyof ScoringWeights, { label: string; description: string; color: string }> = {
+    skills: { label: "Skills Match", description: "How well seeker's skills match job requirements", color: "blue" },
+    title: { label: "Title Match", description: "Alignment between target titles and job title", color: "indigo" },
+    experience: { label: "Experience", description: "Years of experience fit", color: "green" },
+    salary: { label: "Salary Fit", description: "Salary range overlap", color: "emerald" },
+    location: { label: "Location", description: "Location and remote/hybrid preferences", color: "purple" },
+    company_fit: { label: "Company Fit", description: "Industry and company size preferences", color: "orange" },
+    max_penalty: { label: "Max Penalty", description: "Max deduction for exclude keywords and visa mismatch", color: "red" },
+  };
+
   return (
     <div className="space-y-4">
+      {/* Threshold Controls */}
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-purple-800">Match Threshold:</label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={currentThreshold}
+              onChange={(e) => setCurrentThreshold(Number(e.target.value))}
+              className="w-32"
+            />
+            <span className="text-lg font-bold text-purple-700 w-12">{currentThreshold}%</span>
+          </div>
+          <button
+            onClick={saveThreshold}
+            disabled={savingThreshold || currentThreshold === threshold}
+            className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
+          >
+            {savingThreshold ? "Saving..." : "Save"}
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => setShowWeights(!showWeights)}
+            className="px-3 py-1 text-sm border border-purple-300 text-purple-700 rounded hover:bg-purple-100"
+          >
+            {showWeights ? "Hide Weights" : "Adjust Weights"}
+          </button>
+          <button
+            onClick={runMatchNow}
+            disabled={runningMatch}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {runningMatch ? "Running..." : "Run Match Now"}
+          </button>
+        </div>
+        <p className="text-xs text-purple-600 mt-2">
+          Jobs scoring above this threshold will be available in the extension for applying.
+        </p>
+      </div>
+
+      {/* Scoring Weight Controls */}
+      {showWeights && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-semibold text-gray-900">Scoring Weights</h4>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Adjust how much each factor contributes to the match score. Total positive weights: {totalWeight}/100.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={resetWeights}
+                className="px-3 py-1 text-xs border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
+              >
+                Reset to Defaults
+              </button>
+              <button
+                onClick={saveWeights}
+                disabled={savingWeights}
+                className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingWeights ? "Saving..." : "Save Weights"}
+              </button>
+            </div>
+          </div>
+
+          {totalWeight !== 100 && (
+            <div className={`p-2 rounded text-xs ${totalWeight > 100 ? "bg-red-50 text-red-700" : "bg-yellow-50 text-yellow-700"}`}>
+              Positive weights sum to {totalWeight}. For balanced scoring, aim for a total of 100.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(Object.entries(weightLabels) as [keyof ScoringWeights, typeof weightLabels[keyof ScoringWeights]][]).map(
+              ([key, { label, description, color }]) => (
+                <div key={key} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                    <span className={`text-sm font-bold ${key === "max_penalty" ? "text-red-600" : "text-gray-900"}`}>
+                      {key === "max_penalty" ? `-${weights[key]}` : weights[key]}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={key === "max_penalty" ? 30 : 50}
+                    value={weights[key]}
+                    onChange={(e) => updateWeight(key, Number(e.target.value))}
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <p className="text-xs text-gray-400">{description}</p>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Visual weight distribution */}
+          <div className="pt-2">
+            <p className="text-xs text-gray-500 mb-1">Weight Distribution</p>
+            <div className="flex h-4 rounded-full overflow-hidden bg-gray-100">
+              {totalWeight > 0 && (
+                <>
+                  <div style={{ width: `${(weights.skills / totalWeight) * 100}%` }} className="bg-blue-500" title={`Skills: ${weights.skills}`} />
+                  <div style={{ width: `${(weights.title / totalWeight) * 100}%` }} className="bg-indigo-500" title={`Title: ${weights.title}`} />
+                  <div style={{ width: `${(weights.experience / totalWeight) * 100}%` }} className="bg-green-500" title={`Experience: ${weights.experience}`} />
+                  <div style={{ width: `${(weights.salary / totalWeight) * 100}%` }} className="bg-emerald-500" title={`Salary: ${weights.salary}`} />
+                  <div style={{ width: `${(weights.location / totalWeight) * 100}%` }} className="bg-purple-500" title={`Location: ${weights.location}`} />
+                  <div style={{ width: `${(weights.company_fit / totalWeight) * 100}%` }} className="bg-orange-500" title={`Company Fit: ${weights.company_fit}`} />
+                </>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Skills</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />Title</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Experience</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Salary</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />Location</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />Company</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div className={`p-3 rounded-lg text-sm ${message.type === "success" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Filters */}
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
           <button
@@ -408,7 +997,7 @@ function JobsTab({
               filter === "above" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
             }`}
           >
-            Above Threshold ({matchedJobs.filter((m) => m.score >= threshold).length})
+            Above Threshold ({matchedJobs.filter((m) => m.score >= currentThreshold).length})
           </button>
           <button
             onClick={() => setFilter("below")}
@@ -427,7 +1016,7 @@ function JobsTab({
             All ({matchedJobs.length})
           </button>
         </div>
-        <span className="text-sm text-gray-500">Threshold: {threshold}</span>
+        <span className="text-sm text-gray-500">{filtered.length} jobs</span>
       </div>
 
       {filtered.length === 0 ? (
@@ -438,32 +1027,48 @@ function JobsTab({
             <div
               key={m.id}
               className={`p-4 border rounded-lg ${
-                m.score >= threshold ? "border-green-200 bg-green-50" : "border-gray-200"
+                m.score >= currentThreshold ? "border-green-200 bg-green-50" : "border-gray-200"
               }`}
             >
               <div className="flex items-start justify-between">
-                <div>
+                <div className="flex-1">
                   <h4 className="font-medium text-gray-900">{m.job?.title || "Unknown Job"}</h4>
                   <p className="text-sm text-gray-600">{m.job?.company} - {m.job?.location}</p>
+                  {m.job?.url && (
+                    <a
+                      href={m.job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                    >
+                      View Posting →
+                    </a>
+                  )}
                 </div>
-                <div className="text-right">
-                  <span className={`text-lg font-bold ${m.score >= threshold ? "text-green-600" : "text-gray-400"}`}>
-                    {m.score}
-                  </span>
-                  {m.routingDecision && (
-                    <p className="text-xs text-orange-600 mt-1">{m.routingDecision}</p>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className={`text-2xl font-bold ${m.score >= currentThreshold ? "text-green-600" : "text-gray-400"}`}>
+                      {m.score}
+                    </div>
+                    <div className="text-xs text-gray-500">match</div>
+                  </div>
+                  {m.score >= currentThreshold && m.routingDecision !== "OVERRIDDEN_OUT" && m.job && (
+                    <button
+                      onClick={() => addToQueue(m.job!.id)}
+                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                    >
+                      Queue
+                    </button>
                   )}
                 </div>
               </div>
-              {m.job?.url && (
-                <a
-                  href={m.job.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:text-blue-800 mt-2 inline-block"
-                >
-                  View Job Posting →
-                </a>
+              {m.routingDecision && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-800 rounded">
+                    {m.routingDecision.replace(/_/g, " ")}
+                  </span>
+                  {m.routingNote && <span className="text-xs text-gray-500">{m.routingNote}</span>}
+                </div>
               )}
             </div>
           ))}

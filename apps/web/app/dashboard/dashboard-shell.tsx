@@ -33,9 +33,8 @@ const BASE_NAV_SECTIONS: NavSection[] = [
   {
     title: "Pipeline",
     items: [
-      { href: "/dashboard/queue", label: "Queue (Global)", icon: "queue" },
+      { href: "/dashboard/pipeline", label: "Job Hub", icon: "briefcase" },
       { href: "/dashboard/attention", label: "Needs Attention", icon: "alert" },
-      { href: "/dashboard/applied", label: "Applied / Completed", icon: "check" },
     ],
   },
   {
@@ -145,6 +144,18 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
       return (
         <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        </svg>
+      );
+    case "globe":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+        </svg>
+      );
+    case "briefcase":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
       );
     default:

@@ -15,599 +15,461 @@
         --gray-50: #f9fafb;
         --gray-100: #f3f4f6;
         --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
         --gray-400: #9ca3af;
         --gray-500: #6b7280;
         --gray-600: #4b5563;
         --gray-700: #374151;
         --gray-900: #111827;
+        --green-50: #f0fdf4;
+        --green-100: #dcfce7;
         --green-500: #22c55e;
         --green-600: #16a34a;
+        --green-700: #15803d;
+        --red-50: #fef2f2;
         --red-500: #ef4444;
         --red-600: #dc2626;
         --white: #ffffff;
       }
 
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        min-width: 340px;
-        max-width: 340px;
+        min-width: 380px;
+        max-width: 380px;
         background: linear-gradient(135deg, var(--blue-50) 0%, var(--indigo-100) 100%);
         color: var(--gray-900);
       }
 
       .header {
         background: var(--white);
-        padding: 16px 20px;
+        padding: 12px 16px;
         border-bottom: 1px solid var(--gray-200);
         display: flex;
         align-items: center;
         justify-content: space-between;
       }
 
-      .logo {
-        font-size: 18px;
-        font-weight: 700;
-        color: var(--indigo-600);
-      }
+      .header-left { display: flex; align-items: center; gap: 8px; }
+      .logo { font-size: 16px; font-weight: 700; color: var(--indigo-600); }
 
       .version {
-        font-size: 11px;
+        font-size: 10px;
         color: var(--gray-400);
         background: var(--gray-100);
-        padding: 2px 8px;
+        padding: 2px 6px;
         border-radius: 10px;
       }
 
-      .content {
-        padding: 16px 20px;
+      .am-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--green-700);
+        background: var(--green-50);
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--green-100);
       }
 
-      .tabs {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 16px;
-      }
+      .am-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-500); }
+      .am-badge.disconnected { color: var(--gray-500); background: var(--gray-50); border-color: var(--gray-200); }
+      .am-badge.disconnected .dot { background: var(--gray-400); }
+
+      .content { padding: 12px 16px; max-height: 500px; overflow-y: auto; }
+
+      .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
 
       .tab {
         flex: 1;
-        padding: 10px 12px;
+        padding: 8px 6px;
         border: none;
         background: var(--white);
         color: var(--gray-600);
-        font-size: 13px;
+        font-size: 11px;
         font-weight: 500;
         cursor: pointer;
-        border-radius: 8px;
+        border-radius: 6px;
         transition: all 0.2s;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        text-align: center;
       }
 
-      .tab:hover {
-        background: var(--gray-50);
-      }
+      .tab:hover { background: var(--gray-50); }
+      .tab.active { background: var(--indigo-600); color: var(--white); }
 
-      .tab.active {
-        background: var(--indigo-600);
-        color: var(--white);
-      }
-
-      .panel {
-        display: none;
-      }
-
-      .panel.active {
-        display: block;
-      }
+      .panel { display: none; }
+      .panel.active { display: block; }
 
       .card {
         background: var(--white);
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 12px;
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 10px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       }
 
       .card-title {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: var(--gray-700);
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
       }
 
-      .card-title svg {
-        width: 16px;
-        height: 16px;
-        color: var(--indigo-500);
-      }
+      .card-title svg { width: 14px; height: 14px; color: var(--indigo-500); }
 
-      .form-group {
-        margin-bottom: 12px;
-      }
-
-      .form-group:last-child {
-        margin-bottom: 0;
-      }
+      .form-group { margin-bottom: 10px; }
+      .form-group:last-child { margin-bottom: 0; }
 
       label {
         display: block;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
         color: var(--gray-600);
-        margin-bottom: 6px;
+        margin-bottom: 4px;
       }
 
-      input[type="text"],
-      input[type="email"],
-      input[type="url"],
-      select {
+      input[type="text"], input[type="email"], input[type="url"], select {
         width: 100%;
-        padding: 10px 12px;
+        padding: 8px 10px;
         border: 1px solid var(--gray-200);
-        border-radius: 8px;
-        font-size: 13px;
+        border-radius: 6px;
+        font-size: 12px;
         color: var(--gray-900);
         background: var(--white);
         transition: border-color 0.2s, box-shadow 0.2s;
       }
 
-      input:focus,
-      select:focus {
+      input:focus, select:focus {
         outline: none;
         border-color: var(--indigo-500);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
       }
 
-      input::placeholder {
-        color: var(--gray-400);
-      }
+      input::placeholder { color: var(--gray-400); }
 
-      .checkbox-group {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .checkbox-group input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--indigo-600);
-      }
-
-      .checkbox-group label {
-        margin-bottom: 0;
-        font-weight: 400;
-      }
+      .checkbox-group { display: flex; align-items: center; gap: 6px; }
+      .checkbox-group input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--indigo-600); }
+      .checkbox-group label { margin-bottom: 0; font-weight: 400; }
 
       .btn {
         width: 100%;
-        padding: 12px 16px;
+        padding: 10px 14px;
         border: none;
-        border-radius: 8px;
-        font-size: 14px;
+        border-radius: 6px;
+        font-size: 12px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-      }
-
-      .btn-primary {
-        background: var(--indigo-600);
-        color: var(--white);
-      }
-
-      .btn-primary:hover {
-        background: var(--indigo-700);
-      }
-
-      .btn-secondary {
-        background: var(--white);
-        color: var(--indigo-600);
-        border: 1px solid var(--indigo-200);
-      }
-
-      .btn-secondary:hover {
-        background: var(--indigo-50);
-      }
-
-      .btn-success {
-        background: var(--green-500);
-        color: var(--white);
-      }
-
-      .btn-success:hover {
-        background: var(--green-600);
-      }
-
-      .btn-danger {
-        background: var(--red-500);
-        color: var(--white);
-      }
-
-      .btn-danger:hover {
-        background: var(--red-600);
-      }
-
-      .btn-group {
-        display: flex;
-        gap: 8px;
-        margin-top: 12px;
-      }
-
-      .btn-group .btn {
-        flex: 1;
-      }
-
-      .status {
-        padding: 10px 12px;
-        border-radius: 8px;
-        font-size: 12px;
-        margin-top: 12px;
-        display: none;
-      }
-
-      .status.visible {
-        display: block;
-      }
-
-      .status.success {
-        background: #dcfce7;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-      }
-
-      .status.error {
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fecaca;
-      }
-
-      .status.info {
-        background: var(--indigo-50);
-        color: var(--indigo-700);
-        border: 1px solid var(--indigo-100);
-      }
-
-      .runner-status {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px;
-        background: var(--gray-50);
-        border-radius: 8px;
-        margin-bottom: 12px;
-      }
-
-      .runner-indicator {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: var(--gray-400);
-      }
-
-      .runner-indicator.active {
-        background: var(--green-500);
-        animation: pulse 2s infinite;
-      }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-      }
-
-      .runner-text {
-        font-size: 13px;
-        color: var(--gray-600);
-      }
-
-      .runner-text strong {
-        color: var(--gray-900);
-      }
-
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        margin-bottom: 12px;
-      }
-
-      .stat {
-        text-align: center;
-        padding: 12px 8px;
-        background: var(--gray-50);
-        border-radius: 8px;
-      }
-
-      .stat-value {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--indigo-600);
-      }
-
-      .stat-label {
-        font-size: 10px;
-        color: var(--gray-500);
-        text-transform: uppercase;
-        margin-top: 2px;
-      }
-
-      .job-boards {
-        display: flex;
-        flex-wrap: wrap;
         gap: 6px;
-        margin-top: 8px;
       }
 
-      .job-board-tag {
-        font-size: 11px;
-        padding: 4px 8px;
-        background: var(--indigo-50);
-        color: var(--indigo-600);
-        border-radius: 4px;
+      .btn-sm { padding: 6px 10px; font-size: 11px; }
+      .btn-primary { background: var(--indigo-600); color: var(--white); }
+      .btn-primary:hover { background: var(--indigo-700); }
+      .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-secondary { background: var(--white); color: var(--indigo-600); border: 1px solid var(--indigo-100); }
+      .btn-secondary:hover { background: var(--indigo-50); }
+      .btn-success { background: var(--green-500); color: var(--white); }
+      .btn-success:hover { background: var(--green-600); }
+      .btn-danger { background: var(--red-500); color: var(--white); }
+      .btn-danger:hover { background: var(--red-600); }
+
+      .btn-group { display: flex; gap: 6px; margin-top: 10px; }
+      .btn-group .btn { flex: 1; }
+
+      .status { padding: 8px 10px; border-radius: 6px; font-size: 11px; margin-top: 10px; display: none; }
+      .status.visible { display: block; }
+      .status.success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+      .status.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+      .status.info { background: var(--indigo-50); color: var(--indigo-700); border: 1px solid var(--indigo-100); }
+
+      .auth-section { text-align: center; padding: 20px; }
+
+      .auth-section .icon {
+        width: 48px; height: 48px; margin: 0 auto 12px;
+        background: var(--indigo-50); border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
       }
 
-      .tip {
-        font-size: 11px;
-        color: var(--gray-500);
-        margin-top: 12px;
-        padding: 10px;
-        background: var(--gray-50);
-        border-radius: 6px;
-        line-height: 1.4;
+      .auth-section .icon svg { width: 24px; height: 24px; color: var(--indigo-500); }
+      .auth-section h3 { font-size: 14px; margin-bottom: 4px; }
+      .auth-section p { font-size: 11px; color: var(--gray-500); margin-bottom: 14px; }
+
+      .am-code-input { display: flex; gap: 8px; margin-bottom: 8px; }
+
+      .am-code-input input {
+        flex: 1; text-transform: uppercase; font-family: monospace;
+        font-size: 14px; letter-spacing: 2px; text-align: center;
       }
 
-      .tip code {
-        background: var(--gray-200);
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-size: 10px;
+      .am-code-input .btn { width: auto; flex: none; padding: 8px 16px; }
+
+      .am-profile {
+        display: flex; align-items: center; gap: 10px; padding: 10px;
+        background: var(--green-50); border: 1px solid var(--green-100);
+        border-radius: 8px; margin-bottom: 10px;
       }
 
-      .scrape-options {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid var(--gray-200);
+      .am-profile .avatar {
+        width: 36px; height: 36px; background: var(--indigo-500);
+        border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; color: white; font-weight: 700; font-size: 14px;
       }
 
-      .scrape-options-title {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--gray-700);
-        margin-bottom: 8px;
+      .am-profile .info { flex: 1; }
+      .am-profile .info .name { font-size: 13px; font-weight: 600; }
+      .am-profile .info .email { font-size: 10px; color: var(--gray-500); }
+
+      .am-profile .disconnect {
+        font-size: 10px; color: var(--red-500); cursor: pointer;
+        border: none; background: none; padding: 4px;
       }
+
+      .am-profile .disconnect:hover { color: var(--red-600); text-decoration: underline; }
+
+      .seeker-selector { margin-bottom: 10px; }
+      .seeker-selector select { font-size: 12px; }
+
+      .job-list { display: flex; flex-direction: column; gap: 8px; }
+
+      .job-card {
+        background: var(--white); border-radius: 8px; padding: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.08); border-left: 3px solid var(--gray-200);
+      }
+
+      .job-card.score-high { border-left-color: var(--green-500); }
+      .job-card.score-medium { border-left-color: var(--indigo-500); }
+      .job-card.score-low { border-left-color: var(--gray-400); }
+
+      .job-card .title {
+        font-size: 12px; font-weight: 600; color: var(--gray-900);
+        margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+
+      .job-card .meta { font-size: 10px; color: var(--gray-500); margin-bottom: 6px; }
+
+      .job-card .bottom { display: flex; align-items: center; justify-content: space-between; }
+
+      .score-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+      .score-badge.high { background: var(--green-100); color: var(--green-700); }
+      .score-badge.medium { background: var(--indigo-50); color: var(--indigo-600); }
+      .score-badge.low { background: var(--gray-100); color: var(--gray-500); }
+
+      .queue-badge {
+        font-size: 9px; padding: 2px 6px; border-radius: 4px;
+        background: var(--gray-100); color: var(--gray-600); text-transform: uppercase;
+      }
+
+      .contact-card {
+        background: var(--white); border-radius: 8px; padding: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+      }
+
+      .contact-card .name { font-size: 12px; font-weight: 600; }
+      .contact-card .role { font-size: 10px; color: var(--gray-500); }
+      .contact-card .company { font-size: 10px; color: var(--indigo-500); }
 
       .page-info {
-        background: var(--indigo-50);
-        border: 1px solid var(--indigo-100);
-        border-radius: 8px;
-        padding: 12px;
-        margin-bottom: 12px;
+        background: var(--indigo-50); border: 1px solid var(--indigo-100);
+        border-radius: 8px; padding: 10px; margin-bottom: 10px;
       }
 
       .page-info-label {
-        font-size: 10px;
-        color: var(--indigo-500);
-        text-transform: uppercase;
-        font-weight: 600;
-        margin-bottom: 4px;
+        font-size: 9px; color: var(--indigo-500);
+        text-transform: uppercase; font-weight: 600; margin-bottom: 2px;
       }
 
       .page-info-title {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--gray-900);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        font-size: 12px; font-weight: 500; color: var(--gray-900);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
 
       .page-info-url {
-        font-size: 11px;
-        color: var(--gray-500);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        margin-top: 2px;
+        font-size: 10px; color: var(--gray-500);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;
       }
 
       .detected-board {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 11px;
-        padding: 4px 8px;
-        background: var(--green-500);
-        color: var(--white);
-        border-radius: 4px;
-        margin-top: 8px;
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 10px; padding: 3px 6px; background: var(--green-500);
+        color: var(--white); border-radius: 4px; margin-top: 6px;
       }
 
-      .detected-board svg {
-        width: 12px;
-        height: 12px;
+      .detected-board svg { width: 10px; height: 10px; }
+
+      .runner-status {
+        display: flex; align-items: center; gap: 8px; padding: 10px;
+        background: var(--gray-50); border-radius: 6px; margin-bottom: 10px;
       }
+
+      .runner-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--gray-400); }
+
+      .runner-indicator.active { background: var(--green-500); animation: pulse 2s infinite; }
+
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+      .runner-text { font-size: 12px; color: var(--gray-600); }
+      .runner-text strong { color: var(--gray-900); }
+
+      .empty-state { text-align: center; padding: 20px 10px; color: var(--gray-500); font-size: 12px; }
+      .empty-state svg { width: 32px; height: 32px; margin-bottom: 8px; color: var(--gray-300); }
+
+      .scrape-options { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gray-200); }
+      .scrape-options-title { font-size: 11px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+
+      .hidden { display: none !important; }
     </style>
   </head>
   <body>
     <div class="header">
-      <div class="logo">JobGenius</div>
-      <span class="version">v0.2.0</span>
+      <div class="header-left">
+        <div class="logo">JobGenius</div>
+        <span class="version">v0.3.0</span>
+      </div>
+      <div class="am-badge disconnected" id="connectionBadge">
+        <span class="dot"></span>
+        <span id="connectionText">Not Connected</span>
+      </div>
     </div>
 
     <div class="content">
-      <div class="tabs">
-        <button class="tab active" data-tab="save">Save Job</button>
-        <button class="tab" data-tab="discover">Discover</button>
-        <button class="tab" data-tab="settings">Settings</button>
+      <!-- Auth Gate -->
+      <div id="authGate">
+        <div class="card">
+          <div class="auth-section">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+              </svg>
+            </div>
+            <h3>Connect Your Account</h3>
+            <p>Enter your AM code from the dashboard to get started.</p>
+            <div class="form-group">
+              <label>API Base URL</label>
+              <input type="url" id="apiBaseUrlAuth" placeholder="https://jobgenius-platform.vercel.app" />
+            </div>
+            <div class="am-code-input">
+              <input type="text" id="amCodeInput" placeholder="AM CODE" maxlength="8" />
+              <button class="btn btn-primary" id="connectBtn">Connect</button>
+            </div>
+            <div id="authStatus" class="status"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- Save Job Panel -->
-      <div class="panel active" id="panel-save">
-        <div class="page-info">
-          <div class="page-info-label">Current Page</div>
-          <div class="page-info-title" id="pageTitle">Loading...</div>
-          <div class="page-info-url" id="pageUrl">-</div>
-          <div id="detectedBoard"></div>
+      <!-- Main App -->
+      <div id="mainApp" class="hidden">
+        <div class="am-profile" id="amProfileCard">
+          <div class="avatar" id="amAvatar">?</div>
+          <div class="info">
+            <div class="name" id="amName">Account Manager</div>
+            <div class="email" id="amEmailDisplay">-</div>
+          </div>
+          <button class="disconnect" id="disconnectBtn">Disconnect</button>
         </div>
 
-        <button class="btn btn-primary" id="saveJob">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-            <polyline points="17 21 17 13 7 13 7 21"/>
-            <polyline points="7 3 7 8 15 8"/>
-          </svg>
-          Save This Job
-        </button>
-
-        <div class="scrape-options">
-          <div class="scrape-options-title">Quick Scrape Options</div>
-          <div class="btn-group">
-            <button class="btn btn-secondary" id="scrapeVisible">Visible Jobs</button>
-            <button class="btn btn-secondary" id="scrapeAll">All Jobs</button>
-          </div>
+        <div class="seeker-selector">
+          <select id="seekerSelect">
+            <option value="">-- Select Job Seeker --</option>
+          </select>
         </div>
 
-        <div id="saveStatus" class="status"></div>
-      </div>
-
-      <!-- Discover Panel -->
-      <div class="panel" id="panel-discover">
-        <div class="card">
-          <div class="card-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="m21 21-4.35-4.35"/>
-            </svg>
-            Job Discovery
-          </div>
-
-          <div class="form-group">
-            <label>Search Keywords</label>
-            <input type="text" id="searchKeywords" placeholder="e.g., Software Engineer, React" />
-          </div>
-
-          <div class="form-group">
-            <label>Location</label>
-            <input type="text" id="searchLocation" placeholder="e.g., Remote, New York, NY" />
-          </div>
-
-          <div class="form-group">
-            <label>Job Board</label>
-            <select id="searchBoard">
-              <option value="linkedin">LinkedIn</option>
-              <option value="indeed">Indeed</option>
-              <option value="glassdoor">Glassdoor</option>
-              <option value="dice">Dice</option>
-              <option value="ziprecruiter">ZipRecruiter</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Max Jobs to Scrape</label>
-            <select id="maxJobs">
-              <option value="10">10 jobs</option>
-              <option value="25" selected>25 jobs</option>
-              <option value="50">50 jobs</option>
-              <option value="100">100 jobs</option>
-            </select>
-          </div>
-
-          <button class="btn btn-primary" id="startDiscovery">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            Start Discovery
-          </button>
+        <div class="tabs">
+          <button class="tab active" data-tab="jobs">Jobs</button>
+          <button class="tab" data-tab="matched">Matched</button>
+          <button class="tab" data-tab="contacts">Contacts</button>
+          <button class="tab" data-tab="settings">Settings</button>
         </div>
 
-        <div class="card">
-          <div class="card-title">Supported Job Boards</div>
-          <div class="job-boards">
-            <span class="job-board-tag">LinkedIn</span>
-            <span class="job-board-tag">Indeed</span>
-            <span class="job-board-tag">Glassdoor</span>
-            <span class="job-board-tag">Greenhouse</span>
-            <span class="job-board-tag">Workday</span>
-            <span class="job-board-tag">Lever</span>
-            <span class="job-board-tag">Dice</span>
-            <span class="job-board-tag">ZipRecruiter</span>
-          </div>
-        </div>
-
-        <div id="discoverStatus" class="status"></div>
-      </div>
-
-      <!-- Settings Panel -->
-      <div class="panel" id="panel-settings">
-        <div class="card">
-          <div class="card-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            Connection
+        <!-- Jobs Panel -->
+        <div class="panel active" id="panel-jobs">
+          <div class="page-info">
+            <div class="page-info-label">Current Page</div>
+            <div class="page-info-title" id="pageTitle">Loading...</div>
+            <div class="page-info-url" id="pageUrl">-</div>
+            <div id="detectedBoard"></div>
           </div>
 
-          <div class="form-group">
-            <label>API Base URL</label>
-            <input type="url" id="apiBaseUrl" placeholder="https://jobgenius-platform.vercel.app" />
-          </div>
+          <button class="btn btn-primary" id="saveJob">Save This Job</button>
 
-          <div class="form-group">
-            <label>AM Email</label>
-            <input type="email" id="amEmail" placeholder="am@jobgenius.ai" />
-          </div>
-
-          <div class="form-group">
-            <label>Job Seeker ID</label>
-            <input type="text" id="jobSeekerId" placeholder="UUID from dashboard" />
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 20v-6M6 20V10M18 20V4"/>
-            </svg>
-            Automation Runner
-          </div>
-
-          <div class="runner-status">
-            <div class="runner-indicator" id="runnerIndicator"></div>
-            <div class="runner-text">
-              Runner: <strong id="runnerStatusText">Stopped</strong>
+          <div class="scrape-options">
+            <div class="scrape-options-title">Quick Scrape</div>
+            <div class="btn-group">
+              <button class="btn btn-secondary btn-sm" id="scrapeVisible">Visible Jobs</button>
+              <button class="btn btn-secondary btn-sm" id="scrapeAll">All Jobs (Scroll)</button>
             </div>
           </div>
 
-          <div class="checkbox-group" style="margin-bottom: 12px;">
-            <input type="checkbox" id="dryRun" />
-            <label for="dryRun">Dry run mode (no actual submissions)</label>
+          <div id="saveStatus" class="status"></div>
+        </div>
+
+        <!-- Matched Panel -->
+        <div class="panel" id="panel-matched">
+          <div class="card">
+            <div class="card-title">Matched Jobs</div>
+            <button class="btn btn-secondary btn-sm" id="refreshMatched" style="margin-bottom:10px">Refresh</button>
+            <div id="matchedJobsList" class="job-list">
+              <div class="empty-state" id="matchedEmpty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <div>Select a job seeker to see matched jobs</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contacts Panel -->
+        <div class="panel" id="panel-contacts">
+          <div class="card">
+            <div class="card-title">Company Contacts</div>
+            <button class="btn btn-primary btn-sm" id="scrapeContacts" style="margin-bottom:10px">Scrape This Page</button>
+            <div id="contactsList" class="job-list">
+              <div class="empty-state" id="contactsEmpty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                </svg>
+                <div>Navigate to a company page and click "Scrape This Page"</div>
+              </div>
+            </div>
+            <div id="contactsStatus" class="status"></div>
+          </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="panel" id="panel-settings">
+          <div class="card">
+            <div class="card-title">Automation Runner</div>
+            <div class="runner-status">
+              <div class="runner-indicator" id="runnerIndicator"></div>
+              <div class="runner-text">Runner: <strong id="runnerStatusText">Stopped</strong></div>
+            </div>
+            <div class="checkbox-group" style="margin-bottom:10px">
+              <input type="checkbox" id="dryRun" />
+              <label for="dryRun">Dry run mode (no actual submissions)</label>
+            </div>
+            <button class="btn btn-success" id="toggleRunner">Start Runner</button>
           </div>
 
-          <button class="btn btn-success" id="toggleRunner">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            Start Runner
-          </button>
-        </div>
+          <div class="card">
+            <div class="card-title">Connection Settings</div>
+            <div class="form-group">
+              <label>API Base URL</label>
+              <input type="url" id="apiBaseUrl" placeholder="https://jobgenius-platform.vercel.app" />
+            </div>
+          </div>
 
-        <div class="tip">
-          <strong>Tip:</strong> Use <code>/api/seed/demo</code> endpoint to create test data and get a job_seeker_id.
+          <div id="settingsStatus" class="status"></div>
         </div>
-
-        <div id="settingsStatus" class="status"></div>
       </div>
     </div>
 

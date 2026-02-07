@@ -2,6 +2,11 @@
  * Types for the intelligent job matching system
  */
 
+export interface LocationPreference {
+  work_type: "remote" | "hybrid" | "onsite";
+  locations: string[];
+}
+
 export interface JobSeekerProfile {
   id: string;
   // Basic info
@@ -23,6 +28,7 @@ export interface JobSeekerProfile {
   preferred_locations: string[];
   open_to_relocation: boolean;
   requires_visa_sponsorship: boolean;
+  location_preferences: LocationPreference[];
 }
 
 export interface JobPost {

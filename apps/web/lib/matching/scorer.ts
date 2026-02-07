@@ -8,6 +8,7 @@
 import type {
   JobSeekerProfile,
   JobPost,
+  LocationPreference,
   MatchResult,
   MatchScoreBreakdown,
   MatchConfidence,
@@ -331,11 +332,89 @@ function scoreSalary(
   };
 }
 
+/**
+ * Score location match using new location_preferences if available,
+ * otherwise fall back to the existing flat-field logic for backward compatibility.
+ */
+function scoreLocationWithPreferences(
+  seeker: JobSeekerProfile,
+  job: JobPost,
+  maxScore: number
+): MatchScoreBreakdown["location"] {
+  const jobLocation = job.location;
+  const jobWorkType = job.work_type;
+  const jobLocationLower = normalizeString(jobLocation ?? "");
+  const isJobRemote = jobWorkType === "remote" || jobLocationLower.includes("remote");
+
+  let bestScore = 0;
+  let matchType: "exact" | "region" | "remote" | "relocation" | "mismatch" = "mismatch";
+
+  for (const pref of seeker.location_preferences) {
+    const prefWorkType = pref.work_type;
+    const prefLocations = normalizeArray(pref.locations);
+
+    if (prefWorkType === "remote") {
+      if (isJobRemote) {
+        bestScore = maxScore;
+        matchType = "remote";
+        break; // Can't do better than full score
+      }
+    } else {
+      // hybrid or onsite preference
+      if (jobWorkType === prefWorkType || (prefWorkType === "onsite" && jobWorkType === "on-site")) {
+        // Check if job location matches any of this preference's locations
+        const locationHit = prefLocations.some(
+          (loc) =>
+            jobLocationLower.includes(loc) ||
+            loc.includes(jobLocationLower.split(",")[0])
+        );
+        if (locationHit) {
+          bestScore = maxScore;
+          matchType = "exact";
+          break;
+        }
+      }
+      // If seeker is open to hybrid/onsite but job is remote, still works (70%)
+      if (isJobRemote) {
+        const remoteScore = Math.round(maxScore * 0.7);
+        if (remoteScore > bestScore) {
+          bestScore = remoteScore;
+          matchType = "remote";
+        }
+      }
+    }
+  }
+
+  // Fall back to open_to_relocation if nothing matched
+  if (bestScore === 0 && seeker.open_to_relocation) {
+    bestScore = Math.round(maxScore * 0.4);
+    matchType = "relocation";
+  }
+
+  return {
+    score: bestScore,
+    max: maxScore,
+    details: {
+      seeker_location: seeker.location,
+      seeker_work_type: seeker.work_type,
+      job_location: jobLocation,
+      job_work_type: jobWorkType,
+      match_type: matchType,
+    },
+  };
+}
+
 function scoreLocation(
   seeker: JobSeekerProfile,
   job: JobPost,
   maxScore: number
 ): MatchScoreBreakdown["location"] {
+  // Use new location_preferences if populated
+  if (seeker.location_preferences && seeker.location_preferences.length > 0) {
+    return scoreLocationWithPreferences(seeker, job, maxScore);
+  }
+
+  // Backward-compatible flat-field logic
   const seekerLocation = seeker.location;
   const seekerLocations = normalizeArray(seeker.preferred_locations);
   const seekerWorkType = seeker.work_type;

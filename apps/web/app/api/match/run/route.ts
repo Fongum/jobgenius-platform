@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Fetch job seeker with all preference fields
+  // Fetch job seeker with all preference fields including custom weights
   const { data: seekerData, error: seekerError } = await supabaseServer
     .from("job_seekers")
     .select(`
@@ -64,13 +64,15 @@ export async function POST(request: Request) {
       skills,
       resume_text,
       match_threshold,
+      match_weights,
       preferred_industries,
       preferred_company_sizes,
       exclude_keywords,
       years_experience,
       preferred_locations,
       open_to_relocation,
-      requires_visa_sponsorship
+      requires_visa_sponsorship,
+      location_preferences
     `)
     .eq("id", payload.job_seeker_id)
     .single();
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
     preferred_locations: seekerData.preferred_locations ?? [],
     open_to_relocation: seekerData.open_to_relocation ?? false,
     requires_visa_sponsorship: seekerData.requires_visa_sponsorship ?? false,
+    location_preferences: seekerData.location_preferences ?? [],
   };
 
   // Fetch job posts
@@ -212,8 +215,22 @@ export async function POST(request: Request) {
         }
       }
 
+      // Use custom weights if configured by the AM for this seeker
+      const customWeights = seekerData.match_weights as Record<string, number> | null;
+      const weights = customWeights
+        ? {
+            skills: customWeights.skills ?? 35,
+            title: customWeights.title ?? 20,
+            experience: customWeights.experience ?? 10,
+            salary: customWeights.salary ?? 10,
+            location: customWeights.location ?? 15,
+            company_fit: customWeights.company_fit ?? 10,
+            max_penalty: customWeights.max_penalty ?? 15,
+          }
+        : undefined;
+
       // Compute match score
-      const matchResult = computeMatchScore(seeker, jobData);
+      const matchResult = computeMatchScore(seeker, jobData, weights);
 
       // Upsert match score
       const { error: upsertError } = await supabaseServer
@@ -246,10 +263,69 @@ export async function POST(request: Request) {
     }
   }
 
+  // Auto-queue strong/good matches above threshold
+  let autoQueuedCount = 0;
+  const threshold = seekerData.match_threshold ?? 60;
+
+  // Gather all scored jobs for this seeker that are above threshold
+  const { data: highScores } = await supabaseServer
+    .from("job_match_scores")
+    .select("job_post_id, score, recommendation")
+    .eq("job_seeker_id", seeker.id)
+    .gte("score", threshold);
+
+  const qualifiedJobs = (highScores ?? []).filter(
+    (s) => s.recommendation === "strong_match" || s.recommendation === "good_match"
+  );
+
+  if (qualifiedJobs.length > 0) {
+    const qualifiedJobIds = qualifiedJobs.map((j) => j.job_post_id);
+
+    // Check which are already in application_queue or application_runs
+    const { data: existingQueue } = await supabaseServer
+      .from("application_queue")
+      .select("job_post_id")
+      .eq("job_seeker_id", seeker.id)
+      .in("job_post_id", qualifiedJobIds);
+
+    const { data: existingRuns } = await supabaseServer
+      .from("application_runs")
+      .select("job_post_id")
+      .eq("job_seeker_id", seeker.id)
+      .in("job_post_id", qualifiedJobIds);
+
+    const alreadyQueued = new Set([
+      ...(existingQueue ?? []).map((q) => q.job_post_id),
+      ...(existingRuns ?? []).map((r) => r.job_post_id),
+    ]);
+
+    const toQueue = qualifiedJobs
+      .filter((j) => !alreadyQueued.has(j.job_post_id))
+      .map((j) => ({
+        job_seeker_id: seeker.id,
+        job_post_id: j.job_post_id,
+        status: "QUEUED",
+        category: "auto_matched",
+      }));
+
+    if (toQueue.length > 0) {
+      const { error: queueError } = await supabaseServer
+        .from("application_queue")
+        .insert(toQueue);
+
+      if (queueError) {
+        errors.push(`Auto-queue insert failed: ${queueError.message}`);
+      } else {
+        autoQueuedCount = toQueue.length;
+      }
+    }
+  }
+
   return Response.json({
     success: errors.length === 0,
     matched: matchedCount,
     parsed: parsedCount,
+    auto_queued: autoQueuedCount,
     errors: errors.length > 0 ? errors : undefined,
   });
 }

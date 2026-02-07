@@ -16,7 +16,7 @@
       `${ctx.apiBaseUrl}/api/apply/plan?runId=${encodeURIComponent(ctx.runId)}`,
       {
         headers: {
-          "x-am-email": ctx.amEmail,
+          Authorization: `Bearer ${ctx.authToken}`,
           "x-runner": "extension",
           "x-claim-token": ctx.claimToken ?? "",
         },
@@ -40,7 +40,7 @@
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-am-email": ctx.amEmail,
+        Authorization: `Bearer ${ctx.authToken}`,
         "x-runner": "extension",
         "x-claim-token": ctx.claimToken ?? "",
       },
@@ -95,10 +95,9 @@
       runId: message.runId,
       claimToken: message.claimToken,
       apiBaseUrl: message.apiBaseUrl,
-      amEmail: message.amEmail,
-      jobSeekerId: message.jobSeekerId,
+      authToken: message.authToken,
+      activeSeekerId: message.activeSeekerId,
       resumeUrl: message.resumeUrl,
-      defaultEmail: message.amEmail,
       dryRun: Boolean(message.dryRun),
       atsType,
     };

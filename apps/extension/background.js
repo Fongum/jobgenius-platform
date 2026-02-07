@@ -1,7 +1,7 @@
 const STORAGE_KEYS = {
   apiBaseUrl: "apiBaseUrl",
-  amEmail: "amEmail",
-  jobSeekerId: "jobSeekerId",
+  authToken: "authToken",
+  activeSeekerId: "activeSeekerId",
   runnerEnabled: "runnerEnabled",
   dryRun: "dryRun",
 };
@@ -21,14 +21,17 @@ function setStorage(values) {
   });
 }
 
-async function fetchNextJob(apiBaseUrl, amEmail, jobSeekerId) {
+async function fetchNextJob(apiBaseUrl, authToken, activeSeekerId) {
   const endpoint = `${apiBaseUrl}/api/apply/next?jobseekerId=${encodeURIComponent(
-    jobSeekerId
+    activeSeekerId
   )}`;
 
   const response = await fetch(endpoint, {
     method: "GET",
-    headers: { "x-am-email": amEmail, "x-runner": "extension" },
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "x-runner": "extension",
+    },
   });
 
   if (!response.ok) {
@@ -38,7 +41,7 @@ async function fetchNextJob(apiBaseUrl, amEmail, jobSeekerId) {
   return response.json();
 }
 
-async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl, claimToken, jobSeekerId, dryRun) {
+async function runJobInTab(job, runId, apiBaseUrl, authToken, resumeUrl, claimToken, activeSeekerId, dryRun) {
   const tab = await chrome.tabs.create({ url: job.url, active: false });
 
   await new Promise((resolve) => {
@@ -69,8 +72,8 @@ async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl, claimToke
     runId,
     claimToken,
     apiBaseUrl,
-    amEmail,
-    jobSeekerId,
+    authToken,
+    activeSeekerId,
     job,
     resumeUrl,
     dryRun: Boolean(dryRun),
@@ -80,8 +83,8 @@ async function runJobInTab(job, runId, apiBaseUrl, amEmail, resumeUrl, claimToke
 async function pollRunner() {
   const {
     apiBaseUrl,
-    amEmail,
-    jobSeekerId,
+    authToken,
+    activeSeekerId,
     runnerEnabled,
     dryRun,
   } = await getStorage(Object.values(STORAGE_KEYS));
@@ -90,7 +93,7 @@ async function pollRunner() {
     return;
   }
 
-  if (!apiBaseUrl || !amEmail || !jobSeekerId) {
+  if (!apiBaseUrl || !authToken || !activeSeekerId) {
     return;
   }
 
@@ -100,7 +103,7 @@ async function pollRunner() {
 
   let payload;
   try {
-    payload = await fetchNextJob(apiBaseUrl, amEmail, jobSeekerId);
+    payload = await fetchNextJob(apiBaseUrl, authToken, activeSeekerId);
   } catch (error) {
     console.warn("Runner polling failed:", error);
     return;
@@ -120,10 +123,10 @@ async function pollRunner() {
       payload.job,
       payload.run_id,
       apiBaseUrl,
-      amEmail,
+      authToken,
       payload.resume?.url ?? null,
       payload.claim_token ?? null,
-      payload.job_seeker_id ?? jobSeekerId,
+      payload.job_seeker_id ?? activeSeekerId,
       dryRun
     );
   }

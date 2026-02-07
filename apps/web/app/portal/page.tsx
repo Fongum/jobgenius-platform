@@ -44,6 +44,24 @@ export default async function PortalPage() {
     .order("scheduled_at", { ascending: true })
     .limit(5);
 
+  // Get unread conversation count
+  let unreadConversations = 0;
+  const { data: myConvos } = await supabaseAdmin
+    .from("conversations")
+    .select("id")
+    .eq("job_seeker_id", user.id);
+
+  if (myConvos && myConvos.length > 0) {
+    const convoIds = myConvos.map((c: { id: string }) => c.id);
+    const { count } = await supabaseAdmin
+      .from("conversation_messages")
+      .select("id", { count: "exact", head: true })
+      .is("read_at", null)
+      .eq("sender_type", "account_manager")
+      .in("conversation_id", convoIds);
+    unreadConversations = count ?? 0;
+  }
+
   const accountManager = jobSeeker?.job_seeker_assignments?.[0]?.account_managers;
   const profileCompletion = jobSeeker?.profile_completion ?? 0;
 
@@ -57,6 +75,30 @@ export default async function PortalPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* Profile Completion Banner */}
+      {profileCompletion < 80 ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-amber-800 font-medium">Complete your profile to get started</p>
+            <p className="text-sm text-amber-700 mt-0.5">
+              Your account manager will begin searching and applying for jobs once your profile is sufficiently filled out (target: 80%).
+            </p>
+          </div>
+          <Link
+            href="/portal/profile"
+            className="inline-flex items-center justify-center px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 shrink-0"
+          >
+            Complete Profile
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <p className="text-green-800 text-sm font-medium">
+            Your profile is ready &mdash; your account manager is actively working on your behalf.
+          </p>
+        </div>
+      )}
+
       {/* Welcome + Profile Completion */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -105,8 +147,11 @@ export default async function PortalPage() {
           <div className="mt-1 text-3xl font-bold text-green-600">{interviews?.length ?? 0}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-5">
-          <div className="text-sm font-medium text-gray-500">Profile Score</div>
-          <div className="mt-1 text-3xl font-bold text-purple-600">{profileCompletion}%</div>
+          <div className="text-sm font-medium text-gray-500">Unread Messages</div>
+          <div className="mt-1 text-3xl font-bold text-purple-600">{unreadConversations}</div>
+          <Link href="/portal/conversations" className="text-xs text-purple-600 hover:text-purple-800">
+            View conversations →
+          </Link>
         </div>
       </div>
 

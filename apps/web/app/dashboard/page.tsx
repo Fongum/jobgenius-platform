@@ -249,6 +249,12 @@ export default async function DashboardPage() {
             Resolve Issues
           </Link>
           <Link
+            href="/dashboard/global-jobs"
+            className="px-4 py-2 bg-purple-100 text-purple-700 text-sm font-medium rounded-lg hover:bg-purple-200 transition-colors"
+          >
+            Global Jobs
+          </Link>
+          <Link
             href="/dashboard/outreach"
             className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
           >
