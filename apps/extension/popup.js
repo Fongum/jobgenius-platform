@@ -301,12 +301,16 @@ async function loadMatchedJobs() {
       return;
     }
 
-    // Header with stats and Queue All button
+    // Header with stats, Queue All and Apply All buttons
     const queueableJobs = jobs.filter((j) => !j.queue_status);
+    const applyableJobs = jobs.filter((j) => !j.queue_status || j.queue_status === "QUEUED");
     const headerHtml = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:6px">
         <span style="font-size:10px;color:#166534">${jobs.length} jobs above ${threshold}% threshold</span>
-        ${queueableJobs.length > 0 ? `<button class="btn btn-primary btn-sm" onclick="queueAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Queue All (${queueableJobs.length})</button>` : ""}
+        <div style="display:flex;gap:4px">
+          ${queueableJobs.length > 0 ? `<button class="btn btn-secondary btn-sm" onclick="queueAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Queue All (${queueableJobs.length})</button>` : ""}
+          ${applyableJobs.length > 0 ? `<button class="btn btn-apply btn-sm" onclick="applyAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Apply All (${applyableJobs.length})</button>` : ""}
+        </div>
       </div>`;
 
     const jobsHtml = jobs.map((job) => {
@@ -318,10 +322,14 @@ async function loadMatchedJobs() {
       let actionHtml;
       if (job.queue_status === "APPLIED" || job.queue_status === "COMPLETED") {
         actionHtml = '<span class="queue-badge" style="background:#dcfce7;color:#166534">Applied</span>';
+      } else if (job.queue_status === "RUNNING") {
+        actionHtml = '<span class="queue-badge" style="background:#dbeafe;color:#1e40af">Running</span>';
+      } else if (job.queue_status === "QUEUED") {
+        actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">Queued</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       } else if (job.queue_status) {
         actionHtml = `<span class="queue-badge">${job.queue_status}</span>`;
       } else {
-        actionHtml = `<button class="btn btn-primary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button>`;
+        actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       }
 
       return `
@@ -390,6 +398,61 @@ window.queueAllJobs = async function () {
 
     loadMatchedJobs();
   } catch (error) { console.error("Queue all error:", error); }
+};
+
+window.applyJob = async function (jobPostId) {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken) return;
+
+  try {
+    // Queue the job first if not already queued
+    await fetch(`${apiBaseUrl}/api/extension/queue-job`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ job_post_id: jobPostId }),
+    });
+
+    // Enable runner and trigger immediate run
+    await chrome.storage.local.set({ [STORAGE_KEYS.runnerEnabled]: true });
+    chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: true });
+    chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
+    updateRunnerUI(true);
+    loadMatchedJobs();
+  } catch (error) { console.error("Apply error:", error); }
+};
+
+window.applyAllJobs = async function () {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken) return;
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/extension/matched-jobs`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    const jobs = (data.jobs || []).filter((j) => !j.queue_status || j.queue_status === "QUEUED");
+
+    // Queue all unqueued jobs
+    for (const job of jobs) {
+      if (!job.queue_status) {
+        try {
+          await fetch(`${apiBaseUrl}/api/extension/queue-job`, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify({ job_post_id: job.id }),
+          });
+        } catch (e) { console.error("Queue error:", e); }
+      }
+    }
+
+    // Enable runner and trigger immediate run
+    await chrome.storage.local.set({ [STORAGE_KEYS.runnerEnabled]: true });
+    chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: true });
+    chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
+    updateRunnerUI(true);
+    loadMatchedJobs();
+  } catch (error) { console.error("Apply all error:", error); }
 };
 
 // ─── Contact Scraping ─────────────────────────────────────────
