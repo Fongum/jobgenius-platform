@@ -69,6 +69,11 @@ export async function POST(
     user_answer: "",
     score: null,
     feedback: null,
+    star_score: null,
+    relevance_score: null,
+    specificity_score: null,
+    confidence_coaching: null,
+    rewrite_suggestions: [],
   }));
 
   const { data: session, error } = await supabaseAdmin

@@ -38,6 +38,11 @@ type PracticeQuestion = {
   user_answer: string;
   score: number | null;
   feedback: string | null;
+  star_score?: number | null;
+  relevance_score?: number | null;
+  specificity_score?: number | null;
+  confidence_coaching?: string | null;
+  rewrite_suggestions?: string[] | null;
 };
 
 type Session = {
@@ -478,6 +483,24 @@ function Section({
   );
 }
 
+function ScorePill({ label, score }: { label: string; score?: number | null }) {
+  if (score === null || score === undefined) return null;
+  const tone =
+    score >= 80
+      ? "bg-green-50 text-green-700"
+      : score >= 60
+      ? "bg-yellow-50 text-yellow-700"
+      : "bg-red-50 text-red-700";
+  return (
+    <div className={`rounded-lg px-3 py-2 ${tone}`}>
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+      <div className="text-lg font-semibold">{score}</div>
+    </div>
+  );
+}
+
 function PracticeSessionView({
   session,
   currentQ,
@@ -554,25 +577,40 @@ function PracticeSessionView({
               </p>
             </div>
             {question.score !== null && (
-              <div className="flex items-center gap-4 mb-2">
-                <span
-                  className={`text-sm font-bold ${
-                    question.score >= 70
-                      ? "text-green-600"
-                      : question.score >= 40
-                      ? "text-yellow-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  Score: {question.score}%
-                </span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <ScorePill label="Overall" score={question.score} />
+                <ScorePill label="STAR" score={question.star_score} />
+                <ScorePill label="Relevance" score={question.relevance_score} />
+                <ScorePill label="Specificity" score={question.specificity_score} />
               </div>
             )}
             {question.feedback && (
-              <p className="text-sm text-gray-600 italic">
+              <p className="text-sm text-gray-700 mb-2">
+                <span className="font-semibold">Coach feedback:</span>{" "}
                 {question.feedback}
               </p>
             )}
+            {question.confidence_coaching && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                <p className="text-sm text-blue-700">
+                  <span className="font-semibold">Confidence coaching:</span>{" "}
+                  {question.confidence_coaching}
+                </p>
+              </div>
+            )}
+            {question.rewrite_suggestions &&
+              question.rewrite_suggestions.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <p className="text-sm font-semibold text-gray-900 mb-2">
+                    Rewrite suggestions
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                    {question.rewrite_suggestions.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
           </div>
         ) : (
           <div>

@@ -8,6 +8,8 @@ on:
     - cron: "*/15 * * * *"
     # Daily retention (03:00 UTC)
     - cron: "0 3 * * *"
+    # Daily intelligence feedback loop (05:00 UTC)
+    - cron: "0 5 * * *"
   # Manual trigger for testing
   workflow_dispatch:
 
@@ -59,3 +61,15 @@ jobs:
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
           curl -fsS "${WEB_BASE_URL}/api/ops/retention/run?ops_key=${OPS_API_KEY}"
+
+  intelligence-feedback:
+    name: Intelligence Feedback Loop
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call intelligence endpoint
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS "${WEB_BASE_URL}/api/ops/intelligence/run?ops_key=${OPS_API_KEY}"

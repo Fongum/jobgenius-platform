@@ -55,6 +55,11 @@ export async function PATCH(
       expected_hint?: string;
       score?: number | null;
       feedback?: string | null;
+      star_score?: number | null;
+      relevance_score?: number | null;
+      specificity_score?: number | null;
+      confidence_coaching?: string | null;
+      rewrite_suggestions?: string[] | null;
     }>;
     status?: string;
   };
@@ -72,7 +77,16 @@ export async function PATCH(
     const scoredQuestions = body.questions.map((q) => {
       if (q.user_answer && (q.score === null || q.score === undefined)) {
         const result = scorePracticeAnswer(q.question, q.user_answer);
-        return { ...q, score: result.score, feedback: result.feedback };
+        return {
+          ...q,
+          score: result.score,
+          feedback: result.feedback,
+          star_score: result.star_score,
+          relevance_score: result.relevance_score,
+          specificity_score: result.specificity_score,
+          confidence_coaching: result.confidence_coaching,
+          rewrite_suggestions: result.rewrite_suggestions,
+        };
       }
       return q;
     });
