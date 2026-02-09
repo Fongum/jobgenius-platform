@@ -1,0 +1,61 @@
+name: Scheduled Jobs
+
+on:
+  # Every 5 minutes: ops alerts
+  schedule:
+    - cron: "*/5 * * * *"
+    # Every 15 minutes: outreach scheduler
+    - cron: "*/15 * * * *"
+    # Daily retention (03:00 UTC)
+    - cron: "0 3 * * *"
+  # Manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  ops-alerts:
+    name: Ops Alerts
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call ops alerts endpoint
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS "${WEB_BASE_URL}/api/ops/alerts/run?ops_key=${OPS_API_KEY}"
+
+  background-jobs:
+    name: Background Jobs
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call background jobs endpoint
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS "${WEB_BASE_URL}/api/background/run?ops_key=${OPS_API_KEY}"
+
+  outreach-scheduler:
+    name: Outreach Scheduler
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call outreach scheduler endpoint
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS "${WEB_BASE_URL}/api/outreach/scheduler/run?ops_key=${OPS_API_KEY}"
+
+  retention:
+    name: Retention Cleanup
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call retention endpoint
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS "${WEB_BASE_URL}/api/ops/retention/run?ops_key=${OPS_API_KEY}"

@@ -1,6 +1,13 @@
 # jobgenius-platform
 An autonomous job application, interview prep, and recruiter collaboration platform with agentic workflows and human-in-the-loop control.
 
+## Getting Started
+1. Add GitHub repository secrets for scheduled jobs:
+   - `WEB_BASE_URL` (e.g. `https://your-vercel-app.vercel.app`)
+   - `OPS_API_KEY` (must match the backend `OPS_API_KEY`)
+2. To test scheduled jobs locally via manual dispatch:
+   - Go to **Actions** → **Scheduled Jobs** → **Run workflow** (uses `workflow_dispatch`).
+
 ## How to run (web)
 1. `cd apps/web`
 2. Create `.env.local` with Supabase keys:
@@ -61,13 +68,25 @@ An autonomous job application, interview prep, and recruiter collaboration platf
     - `OUTREACH_DATA_USAGE`
   - Optional override: `OUTREACH_REQUIRED_CONSENTS=...`
 - Monitoring:
-  - `/api/outreach/scheduler/run` runs via Vercel Cron every 15 minutes (`OPS_API_KEY` required).
-  - `/api/background/run` processes queued background jobs via Vercel Cron every 5 minutes (`OPS_API_KEY` required).
+  - `/api/outreach/scheduler/run` runs via GitHub Actions every 15 minutes (`OPS_API_KEY` required).
+  - `/api/background/run` processes queued background jobs via GitHub Actions every 5 minutes (`OPS_API_KEY` required).
   - `/api/outreach/metrics` exposes conversion + telemetry metrics (ops or authorized AM).
   - One-time backfill (safe dry-run default):
     - `GET /api/outreach/backfill/run?ops_key=${OPS_API_KEY}`
     - Apply changes: `GET /api/outreach/backfill/run?ops_key=${OPS_API_KEY}&dry_run=false`
   - Dashboard view: `/dashboard/outreach/conversion`.
+
+## Scheduling
+Vercel Cron is disabled for Hobby plan deploys. We now use GitHub Actions instead.
+
+Workflow:
+- `.github/workflows/scheduled-jobs.yml`
+
+Schedules:
+- Every 5 minutes: `/api/ops/alerts/run`
+- Every 5 minutes: `/api/background/run`
+- Every 15 minutes: `/api/outreach/scheduler/run`
+- Daily: `/api/ops/retention/run`
 
 ## Demo seed/reset
 - `POST /api/seed/demo` creates a demo AM/jobseeker, two jobs, one READY run, and one NEEDS_ATTENTION run.
