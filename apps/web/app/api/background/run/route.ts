@@ -310,8 +310,8 @@ async function runAutoMatch(payload: Record<string, unknown>) {
     for (const jobPost of jobPosts) {
       const job = {
         id: jobPost.id,
-        url: jobPost.url,
-        title: jobPost.title,
+        url: jobPost.url ?? "",
+        title: jobPost.title ?? "",
         company: jobPost.company,
         location: jobPost.location,
         description_text: jobPost.description_text,
