@@ -1,6 +1,7 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import AttentionClient from "./AttentionClient";
+import { redirect } from "next/navigation";
 
 type RunRow = {
   id: string;
@@ -60,38 +61,18 @@ const reasonOptions = [
 ];
 
 export default async function AttentionPage({ searchParams }: PageProps) {
-  const amEmail = getAmEmailFromHeaders();
+  const user = await getCurrentUser();
   const atsFilter = searchParams?.ats_type?.trim();
   const reasonFilter = searchParams?.reason?.trim();
 
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Needs Attention</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Needs Attention</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: assignments, error: assignmentsError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("job_seeker_id")
-    .eq("account_manager_id", accountManager.id);
+    .eq("account_manager_id", user.id);
 
   if (assignmentsError) {
     throw new Error("Failed to load job seeker assignments.");
@@ -161,7 +142,7 @@ export default async function AttentionPage({ searchParams }: PageProps) {
   return (
     <main>
       <h1>Needs Attention</h1>
-      <p>Account Manager: {amEmail}</p>
+      <p>Account Manager: {user.email}</p>
       <form method="get" style={{ display: "flex", gap: "8px" }}>
         <label>
           ATS{" "}
@@ -187,7 +168,7 @@ export default async function AttentionPage({ searchParams }: PageProps) {
         </label>
         <button type="submit">Filter</button>
       </form>
-      <AttentionClient rows={enrichedRows} amEmail={amEmail} />
+      <AttentionClient rows={enrichedRows} />
     </main>
   );
 }

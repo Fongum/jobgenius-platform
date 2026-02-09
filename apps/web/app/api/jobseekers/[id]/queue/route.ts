@@ -1,4 +1,4 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { requireAM } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 
 const TAB_VALUES = [
@@ -16,31 +16,15 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   const jobSeekerId = context.params.id;
-  const amEmail = getAmEmailFromHeaders(request.headers);
-  if (!amEmail) {
-    return Response.json(
-      { success: false, error: "Missing AM email." },
-      { status: 400 }
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return Response.json(
-      { success: false, error: "Account manager not found." },
-      { status: 404 }
-    );
+  const auth = await requireAM(request);
+  if (!auth.authenticated) {
+    return Response.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   const { data: assignment, error: assignmentError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("id")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", auth.user.id)
     .eq("job_seeker_id", jobSeekerId)
     .maybeSingle();
 

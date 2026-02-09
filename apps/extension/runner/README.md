@@ -1,4 +1,5 @@
 # Runner v1
 
-This folder is a placeholder for future modular ATS adapters. The current MVP
-implementation lives in `apps/extension/runner.js` to avoid bundling complexity.
+Modular ATS runner executed by the extension service worker. The worker injects
+the scripts in this folder (`runner/dom.js`, adapters, `runner/engine.js`, `runner/index.js`)
+into the job tab at runtime.

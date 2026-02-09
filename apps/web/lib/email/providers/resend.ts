@@ -3,19 +3,21 @@ import type { EmailSendAdapter, EmailSendInput, EmailSendOutput } from "@/lib/em
 export class ResendEmailProvider implements EmailSendAdapter {
   async sendEmail(request: EmailSendInput): Promise<EmailSendOutput> {
     const apiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.OUTREACH_FROM_EMAIL;
+    const configuredFrom =
+      process.env.OUTREACH_FROM_EMAIL ?? process.env.EMAIL_FROM_ADDRESS ?? undefined;
+    const fromEmail = request.from ?? configuredFrom;
     const replyTo = request.replyTo ?? process.env.OUTREACH_REPLY_TO_EMAIL ?? undefined;
 
     if (!apiKey || !fromEmail) {
       return {
         ok: false,
         provider: "resend",
-        detail: "Missing RESEND_API_KEY or OUTREACH_FROM_EMAIL.",
+        detail: "Missing RESEND_API_KEY or from email address.",
       };
     }
 
     const payload = {
-      from: request.from ?? fromEmail,
+      from: fromEmail,
       to: request.to,
       subject: request.subject,
       html: request.html ?? undefined,

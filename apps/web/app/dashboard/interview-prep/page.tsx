@@ -1,6 +1,7 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import InterviewPrepClient from "./InterviewPrepClient";
+import { redirect } from "next/navigation";
 
 type PrepRow = {
   id: string;
@@ -31,36 +32,15 @@ type PrepRow = {
 };
 
 export default async function InterviewPrepPage() {
-  const amEmail = getAmEmailFromHeaders();
-
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Interview Prep</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Interview Prep</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: assignments, error: assignmentsError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("job_seeker_id")
-    .eq("account_manager_id", accountManager.id);
+    .eq("account_manager_id", user.id);
 
   if (assignmentsError) {
     throw new Error("Failed to load job seeker assignments.");
@@ -94,8 +74,8 @@ export default async function InterviewPrepPage() {
   return (
     <main>
       <h1>Interview Prep</h1>
-      <p>Account Manager: {amEmail}</p>
-      <InterviewPrepClient items={(preps ?? []) as PrepRow[]} amEmail={amEmail} />
+      <p>Account Manager: {user.email}</p>
+      <InterviewPrepClient items={(preps ?? []) as PrepRow[]} />
     </main>
   );
 }

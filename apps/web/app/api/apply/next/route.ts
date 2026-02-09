@@ -140,6 +140,7 @@ export async function POST(request: Request) {
         event_type: "NEEDS_ATTENTION",
         actor,
         payload: {
+          reason: errorCode,
           step: run.current_step,
           error_code: errorCode,
           message: payload.error_message ?? null,

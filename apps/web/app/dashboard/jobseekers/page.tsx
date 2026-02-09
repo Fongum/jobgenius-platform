@@ -1,5 +1,6 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 type JobSeekerRow = {
   id: string;
@@ -22,30 +23,9 @@ type Counts = {
 };
 
 export default async function JobSeekersPage() {
-  const amEmail = getAmEmailFromHeaders();
-
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Job Seekers</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id, name, email")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Job Seekers</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: assignments, error: assignmentsError } = await supabaseServer
@@ -53,7 +33,7 @@ export default async function JobSeekersPage() {
     .select(
       "job_seeker_id, job_seekers (id, full_name, location, seniority, target_titles, work_type, match_threshold)"
     )
-    .eq("account_manager_id", accountManager.id);
+    .eq("account_manager_id", user.id);
 
   if (assignmentsError) {
     throw new Error("Failed to load job seeker assignments.");
@@ -73,9 +53,8 @@ export default async function JobSeekersPage() {
       <main>
         <h1>Job Seekers</h1>
         <p>
-          Account Manager: {accountManager.name ?? "Unknown"} ({amEmail})
+          Account Manager: {user.name ?? "Unknown"} ({user.email})
         </p>
-        <p>TODO: Replace AM email header with real auth.</p>
         <p>No job seekers assigned.</p>
       </main>
     );
@@ -204,9 +183,8 @@ export default async function JobSeekersPage() {
     <main>
       <h1>Job Seekers</h1>
       <p>
-        Account Manager: {accountManager.name ?? "Unknown"} ({amEmail})
+        Account Manager: {user.name ?? "Unknown"} ({user.email})
       </p>
-      <p>TODO: Replace AM email header with real auth.</p>
       {seekersWithCounts.length === 0 ? (
         <p>No job seekers assigned.</p>
       ) : (

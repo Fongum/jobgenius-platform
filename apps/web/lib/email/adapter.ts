@@ -67,9 +67,19 @@ class StubEmailAdapter implements EmailSendAdapter {
 
 export function getEmailAdapter(): EmailSendAdapter {
   const provider = process.env.EMAIL_SEND_PROVIDER ?? "stub";
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
+  if (provider === "stub" && isProduction) {
+    throw new Error("EMAIL_SEND_PROVIDER must be set to 'resend' in production.");
+  }
 
   if (provider === "resend") {
     return new ResendEmailProvider();
+  }
+
+  if (provider !== "stub") {
+    throw new Error(`Unsupported EMAIL_SEND_PROVIDER: ${provider}`);
   }
 
   return new StubEmailAdapter();

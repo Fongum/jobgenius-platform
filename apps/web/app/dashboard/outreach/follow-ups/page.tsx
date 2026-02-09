@@ -1,5 +1,6 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 type ThreadRow = {
   id: string;
@@ -37,35 +38,15 @@ type ThreadRow = {
 };
 
 export default async function FollowUpsPage() {
-  const amEmail = getAmEmailFromHeaders();
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Follow-ups Due</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (!accountManager) {
-    return (
-      <main>
-        <h1>Follow-ups Due</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: assignments } = await supabaseServer
     .from("job_seeker_assignments")
     .select("job_seeker_id")
-    .eq("account_manager_id", accountManager.id);
+    .eq("account_manager_id", user.id);
 
   const seekerIds = (assignments ?? []).map((row) => row.job_seeker_id);
   if (seekerIds.length === 0) {

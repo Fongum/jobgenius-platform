@@ -5,15 +5,13 @@
  */
 
 import { cookies } from "next/headers";
+import crypto from "crypto";
 import { getCurrentUser, getUserByAuthId, supabaseAdmin } from "./server";
 import type { AuthUser, UserType } from "./types";
 
 // Cookie names
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const USER_TYPE_COOKIE = "jg_user_type";
-
-// Legacy header for backward compatibility during migration
-const LEGACY_AM_EMAIL_HEADER = "x-am-email";
 
 /**
  * Result of authentication check
@@ -28,7 +26,7 @@ export type AuthCheckResult =
  * Checks in order:
  * 1. JWT token from Authorization header
  * 2. JWT token from cookie
- * 3. Legacy x-am-email header (for backward compatibility)
+ * 3. Extension session token (Bearer) for extension/runner access
  */
 export async function authenticateRequest(
   request: Request
@@ -41,6 +39,10 @@ export async function authenticateRequest(
     if (user) {
       return { authenticated: true, user };
     }
+    const extensionUser = await getUserFromExtensionToken(token);
+    if (extensionUser) {
+      return { authenticated: true, user: extensionUser };
+    }
   }
 
   // 2. Check cookie
@@ -48,15 +50,6 @@ export async function authenticateRequest(
   const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   if (accessToken) {
     const user = await verifyToken(accessToken);
-    if (user) {
-      return { authenticated: true, user };
-    }
-  }
-
-  // 3. Legacy: Check x-am-email header (for backward compatibility)
-  const legacyEmail = request.headers.get(LEGACY_AM_EMAIL_HEADER);
-  if (legacyEmail) {
-    const user = await getUserByLegacyEmail(legacyEmail);
     if (user) {
       return { authenticated: true, user };
     }
@@ -92,18 +85,39 @@ async function verifyToken(token: string): Promise<AuthUser | null> {
   }
 }
 
-/**
- * Get user by legacy email header (backward compatibility)
- */
-async function getUserByLegacyEmail(email: string): Promise<AuthUser | null> {
-  // Try account managers first
-  const { data: am } = await supabaseAdmin
-    .from("account_managers")
-    .select("id, email, name, role, status, am_code")
-    .eq("email", email)
-    .single();
+async function getUserFromExtensionToken(token: string): Promise<AuthUser | null> {
+  if (!token) return null;
 
-  if (am) {
+  try {
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const { data: session } = await supabaseAdmin
+      .from("extension_sessions")
+      .select("id, account_manager_id, expires_at")
+      .eq("token_hash", tokenHash)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+
+    if (!session?.account_manager_id) {
+      return null;
+    }
+
+    // Update last_active_at (best-effort)
+    supabaseAdmin
+      .from("extension_sessions")
+      .update({ last_active_at: new Date().toISOString() })
+      .eq("id", session.id)
+      .then(() => {});
+
+    const { data: am } = await supabaseAdmin
+      .from("account_managers")
+      .select("id, email, name, role, status, am_code")
+      .eq("id", session.account_manager_id)
+      .single();
+
+    if (!am) {
+      return null;
+    }
+
     return {
       id: am.id,
       email: am.email,
@@ -113,25 +127,9 @@ async function getUserByLegacyEmail(email: string): Promise<AuthUser | null> {
       status: am.status,
       amCode: am.am_code ?? undefined,
     };
+  } catch {
+    return null;
   }
-
-  // Try job seekers
-  const { data: js } = await supabaseAdmin
-    .from("job_seekers")
-    .select("id, email, full_name")
-    .eq("email", email)
-    .single();
-
-  if (js) {
-    return {
-      id: js.id,
-      email: js.email,
-      name: js.full_name ?? undefined,
-      userType: "job_seeker",
-    };
-  }
-
-  return null;
 }
 
 /**

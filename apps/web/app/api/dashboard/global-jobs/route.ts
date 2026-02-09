@@ -98,7 +98,9 @@ export async function POST(request: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-am-email": amResult.accountManager.email,
+        ...(request.headers.get("authorization")
+          ? { Authorization: request.headers.get("authorization") as string }
+          : {}),
       },
       body: JSON.stringify({
         job_seeker_id: body.job_seeker_id,

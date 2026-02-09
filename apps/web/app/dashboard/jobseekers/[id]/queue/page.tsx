@@ -1,6 +1,7 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import QueueClient from "./QueueClient";
+import { redirect } from "next/navigation";
 
 type MatchRow = {
   job_post_id: string;
@@ -67,36 +68,15 @@ type PageProps = {
 
 export default async function JobSeekerQueuePage({ params }: PageProps) {
   const jobSeekerId = params.id;
-  const amEmail = getAmEmailFromHeaders();
-
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Job Seeker Queue</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Job Seeker Queue</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: assignment, error: assignmentError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("id")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", user.id)
     .eq("job_seeker_id", jobSeekerId)
     .maybeSingle();
 
@@ -272,11 +252,9 @@ export default async function JobSeekerQueuePage({ params }: PageProps) {
         {jobSeeker.full_name ?? "Job Seeker"}{" "}
         {jobSeeker.email ? `(${jobSeeker.email})` : ""}
       </p>
-      <p>TODO: Replace AM email header with real auth.</p>
       <QueueClient
         jobSeekerId={jobSeeker.id}
         matchThreshold={jobSeeker.match_threshold ?? 60}
-        amEmail={amEmail}
         items={items}
       />
     </main>

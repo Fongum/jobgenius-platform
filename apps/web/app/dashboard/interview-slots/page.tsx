@@ -1,6 +1,7 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import SlotsClient from "./SlotsClient";
+import { redirect } from "next/navigation";
 
 type SlotRow = {
   id: string;
@@ -14,36 +15,15 @@ type SlotRow = {
 };
 
 export default async function InterviewSlotsPage() {
-  const amEmail = getAmEmailFromHeaders();
-
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Interview Slots</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Interview Slots</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: slots, error } = await supabaseServer
     .from("interview_slots")
     .select("id, account_manager_id, job_post_id, start_at, end_at, duration_min, is_booked, created_at")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", user.id)
     .order("start_at", { ascending: true });
 
   if (error) {
@@ -58,11 +38,10 @@ export default async function InterviewSlotsPage() {
   return (
     <main>
       <h1>Interview Slots</h1>
-      <p>Account Manager: {amEmail}</p>
+      <p>Account Manager: {user.email}</p>
       <SlotsClient
         slots={(slots ?? []) as SlotRow[]}
-        accountManagerId={accountManager.id}
-        amEmail={amEmail}
+        accountManagerId={user.id}
       />
     </main>
   );

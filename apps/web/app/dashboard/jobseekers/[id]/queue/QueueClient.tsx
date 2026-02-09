@@ -37,7 +37,6 @@ type QueueItem = {
 type QueueClientProps = {
   jobSeekerId: string;
   matchThreshold: number;
-  amEmail: string;
   items: QueueItem[];
 };
 
@@ -91,7 +90,6 @@ function getCategory(item: QueueItem, threshold: number) {
 export default function QueueClient({
   jobSeekerId,
   matchThreshold,
-  amEmail,
   items,
 }: QueueClientProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("Matched");
@@ -125,7 +123,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/routing/override", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerId,
           job_post_id: jobPostId,
@@ -149,7 +147,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/queue/enqueue", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerId,
           job_post_id: jobPostId,
@@ -176,7 +174,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/queue/enqueue", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerId,
           job_post_id: manualJobId.trim(),
@@ -200,7 +198,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/apply/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ queue_id: queueId }),
       });
 
@@ -226,7 +224,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/apply/pause", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run_id: runId, reason }),
       });
 
@@ -246,7 +244,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/apply/retry", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run_id: runId }),
       });
 
@@ -266,7 +264,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/apply/resume", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run_id: runId }),
       });
 
@@ -288,7 +286,7 @@ export default function QueueClient({
         status === "FAILED" ? "/api/apply/fail" : "/api/apply/fail";
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           run_id: runId,
           reason: status === "FAILED" ? "FAILED" : "CANCELLED",
@@ -311,7 +309,7 @@ export default function QueueClient({
     try {
       const response = await fetch("/api/apply/complete", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run_id: runId }),
       });
 
@@ -336,7 +334,7 @@ export default function QueueClient({
     try {
       const response = await fetch(`/api/jobseekers/${jobSeekerId}/threshold`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ match_threshold: nextValue }),
       });
 

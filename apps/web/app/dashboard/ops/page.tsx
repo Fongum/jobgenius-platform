@@ -1,6 +1,6 @@
-import { headers } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
-import { isOpsAdmin } from "@/lib/ops-auth";
+import { getCurrentUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import AlertsList from "./AlertsList";
 
 type HeartbeatRow = {
@@ -18,8 +18,13 @@ type AlertRow = {
 };
 
 export default async function OpsDashboardPage() {
-  const headerList = headers();
-  if (!isOpsAdmin(headerList)) {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  const isAdmin =
+    user.userType === "am" && ["admin", "superadmin"].includes(user.role ?? "");
+  if (!isAdmin) {
     return (
       <main>
         <h1>Ops Dashboard</h1>

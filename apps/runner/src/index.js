@@ -11,7 +11,8 @@ import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
 
 const API_BASE_URL = process.env.JOBGENIUS_API_BASE_URL;
 const RUNNER_ID = process.env.RUNNER_ID ?? "cloud-runner";
-const AM_EMAIL = process.env.RUNNER_AM_EMAIL ?? process.env.AM_EMAIL ?? "";
+const RUNNER_AUTH_TOKEN = process.env.RUNNER_AUTH_TOKEN ?? "";
+const RUNNER_DEFAULT_EMAIL = process.env.RUNNER_DEFAULT_EMAIL ?? "";
 const POLL_INTERVAL_MS = Number(process.env.RUNNER_POLL_INTERVAL_MS ?? 60000);
 const CONCURRENCY = Number(process.env.RUNNER_CONCURRENCY ?? 5);
 const JOBSEEKER_MAX_PER_HOUR = Number(process.env.JOBSEEKER_MAX_PER_HOUR ?? 8);
@@ -39,8 +40,8 @@ if (!API_BASE_URL) {
   throw new Error("JOBGENIUS_API_BASE_URL is required.");
 }
 
-if (!AM_EMAIL) {
-  throw new Error("RUNNER_AM_EMAIL is required for API access.");
+if (!RUNNER_AUTH_TOKEN) {
+  throw new Error("RUNNER_AUTH_TOKEN is required for API access.");
 }
 
 if (!fs.existsSync(STATE_DIR)) {
@@ -328,7 +329,7 @@ async function executeRun(run) {
           message: `ATS ${run.ats_type} degraded (${breakerState.reason}).`,
           step: "DETECT_ATS",
         },
-        AM_EMAIL,
+        RUNNER_AUTH_TOKEN,
         run.claim_token,
         RUNNER_ID
       );
@@ -351,7 +352,7 @@ async function executeRun(run) {
           message: "Jobseeker max applications per hour exceeded.",
           step: "OPEN_URL",
         },
-        AM_EMAIL,
+        RUNNER_AUTH_TOKEN,
         run.claim_token,
         RUNNER_ID
       );
@@ -369,7 +370,7 @@ async function executeRun(run) {
           message: "Stored session expired. Please re-authenticate.",
           step: "OPEN_URL",
         },
-        AM_EMAIL,
+        RUNNER_AUTH_TOKEN,
         run.claim_token,
         RUNNER_ID
       );
@@ -405,7 +406,7 @@ async function executeRun(run) {
             run_id: run.run_id,
             note: "Watchdog timeout: no progress events.",
           },
-          AM_EMAIL,
+          RUNNER_AUTH_TOKEN,
           run.claim_token,
           RUNNER_ID
         );
@@ -433,7 +434,7 @@ async function executeRun(run) {
     const planResponse = await fetchPlan(
       API_BASE_URL,
       run.run_id,
-      AM_EMAIL,
+      RUNNER_AUTH_TOKEN,
       run.claim_token,
       RUNNER_ID
     );
@@ -442,7 +443,7 @@ async function executeRun(run) {
       await generatePlan(
         API_BASE_URL,
         run.run_id,
-        AM_EMAIL,
+        RUNNER_AUTH_TOKEN,
         run.claim_token,
         RUNNER_ID
       );
@@ -451,7 +452,7 @@ async function executeRun(run) {
     const plan = planResponse?.plan ?? (await fetchPlan(
       API_BASE_URL,
       run.run_id,
-      AM_EMAIL,
+      RUNNER_AUTH_TOKEN,
       run.claim_token,
       RUNNER_ID
     ))?.plan;
@@ -481,7 +482,8 @@ async function executeRun(run) {
     const adapter = getAdapter(run.ats_type);
     await runPlan({
       apiBaseUrl: API_BASE_URL,
-      amEmail: AM_EMAIL,
+      authToken: RUNNER_AUTH_TOKEN,
+      defaultEmail: RUNNER_DEFAULT_EMAIL,
       runnerId: RUNNER_ID,
       run,
       claimToken: run.claim_token,
@@ -503,7 +505,7 @@ async function executeRun(run) {
           message: "Repeated authentication failures. Please re-authenticate.",
           step: "DETECT_ATS",
         },
-        AM_EMAIL,
+        RUNNER_AUTH_TOKEN,
         run.claim_token,
         RUNNER_ID
       );
@@ -572,7 +574,7 @@ async function pollOnce() {
   while (activeRuns.size < CONCURRENCY) {
     let next;
     try {
-      next = await fetchNextGlobal(API_BASE_URL, AM_EMAIL, RUNNER_ID);
+      next = await fetchNextGlobal(API_BASE_URL, RUNNER_AUTH_TOKEN, RUNNER_ID);
     } catch (error) {
       pollFailures += 1;
       pollBackoffUntil = Date.now() + computeBackoffMs();

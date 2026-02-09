@@ -9,7 +9,6 @@ type SequenceRow = {
 
 type ThreadClientProps = {
   threadId: string;
-  amEmail: string;
   sequences: SequenceRow[];
   recruiterStatus: string;
   threadStatus: string;
@@ -20,7 +19,6 @@ const THREAD_STATUSES = ["ACTIVE", "WAITING_REPLY", "FOLLOW_UP_DUE", "CLOSED"] a
 
 export default function ThreadClient({
   threadId,
-  amEmail,
   sequences,
   recruiterStatus,
   threadStatus,
@@ -51,7 +49,7 @@ export default function ThreadClient({
     try {
       const response = await fetch("/api/outreach/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recruiter_thread_id: threadId,
           subject,
@@ -76,7 +74,7 @@ export default function ThreadClient({
     try {
       const response = await fetch("/api/outreach/schedule", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recruiter_thread_id: threadId,
           sequence_id: sequenceId,
@@ -98,7 +96,7 @@ export default function ThreadClient({
     try {
       const response = await fetch(`/api/outreach/threads/${threadId}/stage`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recruiter_status: stageRecruiterStatus,
           thread_status: stageThreadStatus,
@@ -122,7 +120,7 @@ export default function ThreadClient({
     try {
       const response = await fetch(`/api/outreach/threads/${threadId}/opt-out`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reason: closeReason.trim() || "manual_opt_out",
         }),

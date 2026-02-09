@@ -1,5 +1,6 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 type PageProps = {
   params: { id: string };
@@ -56,30 +57,9 @@ function renderList(items?: string[]) {
 
 export default async function InterviewPrepDetailPage({ params }: PageProps) {
   const prepId = params.id;
-  const amEmail = getAmEmailFromHeaders();
-
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Interview Prep</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Interview Prep</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: prep, error: prepError } = await supabaseServer
@@ -102,7 +82,7 @@ export default async function InterviewPrepDetailPage({ params }: PageProps) {
   const { data: assignment, error: assignmentError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("id")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", user.id)
     .eq("job_seeker_id", prep.job_seeker_id)
     .maybeSingle();
 

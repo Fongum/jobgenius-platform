@@ -10,7 +10,8 @@ import {
 
 export async function runPlan({
   apiBaseUrl,
-  amEmail,
+  authToken,
+  defaultEmail,
   runnerId,
   run,
   claimToken,
@@ -26,7 +27,7 @@ export async function runPlan({
     jobSeekerId: run.job_seeker_id,
     atsType: run.ats_type,
     currentStep: "INIT",
-    defaultEmail: amEmail,
+    defaultEmail: defaultEmail ?? "",
     dryRun,
   };
 
@@ -36,7 +37,7 @@ export async function runPlan({
     message: `Cloud runner started on ${ctx.atsType}.`,
     step: ctx.currentStep,
     last_seen_url: page.url(),
-  }, amEmail, claimToken, runnerId);
+  }, authToken, claimToken, runnerId);
   onProgress?.({
     type: "RUNNER_STARTED",
     runId: ctx.runId,
@@ -51,7 +52,7 @@ export async function runPlan({
       message: "Adapter not found.",
       last_seen_url: page.url(),
       step: "DETECT_ATS",
-    }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
     onProgress?.({
       type: "PAUSED",
       reason: "UNKNOWN_ATS",
@@ -69,7 +70,7 @@ export async function runPlan({
       message: "Captcha detected.",
       last_seen_url: page.url(),
       step: "DETECT_ATS",
-    }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
     onProgress?.({
       type: "PAUSED",
       reason: "CAPTCHA",
@@ -87,7 +88,7 @@ export async function runPlan({
       message: "SMS verification required.",
       last_seen_url: page.url(),
       step: "DETECT_ATS",
-    }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
     onProgress?.({
       type: "PAUSED",
       reason: "OTP_SMS",
@@ -105,7 +106,7 @@ export async function runPlan({
       message: "Email verification required.",
       last_seen_url: page.url(),
       step: "DETECT_ATS",
-    }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
     onProgress?.({
       type: "PAUSED",
       reason: "OTP_EMAIL",
@@ -124,7 +125,7 @@ export async function runPlan({
       step: step.name,
       message: `Starting ${step.name}.`,
       last_seen_url: page.url(),
-    }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
     onProgress?.({
       type: "STEP_STARTED",
       runId: ctx.runId,
@@ -145,7 +146,7 @@ export async function runPlan({
           message: "ATS not detected.",
           last_seen_url: page.url(),
           step: step.name,
-        }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
         onProgress?.({
           type: "PAUSED",
           reason: "UNKNOWN_ATS",
@@ -167,7 +168,7 @@ export async function runPlan({
           message: "Apply entry not found.",
           last_seen_url: page.url(),
           step: step.name,
-        }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
         onProgress?.({
           type: "PAUSED",
           reason: result.reason ?? "APPLY_BUTTON_MISSING",
@@ -196,7 +197,7 @@ export async function runPlan({
           message: "Failed to fill fields.",
           last_seen_url: page.url(),
           step: step.name,
-        }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
         onProgress?.({
           type: "PAUSED",
           reason: result.reason ?? "FILL_FAILED",
@@ -225,7 +226,7 @@ export async function runPlan({
             ats: ctx.atsType,
             step: step.name,
           },
-        }, amEmail, claimToken, runnerId);
+    }, authToken, claimToken, runnerId);
         onProgress?.({
           type: "PAUSED",
           reason: "REQUIRED_FIELDS",
@@ -241,13 +242,19 @@ export async function runPlan({
 
     if (step.name === "TRY_SUBMIT") {
       if (dryRun) {
-        await pauseRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          reason: "DRY_RUN_CONFIRM_SUBMIT",
-          message: "Dry run enabled.",
-          last_seen_url: page.url(),
-          step: step.name,
-        }, amEmail, claimToken, runnerId);
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: "DRY_RUN_CONFIRM_SUBMIT",
+            message: "Dry run enabled.",
+            last_seen_url: page.url(),
+            step: step.name,
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "PAUSED",
           reason: "DRY_RUN_CONFIRM_SUBMIT",
@@ -259,13 +266,19 @@ export async function runPlan({
       }
       const result = await adapter.submit(page, ctx);
       if (result?.ok === false) {
-        await pauseRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          reason: result.reason ?? "SUBMIT_BUTTON_MISSING",
-          message: "Submit not available.",
-          last_seen_url: page.url(),
-          step: step.name,
-        }, amEmail, claimToken, runnerId);
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: result.reason ?? "SUBMIT_BUTTON_MISSING",
+            message: "Submit not available.",
+            last_seen_url: page.url(),
+            step: step.name,
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "PAUSED",
           reason: result.reason ?? "SUBMIT_BUTTON_MISSING",
@@ -281,11 +294,17 @@ export async function runPlan({
     if (step.name === "CONFIRM") {
       const confirmed = await adapter.confirm(page, ctx);
       if (confirmed) {
-        await completeRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          note: "Application submitted by cloud runner.",
-          last_seen_url: page.url(),
-        }, amEmail, claimToken, runnerId);
+        await completeRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            note: "Application submitted by cloud runner.",
+            last_seen_url: page.url(),
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "COMPLETED",
           runId: ctx.runId,
@@ -296,13 +315,19 @@ export async function runPlan({
         return;
       }
 
-      await pauseRun(apiBaseUrl, {
-        run_id: ctx.runId,
-        reason: "REQUIRES_REVIEW",
-        message: "Confirmation not detected.",
-        last_seen_url: page.url(),
-        step: step.name,
-      }, amEmail, claimToken, runnerId);
+      await pauseRun(
+        apiBaseUrl,
+        {
+          run_id: ctx.runId,
+          reason: "REQUIRES_REVIEW",
+          message: "Confirmation not detected.",
+          last_seen_url: page.url(),
+          step: step.name,
+        },
+        authToken,
+        claimToken,
+        runnerId
+      );
       onProgress?.({
         type: "PAUSED",
         reason: "REQUIRES_REVIEW",
@@ -314,10 +339,16 @@ export async function runPlan({
     }
   }
 
-  await retryRun(apiBaseUrl, {
-    run_id: ctx.runId,
-    note: "Plan exhausted without confirmation.",
-  }, amEmail, claimToken, runnerId);
+  await retryRun(
+    apiBaseUrl,
+    {
+      run_id: ctx.runId,
+      note: "Plan exhausted without confirmation.",
+    },
+    authToken,
+    claimToken,
+    runnerId
+  );
   onProgress?.({
     type: "RETRIED",
     reason: "PLAN_EXHAUSTED",

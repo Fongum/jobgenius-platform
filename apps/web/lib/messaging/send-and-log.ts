@@ -24,10 +24,16 @@ export type SendAndLogResult = {
 export async function sendAndLogEmail(
   options: SendAndLogOptions
 ): Promise<SendAndLogResult> {
+  const configuredFrom =
+    process.env.EMAIL_FROM_ADDRESS ?? process.env.OUTREACH_FROM_EMAIL ?? null;
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
   const fromEmail =
-    process.env.EMAIL_FROM_ADDRESS ??
-    process.env.OUTREACH_FROM_EMAIL ??
-    "noreply@joblinca.com";
+    configuredFrom ?? (isProduction ? null : "noreply@joblinca.com");
+
+  if (!fromEmail) {
+    throw new Error("EMAIL_FROM_ADDRESS or OUTREACH_FROM_EMAIL is required in production.");
+  }
 
   const adapter = getEmailAdapter();
   let result: EmailSendOutput;

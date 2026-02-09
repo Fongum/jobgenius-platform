@@ -1,6 +1,7 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import ThreadClient from "./ThreadClient";
+import { redirect } from "next/navigation";
 
 type MessageRow = {
   id: string;
@@ -15,31 +16,11 @@ type MessageRow = {
 };
 
 export default async function ThreadPage({ params }: { params: { id: string } }) {
-  const amEmail = getAmEmailFromHeaders();
+  const user = await getCurrentUser();
   const threadId = params.id;
 
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Outreach Thread</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (!accountManager) {
-    return (
-      <main>
-        <h1>Outreach Thread</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: thread } = await supabaseServer
@@ -62,7 +43,7 @@ export default async function ThreadPage({ params }: { params: { id: string } })
   const { data: assignments } = await supabaseServer
     .from("job_seeker_assignments")
     .select("id")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", user.id)
     .eq("job_seeker_id", thread.job_seeker_id)
     .maybeSingle();
 
@@ -112,7 +93,6 @@ export default async function ThreadPage({ params }: { params: { id: string } })
 
       <ThreadClient
         threadId={threadId}
-        amEmail={amEmail}
         recruiterStatus={recruiter?.status ?? "NEW"}
         threadStatus={thread.thread_status}
         sequences={(sequences ?? []) as Array<{ id: string; name: string }>}

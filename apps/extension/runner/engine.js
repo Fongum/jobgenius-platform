@@ -1,13 +1,13 @@
 (() => {
   const dom = window.JobGeniusDom;
 
-  async function postJson(url, payload, amEmail) {
+  async function postJson(url, payload, authToken) {
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-am-email": amEmail,
         "x-runner": "extension",
+        Authorization: authToken ? `Bearer ${authToken}` : "",
       },
       body: JSON.stringify(payload),
     });
@@ -23,7 +23,7 @@
     return postJson(
       `${ctx.apiBaseUrl}/api/apply/event`,
       { ...payload, claim_token: ctx.claimToken },
-      ctx.amEmail
+      ctx.authToken
     );
   }
 
@@ -39,7 +39,7 @@
         step: meta?.step,
         meta,
       },
-      ctx.amEmail
+      ctx.authToken
     );
   }
 
@@ -52,7 +52,7 @@
         note,
         last_seen_url: window.location.href,
       },
-      ctx.amEmail
+      ctx.authToken
     );
   }
 
@@ -64,7 +64,7 @@
         claim_token: ctx.claimToken,
         note,
       },
-      ctx.amEmail
+      ctx.authToken
     );
   }
 
@@ -76,7 +76,12 @@
           `${ctx.apiBaseUrl}/api/otp/latest?jobSeekerId=${encodeURIComponent(
             ctx.jobSeekerId
           )}`,
-          { headers: { "x-am-email": ctx.amEmail, "x-runner": "extension" } }
+          {
+            headers: {
+              "x-runner": "extension",
+              Authorization: ctx.authToken ? `Bearer ${ctx.authToken}` : "",
+            },
+          }
         );
         if (response.ok) {
           const data = await response.json();
@@ -98,7 +103,7 @@
     await postJson(
       `${ctx.apiBaseUrl}/api/otp/mark-used`,
       { otp_id: otpId },
-      ctx.amEmail
+      ctx.authToken
     );
   }
 

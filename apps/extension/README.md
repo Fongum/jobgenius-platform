@@ -14,8 +14,8 @@ Chrome extension for AMs to save jobs and run the Phase 3 automation runner.
 3. The value is saved automatically.
 
 ## Configure runner (Phase 3)
-1. Set **AM Email** (this is sent as the `x-am-email` header).
-2. Set **Active Job Seeker ID** (UUID from the dashboard).
+1. Connect with your **AM Code** to authenticate.
+2. Select the **Active Job Seeker** from the dropdown.
 3. Click **Start Runner**.
 4. The service worker polls `/api/apply/next` every minute and executes jobs.
 
@@ -36,5 +36,5 @@ Chrome extension for AMs to save jobs and run the Phase 3 automation runner.
 4. Expect either APPLIED or NEEDS_ATTENTION with a reason.
 
 ## Local testing notes
-- The runner sends `x-am-email` and `x-runner: extension` headers.
+- The runner sends `Authorization: Bearer <token>` and `x-runner: extension` headers.
 - Resume uploads use `resume_url` from the job seeker record (best-effort).

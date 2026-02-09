@@ -1,5 +1,4 @@
 import { headers } from "next/headers";
-import { getAmEmailFromHeaders } from "@/lib/am";
 
 function getHeaderValue(source?: Headers, key?: string) {
   if (source && key) {
@@ -9,13 +8,6 @@ function getHeaderValue(source?: Headers, key?: string) {
     return headers().get(key);
   }
   return null;
-}
-
-function normalizeList(value?: string | null) {
-  return (value ?? "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
 }
 
 function getOpsKeyFromUrl(url?: string) {
@@ -63,23 +55,10 @@ export function isServiceKey(headersSource?: Headers) {
   return bearer === serviceKey;
 }
 
-export function isOpsAdmin(headersSource?: Headers) {
-  const adminList = normalizeList(process.env.OPS_ADMIN_EMAILS);
-  if (adminList.length === 0) {
-    return false;
-  }
-  const email = getAmEmailFromHeaders(headersSource);
-  if (!email) {
-    return false;
-  }
-  return adminList.includes(email);
-}
-
 export function requireOpsAuth(headersSource?: Headers, url?: string) {
   if (
     isOpsApiKey(headersSource, url) ||
-    isServiceKey(headersSource) ||
-    isOpsAdmin(headersSource)
+    isServiceKey(headersSource)
   ) {
     return { ok: true } as const;
   }

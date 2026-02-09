@@ -1,5 +1,6 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 type MetricsRow = {
   account_manager_id: string;
@@ -55,39 +56,19 @@ function average(values: number[]) {
 }
 
 export default async function OutreachConversionPage() {
-  const amEmail = getAmEmailFromHeaders();
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Outreach Conversion</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (!accountManager) {
-    return (
-      <main>
-        <h1>Outreach Conversion</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: metricsData } = await supabaseServer
     .from("v_outreach_am_metrics")
     .select("*")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", user.id)
     .maybeSingle();
 
   const metrics = (metricsData as MetricsRow | null) ?? {
-    account_manager_id: accountManager.id,
+    account_manager_id: user.id,
     recruiters_contacted: 0,
     threads_total: 0,
     replied_threads: 0,
@@ -104,7 +85,7 @@ export default async function OutreachConversionPage() {
   const { data: pipelineRows } = await supabaseServer
     .from("v_outreach_pipeline_status")
     .select("status, recruiter_count")
-    .eq("account_manager_id", accountManager.id);
+    .eq("account_manager_id", user.id);
 
   const pipelineMap = new Map<string, number>();
   for (const row of (pipelineRows ?? []) as PipelineRow[]) {
@@ -114,7 +95,7 @@ export default async function OutreachConversionPage() {
   const { data: assignments } = await supabaseServer
     .from("job_seeker_assignments")
     .select("job_seeker_id")
-    .eq("account_manager_id", accountManager.id);
+    .eq("account_manager_id", user.id);
 
   const seekerIds = (assignments ?? []).map((row) => row.job_seeker_id);
   let averageCompensation = 120000;
@@ -179,7 +160,7 @@ export default async function OutreachConversionPage() {
     <main style={{ display: "grid", gap: "16px" }}>
       <header>
         <h1>Outreach Conversion</h1>
-        <p>Account Manager: {amEmail}</p>
+        <p>Account Manager: {user.name ?? user.email}</p>
         <nav style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <a href="/dashboard/outreach/recruiters">Recruiters</a>
           <a href="/dashboard/outreach/follow-ups">Follow-ups Due</a>

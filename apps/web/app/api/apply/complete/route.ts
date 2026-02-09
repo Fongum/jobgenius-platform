@@ -3,6 +3,7 @@ import { buildInterviewPrepContent } from "@/lib/interview-prep";
 import { fetchCompanyInfo } from "@/lib/company-info";
 import { getActorFromHeaders } from "@/lib/actor";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { supabaseServer } from "@/lib/supabase/server";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { applicationAckEmail } from "@/lib/email-templates/application-ack";
@@ -236,6 +237,17 @@ export async function POST(request: Request) {
           updated_at: nowIsoInner,
         }))
       );
+    }
+
+    if (draftRows.length > 0) {
+      const contactIds = (createdContacts ?? []).map((contact) => contact.id);
+      enqueueBackgroundJob("AUTO_OUTREACH", {
+        job_seeker_id: jobSeeker.id,
+        job_post_id: jobPost.id,
+        ...(contactIds.length > 0 ? { contact_ids: contactIds } : {}),
+      }).catch(() => {
+        // Non-blocking: outreach scheduling should not break completion flow
+      });
     }
 
     const prepContent = buildInterviewPrepContent({

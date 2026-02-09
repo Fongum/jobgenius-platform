@@ -61,7 +61,6 @@ type ConsentStatus = Record<
 
 type OutreachClientProps = {
   drafts: DraftRow[];
-  amEmail: string;
   requiredConsents: string[];
   jobSeekers: JobSeekerRow[];
   consentStatus: ConsentStatus;
@@ -95,7 +94,6 @@ function consentHash(consentType: string) {
 
 export default function OutreachClient({
   drafts,
-  amEmail,
   requiredConsents,
   jobSeekers,
   consentStatus,
@@ -155,7 +153,7 @@ export default function OutreachClient({
     try {
       const response = await fetch("/api/consent/accept", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerIdValue,
           consent_type: consentType,
@@ -187,7 +185,7 @@ export default function OutreachClient({
       for (const consentType of missing) {
         const response = await fetch("/api/consent/accept", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             job_seeker_id: jobSeekerIdValue,
             consent_type: consentType,
@@ -212,7 +210,7 @@ export default function OutreachClient({
       const update = edits.get(draftId);
       const response = await fetch(`/api/outreach/drafts/${draftId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subject: update?.subject ?? "",
           body: update?.body ?? "",
@@ -235,7 +233,7 @@ export default function OutreachClient({
     try {
       const response = await fetch(`/api/outreach/drafts/${draftId}/send`, {
         method: "POST",
-        headers: { "x-am-email": amEmail },
+        headers: {},
       });
 
       if (!response.ok) {
@@ -257,7 +255,7 @@ export default function OutreachClient({
     try {
       const response = await fetch("/api/outreach/drafts", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerId.trim(),
           job_post_id: jobPostId.trim(),

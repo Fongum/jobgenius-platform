@@ -5,7 +5,7 @@
 import { logLine } from '../logger.js';
 
 const API_BASE_URL = process.env.JOBGENIUS_API_BASE_URL || 'http://localhost:3000';
-const RUNNER_AM_EMAIL = process.env.RUNNER_AM_EMAIL || '';
+const RUNNER_AUTH_TOKEN = process.env.RUNNER_AUTH_TOKEN || '';
 const OPS_API_KEY = process.env.OPS_API_KEY || '';
 
 /**
@@ -17,10 +17,13 @@ export async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
   const headers = {
     'Content-Type': 'application/json',
-    'x-am-email': RUNNER_AM_EMAIL,
     'x-ops-key': OPS_API_KEY,
     ...options.headers
   };
+
+  if (RUNNER_AUTH_TOKEN) {
+    headers.Authorization = `Bearer ${RUNNER_AUTH_TOKEN}`;
+  }
 
   const response = await fetch(url, {
     ...options,

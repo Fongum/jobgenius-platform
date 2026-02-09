@@ -5,7 +5,8 @@ Long-running Playwright worker that polls the JobGenius API for runs and execute
 
 ## Environment
 - `JOBGENIUS_API_BASE_URL` (required)
-- `RUNNER_AM_EMAIL` (required, used for internal auth header)
+- `RUNNER_AUTH_TOKEN` (required, used for API auth)
+- `RUNNER_DEFAULT_EMAIL` (optional, fallback email for ATS forms)
 - `RUNNER_ID` (optional)
 - `RUNNER_POLL_INTERVAL_MS` (default 60000)
 - `RUNNER_CONCURRENCY` (default 5)
@@ -21,6 +22,7 @@ Long-running Playwright worker that polls the JobGenius API for runs and execute
 - `RUNNER_REQUIRED_FIELDS_THRESHOLD` (default 5)
 - `RUNNER_METRICS_INTERVAL_MS` (default 60000)
 - `RUNNER_DRY_RUN` (default false)
+- `OPS_API_KEY` (optional, enables heartbeats)
 
 ## Local run
 ```bash

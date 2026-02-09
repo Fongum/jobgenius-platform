@@ -26,7 +26,6 @@ type InterviewRow = {
 
 type Props = {
   interviews: InterviewRow[];
-  amEmail: string;
 };
 
 type Tab = "upcoming" | "past" | "cancelled";
@@ -39,7 +38,7 @@ const statusColors: Record<string, string> = {
   no_show: "#9333ea",
 };
 
-export default function InterviewsClient({ interviews, amEmail }: Props) {
+export default function InterviewsClient({ interviews }: Props) {
   const [tab, setTab] = useState<Tab>("upcoming");
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -68,13 +67,13 @@ export default function InterviewsClient({ interviews, amEmail }: Props) {
       if (action === "cancel") {
         await fetch(`/api/interviews/${interviewId}/cancel`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cancelled_by: "recruiter" }),
         });
       } else {
         await fetch(`/api/interviews/${interviewId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: action }),
         });
       }

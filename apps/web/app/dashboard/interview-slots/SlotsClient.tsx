@@ -16,10 +16,9 @@ type SlotRow = {
 type Props = {
   slots: SlotRow[];
   accountManagerId: string;
-  amEmail: string;
 };
 
-export default function SlotsClient({ slots, accountManagerId, amEmail }: Props) {
+export default function SlotsClient({ slots, accountManagerId }: Props) {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("09:30");
@@ -39,7 +38,7 @@ export default function SlotsClient({ slots, accountManagerId, amEmail }: Props)
     try {
       const res = await fetch("/api/interview-slots", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           account_manager_id: accountManagerId,
           start_at: startAt,
@@ -65,7 +64,7 @@ export default function SlotsClient({ slots, accountManagerId, amEmail }: Props)
     try {
       await fetch(`/api/interview-slots?id=${slotId}`, {
         method: "DELETE",
-        headers: { "x-am-email": amEmail },
+        headers: {},
       });
       window.location.reload();
     } finally {

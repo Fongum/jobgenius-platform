@@ -42,10 +42,9 @@ type AttentionRow = {
 
 type AttentionClientProps = {
   rows: AttentionRow[];
-  amEmail: string;
 };
 
-export default function AttentionClient({ rows, amEmail }: AttentionClientProps) {
+export default function AttentionClient({ rows }: AttentionClientProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(rows.length);
   const lastCountRef = useRef(rows.length);
@@ -60,7 +59,7 @@ export default function AttentionClient({ rows, amEmail }: AttentionClientProps)
     const interval = setInterval(async () => {
       try {
         const response = await fetch("/api/queue?status=NEEDS_ATTENTION", {
-          headers: { "x-am-email": amEmail },
+          headers: {},
         });
         if (!response.ok) return;
         const data = await response.json();
@@ -92,7 +91,7 @@ export default function AttentionClient({ rows, amEmail }: AttentionClientProps)
     try {
       const response = await fetch("/api/apply/resume", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run_id: runId, note: note ?? "Resolved in inbox." }),
       });
 
@@ -120,7 +119,7 @@ export default function AttentionClient({ rows, amEmail }: AttentionClientProps)
     try {
       const otpResponse = await fetch("/api/otp/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerId,
           channel,
@@ -135,7 +134,7 @@ export default function AttentionClient({ rows, amEmail }: AttentionClientProps)
 
       const resumeResponse = await fetch("/api/apply/resume", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run_id: runId, note: "OTP submitted by AM." }),
       });
 

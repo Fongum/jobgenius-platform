@@ -1,36 +1,17 @@
-import { getAmEmailFromHeaders } from "@/lib/am";
+import { getCurrentUser } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 type PageProps = {
   params: { id: string };
 };
 
 export default async function AppliedReportPage({ params }: PageProps) {
-  const amEmail = getAmEmailFromHeaders();
+  const user = await getCurrentUser();
   const runId = params.id;
 
-  if (!amEmail) {
-    return (
-      <main>
-        <h1>Application Report</h1>
-        <p>Missing AM email. Set x-am-email header or AM_EMAIL env var.</p>
-      </main>
-    );
-  }
-
-  const { data: accountManager, error: amError } = await supabaseServer
-    .from("account_managers")
-    .select("id")
-    .eq("email", amEmail)
-    .single();
-
-  if (amError || !accountManager) {
-    return (
-      <main>
-        <h1>Application Report</h1>
-        <p>Account manager not found for {amEmail}.</p>
-      </main>
-    );
+  if (!user || user.userType !== "am") {
+    redirect("/login");
   }
 
   const { data: run, error: runError } = await supabaseServer
@@ -53,7 +34,7 @@ export default async function AppliedReportPage({ params }: PageProps) {
   const { data: assignment, error: assignmentError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("id")
-    .eq("account_manager_id", accountManager.id)
+    .eq("account_manager_id", user.id)
     .eq("job_seeker_id", run.job_seeker_id)
     .maybeSingle();
 

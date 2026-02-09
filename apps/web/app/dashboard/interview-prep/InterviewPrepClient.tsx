@@ -32,10 +32,9 @@ type PrepRow = {
 
 type InterviewPrepClientProps = {
   items: PrepRow[];
-  amEmail: string;
 };
 
-export default function InterviewPrepClient({ items, amEmail }: InterviewPrepClientProps) {
+export default function InterviewPrepClient({ items }: InterviewPrepClientProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [jobSeekerId, setJobSeekerId] = useState("");
   const [jobPostId, setJobPostId] = useState("");
@@ -49,7 +48,7 @@ export default function InterviewPrepClient({ items, amEmail }: InterviewPrepCli
     try {
       const response = await fetch("/api/interview-prep", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-am-email": amEmail },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: jobSeekerId.trim(),
           job_post_id: jobPostId.trim(),
