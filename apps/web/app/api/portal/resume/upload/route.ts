@@ -288,8 +288,7 @@ async function extractDocxText(buffer: Buffer): Promise<string> {
     // DOCX files are ZIP archives containing XML
     // Try to use mammoth if available
     // Dynamic require to avoid TS module resolution error (mammoth is optional)
-    const mammothModule = "mammoth";
-    const mammoth = await import(mammothModule).catch(() => null) as { extractRawText?: (opts: { buffer: Buffer }) => Promise<{ value: string }> } | null;
+    const mammoth = await import("mammoth").catch(() => null) as { extractRawText?: (opts: { buffer: Buffer }) => Promise<{ value: string }> } | null;
     if (mammoth?.extractRawText) {
       const result = await mammoth.extractRawText({ buffer });
       return result.value || "";
