@@ -229,7 +229,7 @@ export async function POST(request: Request) {
           job_seeker_id: draft.job_seeker_id,
           job_post_id: draft.job_post_id,
           draft_id: null,
-          provider: "stub",
+          provider: process.env.EMAIL_SEND_PROVIDER ?? "stub",
           status: "PENDING",
           request_payload: {
             subject: draft.subject,

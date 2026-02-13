@@ -14,8 +14,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "JobGenius - AI-Powered Job Placement Platform",
-  description: "Land your dream job 3-5x faster with automated applications, intelligent matching, and recruiter outreach.",
+  title: "JobGenius - We Handle Your Job Search So You Can Focus on Interviews",
+  description: "Stop applying to jobs. JobGenius pairs AI with a dedicated human account manager to run your entire job search — applications, recruiter outreach, and interview prep — so you only show up when it matters.",
 };
 
 export default function RootLayout({

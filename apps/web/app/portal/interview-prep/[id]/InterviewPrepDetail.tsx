@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import AudioPractice from "./AudioPractice";
+import QuizTab from "./QuizTab";
+import QABankTab from "./QABankTab";
+import VoiceSimulatorTab from "./VoiceSimulatorTab";
 
 type PrepContent = {
   role_summary?: string;
@@ -56,21 +60,44 @@ type Session = {
   created_at: string;
 };
 
+type InterviewInfo = {
+  scheduled_at: string | null;
+  status: string;
+};
+
+type ProgressStats = {
+  total_sessions: number;
+  total_questions_answered: number;
+  average_score: number;
+  best_score: number;
+  recent_average: number;
+  older_average: number;
+  streak_days: number;
+  sessions_this_week: number;
+  questions_this_week: number;
+  score_trend: "improving" | "stable" | "declining";
+};
+
 const SUB_TABS = [
   { key: "notes", label: "Study Notes" },
   { key: "videos", label: "Videos" },
   { key: "practice", label: "Practice Q&A" },
   { key: "simulation", label: "Audio Simulation" },
+  { key: "quiz", label: "Quiz" },
+  { key: "qa-bank", label: "Q&A Bank" },
+  { key: "voice-sim", label: "Voice Simulator" },
 ] as const;
 
 export default function InterviewPrepDetail({
   prep,
   videos,
   sessions: initialSessions,
+  interview,
 }: {
   prep: Prep;
   videos: Video[];
   sessions: Session[];
+  interview?: InterviewInfo | null;
 }) {
   const [activeTab, setActiveTab] = useState<string>("notes");
   const [sessions, setSessions] = useState<Session[]>(initialSessions);
@@ -79,11 +106,21 @@ export default function InterviewPrepDetail({
   const [userAnswer, setUserAnswer] = useState("");
   const [creating, setCreating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<ProgressStats | null>(null);
 
   const content = prep.content ?? {};
   const jobPost = prep.job_posts;
 
-  async function startNewPractice() {
+  useEffect(() => {
+    fetch("/api/portal/interview-prep/progress")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.progress) setProgress(data.progress);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function startNewPractice(sessionType: "qa" | "audio_simulation" = "qa") {
     setCreating(true);
     try {
       const res = await fetch(
@@ -91,7 +128,7 @@ export default function InterviewPrepDetail({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_type: "qa" }),
+          body: JSON.stringify({ session_type: sessionType }),
         }
       );
       if (res.ok) {
@@ -101,7 +138,6 @@ export default function InterviewPrepDetail({
         setCurrentQ(0);
         setUserAnswer("");
 
-        // Mark as in_progress
         await fetch(
           `/api/portal/interview-prep/${prep.id}/practice/${session.id}`,
           {
@@ -167,6 +203,35 @@ export default function InterviewPrepDetail({
     setUserAnswer("");
   }
 
+  function handleAudioAnswerSubmitted(updatedSession: Session) {
+    setActiveSession(updatedSession);
+    setSessions((prev) =>
+      prev.map((s) => (s.id === updatedSession.id ? updatedSession : s))
+    );
+    const nextUnanswered = updatedSession.questions.findIndex(
+      (q) => !q.user_answer
+    );
+    if (nextUnanswered >= 0) {
+      setCurrentQ(nextUnanswered);
+    }
+  }
+
+  // Interview countdown
+  const daysUntilInterview =
+    interview?.scheduled_at
+      ? Math.max(
+          0,
+          Math.ceil(
+            (new Date(interview.scheduled_at).getTime() - Date.now()) /
+              (1000 * 60 * 60 * 24)
+          )
+        )
+      : null;
+
+  const readiness = progress?.average_score ?? 0;
+  const questionsNeeded =
+    readiness < 80 ? Math.ceil((80 - readiness) / 3) : 0;
+
   return (
     <div>
       {/* Header */}
@@ -185,24 +250,92 @@ export default function InterviewPrepDetail({
         )}
       </div>
 
+      {/* Interview Countdown Banner */}
+      {daysUntilInterview !== null && daysUntilInterview >= 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-purple-800">
+                Interview in {daysUntilInterview} day
+                {daysUntilInterview !== 1 ? "s" : ""}
+              </p>
+              <p className="text-sm text-purple-700 mt-0.5">
+                Readiness: {readiness}%
+                {questionsNeeded > 0 &&
+                  ` — Practice ${questionsNeeded} more question${questionsNeeded !== 1 ? "s" : ""} to reach 80%`}
+              </p>
+            </div>
+            <div className="text-2xl font-bold text-purple-900">
+              {daysUntilInterview}d
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Banner */}
+      {progress && progress.total_sessions > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-sm text-gray-700">
+              {progress.questions_this_week > 0 ? (
+                <>
+                  You&apos;ve practiced{" "}
+                  <span className="font-semibold">
+                    {progress.questions_this_week} question
+                    {progress.questions_this_week !== 1 ? "s" : ""}
+                  </span>{" "}
+                  this week. Average score:{" "}
+                  <span className="font-semibold">{progress.average_score}%</span>
+                  {progress.score_trend !== "stable" && (
+                    <span
+                      className={
+                        progress.score_trend === "improving"
+                          ? "text-green-700"
+                          : "text-red-700"
+                      }
+                    >
+                      {" "}
+                      ({progress.score_trend})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  {progress.total_sessions} session
+                  {progress.total_sessions !== 1 ? "s" : ""} completed.
+                  Average score: {progress.average_score}%
+                </>
+              )}
+            </div>
+            {progress.streak_days > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                {progress.streak_days}-day streak
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Sub-tabs */}
-      <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 mb-6">
-        {SUB_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => {
-              setActiveTab(tab.key);
-              setActiveSession(null);
-            }}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
-              activeTab === tab.key
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-6">
+        <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 min-w-max sm:min-w-0">
+          {SUB_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setActiveSession(null);
+              }}
+              className={`flex-shrink-0 sm:flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
+                activeTab === tab.key
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Study Notes Tab */}
@@ -365,18 +498,22 @@ export default function InterviewPrepDetail({
               onAnswerChange={setUserAnswer}
               onSubmit={submitAnswer}
               onBack={() => setActiveSession(null)}
+              onNavigate={(i) => {
+                setCurrentQ(i);
+                setUserAnswer(activeSession.questions[i]?.user_answer || "");
+              }}
               prepId={prep.id}
             />
           ) : (
             <div>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Practice Sessions
                 </h3>
                 <button
-                  onClick={startNewPractice}
+                  onClick={() => startNewPractice("qa")}
                   disabled={creating}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors w-full sm:w-auto"
                 >
                   {creating ? "Creating..." : "Start New Practice"}
                 </button>
@@ -397,7 +534,7 @@ export default function InterviewPrepDetail({
                     .map((session) => (
                       <div
                         key={session.id}
-                        className="bg-white rounded-lg shadow p-4 flex items-center justify-between"
+                        className="bg-white rounded-lg shadow p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div>
                           <div className="flex items-center gap-2">
@@ -425,12 +562,8 @@ export default function InterviewPrepDetail({
                           </p>
                         </div>
                         <button
-                          onClick={() =>
-                            session.status === "completed"
-                              ? resumeSession(session)
-                              : resumeSession(session)
-                          }
-                          className="px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100"
+                          onClick={() => resumeSession(session)}
+                          className="px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 sm:py-1 self-start sm:self-auto"
                         >
                           {session.status === "completed"
                             ? "Review"
@@ -447,23 +580,164 @@ export default function InterviewPrepDetail({
 
       {/* Audio Simulation Tab */}
       {activeTab === "simulation" && (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <div className="text-6xl mb-4">🎙️</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Audio Interview Simulation
-          </h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            Audio interview simulation is coming soon. In the meantime, practice
-            answering questions aloud using the Practice Q&A tab.
-          </p>
-          <button
-            onClick={() => setActiveTab("practice")}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Go to Practice Q&A
-          </button>
+        <div>
+          {activeSession ? (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setActiveSession(null)}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  &larr; Back to sessions
+                </button>
+                <span className="text-sm text-gray-500">
+                  Question {currentQ + 1} of {activeSession.questions.length}
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${
+                      (activeSession.questions.filter((q) => q.user_answer)
+                        .length /
+                        activeSession.questions.length) *
+                      100
+                    }%`,
+                  }}
+                />
+              </div>
+
+              {activeSession.status === "completed" &&
+                activeSession.overall_score !== null && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-center">
+                    <p className="text-lg font-bold text-green-700">
+                      Overall Score: {activeSession.overall_score}%
+                    </p>
+                    <p className="text-sm text-green-600 mt-1">
+                      Audio practice complete! Review your answers below.
+                    </p>
+                  </div>
+                )}
+
+              <AudioPractice
+                prepId={prep.id}
+                session={activeSession}
+                currentQ={currentQ}
+                onAnswerSubmitted={handleAudioAnswerSubmitted}
+              />
+
+              {/* Question navigation */}
+              <div className="flex justify-center gap-2 mt-6 flex-wrap">
+                {activeSession.questions.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentQ(i)}
+                    className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full text-xs font-medium ${
+                      i === currentQ
+                        ? "bg-blue-600 text-white"
+                        : q.user_answer
+                        ? q.score !== null && q.score >= 70
+                          ? "bg-green-100 text-green-700"
+                          : q.score !== null
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-gray-200 text-gray-600"
+                        : "bg-gray-100 text-gray-400"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Audio Practice Sessions
+                </h3>
+                <button
+                  onClick={() => startNewPractice("audio_simulation")}
+                  disabled={creating}
+                  className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors w-full sm:w-auto"
+                >
+                  {creating ? "Creating..." : "Start Audio Practice"}
+                </button>
+              </div>
+
+              {sessions.filter((s) => s.session_type === "audio_simulation")
+                .length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-8 text-center">
+                  <div className="text-4xl mb-4">🎙️</div>
+                  <p className="text-gray-600 font-medium mb-2">
+                    Practice answering interview questions out loud
+                  </p>
+                  <p className="text-sm text-gray-400 max-w-md mx-auto">
+                    Your speech will be transcribed and scored with AI-powered
+                    feedback. Use Chrome or Edge for the best experience.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sessions
+                    .filter((s) => s.session_type === "audio_simulation")
+                    .map((session) => (
+                      <div
+                        key={session.id}
+                        className="bg-white rounded-lg shadow p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                session.status === "completed"
+                                  ? "bg-green-100 text-green-700"
+                                  : session.status === "in_progress"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {session.status.replace("_", " ")}
+                            </span>
+                            {session.overall_score !== null && (
+                              <span className="text-sm font-bold text-gray-900">
+                                Score: {session.overall_score}%
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {session.questions.length} questions
+                            {" - "}
+                            {new Date(session.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => resumeSession(session)}
+                          className="px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 sm:py-1 self-start sm:self-auto"
+                        >
+                          {session.status === "completed"
+                            ? "Review"
+                            : "Continue"}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Quiz Tab */}
+      {activeTab === "quiz" && <QuizTab prepId={prep.id} />}
+
+      {/* Q&A Bank Tab */}
+      {activeTab === "qa-bank" && <QABankTab prepId={prep.id} />}
+
+      {/* Voice Simulator Tab */}
+      {activeTab === "voice-sim" && <VoiceSimulatorTab prepId={prep.id} />}
     </div>
   );
 }
@@ -509,6 +783,7 @@ function PracticeSessionView({
   onAnswerChange,
   onSubmit,
   onBack,
+  onNavigate,
 }: {
   session: Session;
   currentQ: number;
@@ -517,6 +792,7 @@ function PracticeSessionView({
   onAnswerChange: (v: string) => void;
   onSubmit: () => void;
   onBack: () => void;
+  onNavigate: (index: number) => void;
   prepId: string;
 }) {
   const question = session.questions[currentQ];
@@ -561,14 +837,14 @@ function PracticeSessionView({
       )}
 
       {/* Question */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
         <h3 className="text-base font-semibold text-gray-900 mb-4">
           {question?.question}
         </h3>
 
         {question?.user_answer ? (
           <div>
-            <div className="bg-gray-50 rounded-lg p-4 mb-3">
+            <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-3">
               <p className="text-sm font-medium text-gray-500 mb-1">
                 Your Answer:
               </p>
@@ -639,16 +915,12 @@ function PracticeSessionView({
       </div>
 
       {/* Question navigation */}
-      <div className="flex justify-center gap-2 mt-6">
+      <div className="flex justify-center gap-2 mt-6 flex-wrap">
         {session.questions.map((q, i) => (
           <button
             key={i}
-            onClick={() => {
-              onAnswerChange(q.user_answer || "");
-              // We need to update currentQ through parent
-              // For now, we can't navigate freely - just show indicators
-            }}
-            className={`w-8 h-8 rounded-full text-xs font-medium ${
+            onClick={() => onNavigate(i)}
+            className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full text-xs font-medium ${
               i === currentQ
                 ? "bg-blue-600 text-white"
                 : q.user_answer

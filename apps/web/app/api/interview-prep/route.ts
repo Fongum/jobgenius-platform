@@ -1,4 +1,6 @@
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
+import { buildInterviewPrepContentWithAI } from "@/lib/interview-prep-ai";
+import { isOpenAIConfigured } from "@/lib/openai";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
 
   const { data: jobSeeker, error: seekerError } = await supabaseServer
     .from("job_seekers")
-    .select("id, seniority, work_type")
+    .select("id, seniority, work_type, skills")
     .eq("id", payload.job_seeker_id)
     .single();
 
@@ -113,14 +115,27 @@ export async function POST(request: Request) {
     );
   }
 
-  const content = buildInterviewPrepContent({
-    jobTitle: jobPost.title,
-    companyName: jobPost.company,
-    descriptionText: jobPost.description_text,
-    location: jobPost.location,
-    seniority: jobSeeker.seniority,
-    workType: jobSeeker.work_type,
-  });
+  let content;
+  if (isOpenAIConfigured()) {
+    content = await buildInterviewPrepContentWithAI({
+      jobTitle: jobPost.title,
+      companyName: jobPost.company,
+      descriptionText: jobPost.description_text,
+      location: jobPost.location,
+      seniority: jobSeeker.seniority,
+      workType: jobSeeker.work_type,
+      seekerSkills: jobSeeker.skills,
+    });
+  } else {
+    content = buildInterviewPrepContent({
+      jobTitle: jobPost.title,
+      companyName: jobPost.company,
+      descriptionText: jobPost.description_text,
+      location: jobPost.location,
+      seniority: jobSeeker.seniority,
+      workType: jobSeeker.work_type,
+    });
+  }
 
   const nowIso = new Date().toISOString();
   const { data: prep, error: prepError } = await supabaseServer

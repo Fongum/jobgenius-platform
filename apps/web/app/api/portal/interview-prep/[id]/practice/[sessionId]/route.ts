@@ -1,6 +1,7 @@
 import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { scorePracticeAnswer, calculateOverallScore } from "@/lib/portal/practice-scoring";
+import { scoreWithAI, isAIScoringAvailable } from "@/lib/portal/ai-practice-scoring";
 
 export async function GET(
   request: Request,
@@ -74,22 +75,77 @@ export async function PATCH(
 
   if (body.questions) {
     // Score any answers that don't have scores yet
-    const scoredQuestions = body.questions.map((q) => {
-      if (q.user_answer && (q.score === null || q.score === undefined)) {
-        const result = scorePracticeAnswer(q.question, q.user_answer);
-        return {
-          ...q,
-          score: result.score,
-          feedback: result.feedback,
-          star_score: result.star_score,
-          relevance_score: result.relevance_score,
-          specificity_score: result.specificity_score,
-          confidence_coaching: result.confidence_coaching,
-          rewrite_suggestions: result.rewrite_suggestions,
-        };
+    let scoredQuestions;
+
+    if (isAIScoringAvailable()) {
+      // Fetch job context for AI scoring
+      let jobTitle: string | undefined;
+      let companyName: string | undefined;
+      let jobDescription: string | undefined;
+
+      const { data: prepData } = await supabaseAdmin
+        .from("interview_prep")
+        .select("job_post_id")
+        .eq("id", params.id)
+        .single();
+
+      if (prepData?.job_post_id) {
+        const { data: jobPost } = await supabaseAdmin
+          .from("job_posts")
+          .select("title, company, description_text")
+          .eq("id", prepData.job_post_id)
+          .single();
+
+        if (jobPost) {
+          jobTitle = jobPost.title;
+          companyName = jobPost.company;
+          jobDescription = jobPost.description_text;
+        }
       }
-      return q;
-    });
+
+      scoredQuestions = await Promise.all(
+        body.questions.map(async (q) => {
+          if (q.user_answer && (q.score === null || q.score === undefined)) {
+            const result = await scoreWithAI({
+              question: q.question,
+              userAnswer: q.user_answer,
+              jobTitle,
+              companyName,
+              jobDescription,
+            });
+            return {
+              ...q,
+              score: result.score,
+              feedback: result.feedback,
+              star_score: result.star_score,
+              relevance_score: result.relevance_score,
+              specificity_score: result.specificity_score,
+              confidence_coaching: result.confidence_coaching,
+              rewrite_suggestions: result.rewrite_suggestions,
+            };
+          }
+          return q;
+        })
+      );
+    } else {
+      scoredQuestions = body.questions.map((q) => {
+        if (q.user_answer && (q.score === null || q.score === undefined)) {
+          const result = scorePracticeAnswer(q.question, q.user_answer);
+          return {
+            ...q,
+            score: result.score,
+            feedback: result.feedback,
+            star_score: result.star_score,
+            relevance_score: result.relevance_score,
+            specificity_score: result.specificity_score,
+            confidence_coaching: result.confidence_coaching,
+            rewrite_suggestions: result.rewrite_suggestions,
+          };
+        }
+        return q;
+      });
+    }
+
     updates.questions = scoredQuestions;
     updates.overall_score = calculateOverallScore(scoredQuestions);
   }

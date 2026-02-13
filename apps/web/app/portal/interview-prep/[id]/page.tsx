@@ -39,11 +39,27 @@ export default async function InterviewPrepDetailPage({
     .eq("job_seeker_id", user.id)
     .order("created_at", { ascending: false });
 
+  // Get linked interview if any
+  let interview: { scheduled_at: string | null; status: string } | null = null;
+  if (prep.job_post_id) {
+    const { data: iv } = await supabaseAdmin
+      .from("interviews")
+      .select("scheduled_at, status")
+      .eq("job_seeker_id", user.id)
+      .eq("job_post_id", prep.job_post_id)
+      .in("status", ["confirmed", "pending_candidate"])
+      .order("scheduled_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    interview = iv;
+  }
+
   return (
     <InterviewPrepDetail
       prep={prep}
       videos={videos ?? []}
       sessions={sessions ?? []}
+      interview={interview}
     />
   );
 }

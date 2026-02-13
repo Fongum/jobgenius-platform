@@ -513,6 +513,7 @@ function DiscoverTab({
       </div>
 
       <p className="text-sm text-gray-500">{filtered.length} matches</p>
+      <p className="text-xs text-gray-400">Jobs above threshold with strong/good match are auto-queued when matching runs.</p>
 
       {/* Job cards */}
       <div className="space-y-3">
@@ -632,8 +633,41 @@ function QueueTab({
   setMsg: (m: { type: "success" | "error"; text: string } | null) => void;
   switchTab: (tab: TabId) => void;
 }) {
+  const router = useRouter();
   const [subFilter, setSubFilter] = useState<string>("all");
   const [loading, setLoading] = useState<Set<string>>(new Set());
+  const [bulkStarting, setBulkStarting] = useState(false);
+
+  const readyCount = queueItems.filter((q) => q.status === "QUEUED").length;
+
+  const startAllReady = async () => {
+    const readyIds = queueItems
+      .filter((q) => q.status === "QUEUED")
+      .map((q) => q.id);
+    if (readyIds.length === 0) return;
+    setBulkStarting(true);
+    try {
+      const res = await fetch("/api/apply/start-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queue_ids: readyIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Batch start failed." });
+      } else {
+        setMsg({
+          type: "success",
+          text: `Started ${data.started}, blocked ${data.blocked}, failed ${data.failed}.`,
+        });
+        router.refresh();
+      }
+    } catch {
+      setMsg({ type: "error", text: "Network error." });
+    } finally {
+      setBulkStarting(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     return queueItems.filter((q) => {
@@ -689,6 +723,16 @@ function QueueTab({
           </button>
         ))}
       </div>
+
+      {readyCount > 0 && (
+        <button
+          onClick={startAllReady}
+          disabled={bulkStarting}
+          className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+        >
+          {bulkStarting ? "Starting..." : `Start All Ready (${readyCount})`}
+        </button>
+      )}
 
       <p className="text-sm text-gray-500">{filtered.length} items</p>
 
@@ -1165,11 +1209,44 @@ function FollowUpTab({
   seekerMap: Map<string, SeekerSummary>;
   setMsg: (m: { type: "success" | "error"; text: string } | null) => void;
 }) {
+  const router = useRouter();
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [bulkSending, setBulkSending] = useState(false);
   const [editingDraft, setEditingDraft] = useState<string | null>(null);
   const [draftSubject, setDraftSubject] = useState("");
   const [draftBody, setDraftBody] = useState("");
+
+  const pendingDrafts = outreachDrafts.filter(
+    (d) => d.status === "draft" || d.status === "DRAFT"
+  );
+
+  const sendAllDrafts = async () => {
+    const draftIds = pendingDrafts.map((d) => d.id);
+    if (draftIds.length === 0) return;
+    setBulkSending(true);
+    try {
+      const res = await fetch("/api/outreach/send-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_ids: draftIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Batch send failed." });
+      } else {
+        setMsg({
+          type: "success",
+          text: `Sent ${data.sent}, skipped ${data.skipped}, failed ${data.failed}.`,
+        });
+        router.refresh();
+      }
+    } catch {
+      setMsg({ type: "error", text: "Network error." });
+    } finally {
+      setBulkSending(false);
+    }
+  };
 
   const appliedRuns = runs.filter((r) => ["APPLIED", "COMPLETED"].includes(r.status));
 
@@ -1271,6 +1348,16 @@ function FollowUpTab({
   };
 
   return (
+    <div className="space-y-4">
+      {pendingDrafts.length > 0 && (
+        <button
+          onClick={sendAllDrafts}
+          disabled={bulkSending}
+          className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+        >
+          {bulkSending ? "Sending..." : `Send All Drafts (${pendingDrafts.length})`}
+        </button>
+      )}
     <div className="flex gap-6 min-h-[500px]">
       {/* Left panel - company list */}
       <div className="w-72 shrink-0 border-r pr-4 overflow-y-auto">
@@ -1442,6 +1529,7 @@ function FollowUpTab({
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }
