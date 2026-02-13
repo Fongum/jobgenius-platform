@@ -19,7 +19,7 @@
       return { ok: true };
     },
     async fillKnownFields(ctx) {
-      dom.fillTextInputs(ctx.defaultEmail);
+      dom.fillTextInputs(ctx.defaultEmail, ctx.profile);
       if (ctx.resumeUrl) {
         const upload = await dom.uploadResume(ctx.resumeUrl);
         if (!upload.ok) {

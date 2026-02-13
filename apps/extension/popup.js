@@ -47,6 +47,7 @@ const els = {
   apiBaseUrl: document.getElementById("apiBaseUrl"),
   dryRun: document.getElementById("dryRun"),
   toggleRunnerBtn: document.getElementById("toggleRunner"),
+  saveSessionStateBtn: document.getElementById("saveSessionState"),
   runnerIndicator: document.getElementById("runnerIndicator"),
   runnerStatusText: document.getElementById("runnerStatusText"),
   settingsStatus: document.getElementById("settingsStatus"),
@@ -100,6 +101,19 @@ function getHeaders() {
     Authorization: `Bearer ${authToken}`,
     "x-runner": "extension",
   };
+}
+
+function mapSameSite(value) {
+  switch ((value || "").toLowerCase()) {
+    case "no_restriction":
+      return "None";
+    case "strict":
+      return "Strict";
+    case "lax":
+      return "Lax";
+    default:
+      return "Lax";
+  }
 }
 
 // ─── Auth Functions ───────────────────────────────────────────
@@ -961,6 +975,109 @@ async function toggleRunner() {
   if (newValue) chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
 }
 
+async function saveSessionState() {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken || !activeSeekerId) {
+    setStatus(els.settingsStatus, "Connect and select a job seeker first.", "error");
+    return;
+  }
+
+  let tab;
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    tab = tabs[0];
+  } catch (error) {
+    setStatus(els.settingsStatus, "Unable to access current tab.", "error");
+    return;
+  }
+
+  if (!tab?.url || !/^https?:\/\//i.test(tab.url)) {
+    setStatus(els.settingsStatus, "Open a job board page first.", "error");
+    return;
+  }
+
+  setStatus(els.settingsStatus, "Saving session state...", "info");
+
+  let origin;
+  try {
+    origin = new URL(tab.url).origin;
+  } catch {
+    setStatus(els.settingsStatus, "Invalid tab URL.", "error");
+    return;
+  }
+
+  let cookies = [];
+  try {
+    const rawCookies = await chrome.cookies.getAll({ url: origin });
+    cookies = rawCookies.map((cookie) => {
+      const mapped = {
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        httpOnly: Boolean(cookie.httpOnly),
+        secure: Boolean(cookie.secure),
+        sameSite: mapSameSite(cookie.sameSite),
+      };
+      if (typeof cookie.expirationDate === "number") {
+        mapped.expires = cookie.expirationDate;
+      }
+      return mapped;
+    });
+  } catch (error) {
+    console.warn("Cookie capture failed:", error);
+  }
+
+  let localStorageData = [];
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const entries = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i);
+          if (key) entries.push({ name: key, value: localStorage.getItem(key) ?? "" });
+        }
+        return entries;
+      },
+    });
+    localStorageData = results?.[0]?.result ?? [];
+  } catch (error) {
+    console.warn("LocalStorage capture failed:", error);
+  }
+
+  const storageState = {
+    cookies,
+    origins: [
+      {
+        origin,
+        localStorage: localStorageData,
+      },
+    ],
+  };
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/extension/storage-state`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        job_seeker_id: activeSeekerId,
+        storage_state: storageState,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setStatus(els.settingsStatus, data.error || "Failed to save session state.", "error");
+      return;
+    }
+
+    setStatus(els.settingsStatus, "Session state saved.", "success");
+  } catch (error) {
+    setStatus(els.settingsStatus, "Failed to save session state.", "error");
+  }
+}
+
 // ─── Page Info ────────────────────────────────────────────────
 
 async function updatePageInfo() {
@@ -1006,6 +1123,7 @@ els.scrapeAllBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeAllJobs
 els.refreshMatchedBtn.addEventListener("click", loadMatchedJobs);
 els.scrapeContactsBtn.addEventListener("click", scrapePageContacts);
 els.toggleRunnerBtn.addEventListener("click", toggleRunner);
+els.saveSessionStateBtn.addEventListener("click", saveSessionState);
 
 els.seekerSelect.addEventListener("change", (e) => {
   if (e.target.value) {

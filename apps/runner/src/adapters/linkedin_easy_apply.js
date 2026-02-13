@@ -19,7 +19,7 @@ export const linkedinAdapter = {
     return { ok: true };
   },
   async fillKnownFields(page, ctx) {
-    await fillKnownFields(page, ctx.defaultEmail);
+    await fillKnownFields(page, ctx);
     return { ok: true };
   },
   async extractRequiredFields(page) {

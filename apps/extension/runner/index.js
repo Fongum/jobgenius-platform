@@ -98,6 +98,8 @@
       authToken: message.authToken,
       activeSeekerId: message.activeSeekerId,
       resumeUrl: message.resumeUrl,
+      profile: message.profile ?? null,
+      defaultEmail: message.profile?.email ?? "",
       dryRun: Boolean(message.dryRun),
       atsType,
     };

@@ -1,5 +1,6 @@
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
+import { supabaseAdmin } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import { randomUUID } from "crypto";
 
@@ -111,7 +112,9 @@ export async function GET(request: Request) {
   const [{ data: jobSeeker }, { data: jobPost }] = await Promise.all([
     supabaseServer
       .from("job_seekers")
-      .select("resume_url")
+      .select(
+        "id, resume_url, full_name, email, phone, location, linkedin_url, portfolio_url, address_line1, address_city, address_state, address_zip, address_country"
+      )
       .eq("id", lockedRun.job_seeker_id)
       .maybeSingle(),
     supabaseServer
@@ -126,6 +129,19 @@ export async function GET(request: Request) {
       { success: false, error: "Job post not found." },
       { status: 404 }
     );
+  }
+
+  let storageStateUrl: string | null = null;
+  try {
+    const storagePath = `${lockedRun.job_seeker_id}/storage-state.json`;
+    const { data: signedState } = await supabaseAdmin.storage
+      .from("runner_state")
+      .createSignedUrl(storagePath, 7 * 24 * 60 * 60);
+    if (signedState?.signedUrl) {
+      storageStateUrl = signedState.signedUrl;
+    }
+  } catch {
+    storageStateUrl = null;
   }
 
   return Response.json({
@@ -143,6 +159,22 @@ export async function GET(request: Request) {
     resume: {
       url: jobSeeker?.resume_url ?? null,
     },
+    storage_state_url: storageStateUrl,
+    profile: jobSeeker
+      ? {
+          full_name: jobSeeker.full_name ?? null,
+          email: jobSeeker.email ?? null,
+          phone: jobSeeker.phone ?? null,
+          location: jobSeeker.location ?? null,
+          linkedin_url: jobSeeker.linkedin_url ?? null,
+          portfolio_url: jobSeeker.portfolio_url ?? null,
+          address_line1: jobSeeker.address_line1 ?? null,
+          address_city: jobSeeker.address_city ?? null,
+          address_state: jobSeeker.address_state ?? null,
+          address_zip: jobSeeker.address_zip ?? null,
+          address_country: jobSeeker.address_country ?? null,
+        }
+      : null,
     job: {
       id: jobPost.id,
       url: jobPost.url,

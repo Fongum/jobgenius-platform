@@ -1,5 +1,5 @@
 import { hasCaptcha, hasEmailOtp, hasSmsOtp } from "./signals.js";
-import { extractRequiredFields } from "./adapters/base.js";
+import { extractRequiredFields, uploadResume } from "./adapters/base.js";
 import { logLine } from "./logger.js";
 import {
   sendEvent,
@@ -21,6 +21,8 @@ export async function runPlan({
   context,
   dryRun,
   onProgress,
+  resumePath,
+  profile,
 }) {
   const ctx = {
     runId: run.run_id,
@@ -29,6 +31,8 @@ export async function runPlan({
     currentStep: "INIT",
     defaultEmail: defaultEmail ?? "",
     dryRun,
+    resumePath: resumePath ?? null,
+    profile: profile ?? null,
   };
 
   await sendEvent(apiBaseUrl, {
@@ -206,6 +210,19 @@ export async function runPlan({
           step: step.name,
         });
         return;
+      }
+      if (ctx.resumePath) {
+        const uploadResult = adapter.uploadResume
+          ? await adapter.uploadResume(page, ctx)
+          : await uploadResume(page, ctx.resumePath);
+        if (uploadResult?.ok === false && uploadResult.reason !== "NO_INPUT_OR_URL") {
+          logLine({
+            level: "WARN",
+            runId: ctx.runId,
+            step: step.name,
+            msg: `Resume upload failed (${uploadResult.reason}).`,
+          });
+        }
       }
       continue;
     }

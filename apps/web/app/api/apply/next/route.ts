@@ -398,7 +398,9 @@ export async function GET(request: Request) {
   const [{ data: jobSeeker }, { data: jobPost }, { data: tailoredResume }] = await Promise.all([
     supabaseServer
       .from("job_seekers")
-      .select("resume_url")
+      .select(
+        "resume_url, full_name, email, phone, location, linkedin_url, portfolio_url, address_line1, address_city, address_state, address_zip, address_country"
+      )
       .eq("id", jobSeekerId)
       .maybeSingle(),
     supabaseServer
@@ -437,6 +439,21 @@ export async function GET(request: Request) {
       url: jobSeeker?.resume_url ?? null,
       tailored_text: tailoredResume?.tailored_text ?? null,
     },
+    profile: jobSeeker
+      ? {
+          full_name: jobSeeker.full_name ?? null,
+          email: jobSeeker.email ?? null,
+          phone: jobSeeker.phone ?? null,
+          location: jobSeeker.location ?? null,
+          linkedin_url: jobSeeker.linkedin_url ?? null,
+          portfolio_url: jobSeeker.portfolio_url ?? null,
+          address_line1: jobSeeker.address_line1 ?? null,
+          address_city: jobSeeker.address_city ?? null,
+          address_state: jobSeeker.address_state ?? null,
+          address_zip: jobSeeker.address_zip ?? null,
+          address_country: jobSeeker.address_country ?? null,
+        }
+      : null,
     job: {
       id: jobPost.id,
       url: jobPost.url,

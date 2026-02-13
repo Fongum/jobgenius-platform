@@ -40,15 +40,107 @@ export async function extractRequiredFields(page) {
   });
 }
 
-export async function fillKnownFields(page, defaultEmail) {
-  const inputs = await page.$$("input[type='text'], input[type='email'], textarea");
+function normalizeHint(value) {
+  return (value ?? "").toString().trim().toLowerCase();
+}
+
+function pickFirst(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function splitFullName(fullName) {
+  if (!fullName) return { firstName: "", lastName: "" };
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function splitLocation(location) {
+  if (!location) return { city: "", state: "" };
+  const match = location.match(/^([^,]+),\s*([A-Za-z]{2})$/);
+  if (match) {
+    return { city: match[1].trim(), state: match[2].trim() };
+  }
+  return { city: location.trim(), state: "" };
+}
+
+async function getInputHint(input) {
+  const label = await input.evaluate((el) => {
+    const id = el.getAttribute("id");
+    if (id) {
+      const labelEl = document.querySelector(`label[for='${id}']`);
+      if (labelEl?.textContent) return labelEl.textContent.trim();
+    }
+    const parentLabel = el.closest("label");
+    if (parentLabel?.textContent) return parentLabel.textContent.trim();
+    return "";
+  });
+  const ariaLabel = await input.getAttribute("aria-label");
+  const placeholder = await input.getAttribute("placeholder");
+  const name = await input.getAttribute("name");
+  const id = await input.getAttribute("id");
+  return normalizeHint([label, ariaLabel, placeholder, name, id].filter(Boolean).join(" "));
+}
+
+function resolveFieldValue(hint, type, profile, defaultEmail) {
+  const fullName = pickFirst(profile?.full_name, profile?.name);
+  const { firstName, lastName } = splitFullName(fullName);
+  const email = pickFirst(profile?.email, defaultEmail);
+  const phone = pickFirst(profile?.phone);
+  const location = pickFirst(profile?.location);
+  const { city, state } = splitLocation(location);
+
+  const addressLine1 = pickFirst(profile?.address_line1);
+  const addressCity = pickFirst(profile?.address_city, city);
+  const addressState = pickFirst(profile?.address_state, state);
+  const addressZip = pickFirst(profile?.address_zip);
+  const addressCountry = pickFirst(profile?.address_country);
+  const isCompanyField = hint.includes("company") || hint.includes("employer");
+
+  if (hint.includes("first name")) return firstName;
+  if (hint.includes("last name")) return lastName;
+  if (hint.includes("full name")) return fullName;
+  if (hint.includes("name") && !isCompanyField) return fullName;
+  if (hint.includes("email")) return email;
+  if (hint.includes("phone") || hint.includes("mobile")) return phone;
+  if (hint.includes("linkedin")) return pickFirst(profile?.linkedin_url);
+  if (hint.includes("portfolio") || hint.includes("website") || hint.includes("github")) {
+    return pickFirst(profile?.portfolio_url);
+  }
+  if (hint.includes("address") || hint.includes("street")) return addressLine1;
+  if (hint.includes("city")) return addressCity;
+  if (hint.includes("state")) return addressState;
+  if (hint.includes("zip") || hint.includes("postal")) return addressZip;
+  if (hint.includes("country")) return addressCountry;
+
+  if (type === "email") return email;
+  if (type === "tel") return phone;
+  return type === "email" ? email : "N/A";
+}
+
+export async function fillKnownFields(page, ctx) {
+  const profile = ctx?.profile ?? {};
+  const defaultEmail = ctx?.defaultEmail ?? "";
+  const inputs = await page.$$(
+    "input[type='text'], input[type='email'], input[type='tel'], input:not([type]), textarea"
+  );
   for (const input of inputs) {
     const isDisabled = await input.getAttribute("disabled");
     if (isDisabled !== null) continue;
     const value = await input.inputValue();
     if (value) continue;
     const type = (await input.getAttribute("type")) ?? "text";
-    const fillValue = type === "email" ? defaultEmail : "N/A";
+    const hint = await getInputHint(input);
+    const fillValue = resolveFieldValue(hint, type, profile, defaultEmail);
+    if (!fillValue) continue;
     await input.fill(fillValue);
   }
 }

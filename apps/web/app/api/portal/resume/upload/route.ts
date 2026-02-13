@@ -212,13 +212,18 @@ export async function POST(request: Request) {
     );
   }
 
-  // Also update resume_text on the job_seekers table for matching
+  // Update resume URL (for runner access) and resume_text (for matching)
+  const seekerUpdates: Record<string, unknown> = {
+    resume_url: fileUrl,
+  };
   if (rawText) {
-    await supabaseAdmin
-      .from("job_seekers")
-      .update({ resume_text: rawText.slice(0, 50000) })
-      .eq("id", auth.user.id);
+    seekerUpdates.resume_text = rawText.slice(0, 50000);
   }
+
+  await supabaseAdmin
+    .from("job_seekers")
+    .update(seekerUpdates)
+    .eq("id", auth.user.id);
 
   // Parse resume to extract structured profile data
   // Try AI parsing first, fall back to regex parser

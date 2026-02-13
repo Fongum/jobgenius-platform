@@ -41,7 +41,17 @@ async function fetchNextJob(apiBaseUrl, authToken, activeSeekerId) {
   return response.json();
 }
 
-async function runJobInTab(job, runId, apiBaseUrl, authToken, resumeUrl, claimToken, activeSeekerId, dryRun) {
+async function runJobInTab(
+  job,
+  runId,
+  apiBaseUrl,
+  authToken,
+  resumeUrl,
+  claimToken,
+  activeSeekerId,
+  dryRun,
+  profile
+) {
   const tab = await chrome.tabs.create({ url: job.url, active: false });
 
   await new Promise((resolve) => {
@@ -76,6 +86,7 @@ async function runJobInTab(job, runId, apiBaseUrl, authToken, resumeUrl, claimTo
     activeSeekerId,
     job,
     resumeUrl,
+    profile,
     dryRun: Boolean(dryRun),
   });
 }
@@ -127,7 +138,8 @@ async function pollRunner() {
       payload.resume?.url ?? null,
       payload.claim_token ?? null,
       payload.job_seeker_id ?? activeSeekerId,
-      dryRun
+      dryRun,
+      payload.profile ?? null
     );
   }
 }

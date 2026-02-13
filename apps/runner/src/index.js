@@ -72,6 +72,67 @@ const metrics = {
 let pollFailures = 0;
 let pollBackoffUntil = 0;
 
+function inferResumeExtension(resumeUrl, contentType) {
+  const urlExt = resumeUrl ? path.extname(new URL(resumeUrl).pathname) : "";
+  if (urlExt) {
+    return urlExt;
+  }
+  const content = (contentType ?? "").toLowerCase();
+  if (content.includes("pdf")) return ".pdf";
+  if (content.includes("word")) return ".docx";
+  if (content.includes("text")) return ".txt";
+  return ".pdf";
+}
+
+async function downloadResume(resumeUrl, jobSeekerId) {
+  if (!resumeUrl) return null;
+  try {
+    const response = await fetch(resumeUrl);
+    if (!response.ok) {
+      throw new Error(`Resume download failed (${response.status}).`);
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    const ext = inferResumeExtension(resumeUrl, contentType);
+    const tmpDir = path.join(STATE_DIR, ".tmp");
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    const filePath = path.join(
+      tmpDir,
+      `resume-${jobSeekerId}-${Date.now()}${ext}`
+    );
+    const arrayBuffer = await response.arrayBuffer();
+    fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+    return filePath;
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      step: "RESUME",
+      msg: error?.message ?? "Resume download failed.",
+    });
+    return null;
+  }
+}
+
+async function fetchStorageState(storageStateUrl) {
+  if (!storageStateUrl) return null;
+  try {
+    const response = await fetch(storageStateUrl);
+    if (!response.ok) {
+      throw new Error(`Storage state fetch failed (${response.status}).`);
+    }
+    const json = await response.json();
+    return json ?? null;
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      step: "STORAGE",
+      msg: error?.message ?? "Failed to load remote storage state.",
+    });
+    return null;
+  }
+}
+
 function getAdapter(atsType) {
   return adapters.find((adapter) => adapter.name === atsType) ?? null;
 }
@@ -257,6 +318,7 @@ async function executeRun(run) {
   let browser;
   let context;
   let page;
+  let resumePath;
   let watchdogInterval;
   let watchdogTriggered = false;
   let lastProgressAt = Date.now();
@@ -377,7 +439,11 @@ async function executeRun(run) {
       return;
     }
 
-    const storageState = readState(run.job_seeker_id);
+    const remoteState = await fetchStorageState(run.storage_state_url);
+    const localState = readState(run.job_seeker_id);
+    const storageState = remoteState ?? localState;
+
+    resumePath = await downloadResume(run.resume?.url ?? null, run.job_seeker_id);
 
     browser = await chromium.launch({ headless: true });
     context = await browser.newContext(
@@ -493,6 +559,8 @@ async function executeRun(run) {
       context,
       dryRun: RUNNER_DRY_RUN,
       onProgress,
+      resumePath,
+      profile: run.profile ?? null,
     });
 
     if (reauthOverride) {
@@ -563,6 +631,13 @@ async function executeRun(run) {
     }
     runProgress.delete(run.run_id);
     activeRuns.delete(run.run_id);
+    if (resumePath && fs.existsSync(resumePath)) {
+      try {
+        fs.unlinkSync(resumePath);
+      } catch {
+        // Best-effort cleanup.
+      }
+    }
   }
 }
 

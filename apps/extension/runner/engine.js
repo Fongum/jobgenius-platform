@@ -256,7 +256,7 @@
             return;
           }
         } else {
-          dom.fillTextInputs(ctx.defaultEmail);
+          dom.fillTextInputs(ctx.defaultEmail, ctx.profile);
         }
         continue;
       }
