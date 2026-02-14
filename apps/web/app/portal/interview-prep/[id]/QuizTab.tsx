@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useToast, ToastContainer } from "@/lib/use-toast";
 
 type QuizQuestion = {
   question: string;
@@ -44,7 +45,37 @@ export default function QuizTab({ prepId }: { prepId: string }) {
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [quizType, setQuizType] = useState("general");
+  const { toasts, toast } = useToast();
+
+  // Keyboard shortcuts for quiz navigation
+  useEffect(() => {
+    if (!activeQuiz) return;
+    const question = activeQuiz.questions[currentQ];
+    const isAnswered = question?.user_answer !== null;
+
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "ArrowLeft" && currentQ > 0) {
+        setCurrentQ((q) => q - 1);
+        setSelectedAnswer(null);
+      } else if (e.key === "ArrowRight" && currentQ < activeQuiz!.questions.length - 1) {
+        setCurrentQ((q) => q + 1);
+        setSelectedAnswer(null);
+      } else if (e.key === "Enter" && selectedAnswer !== null && !isAnswered && !submitting) {
+        e.preventDefault();
+        submitAnswer();
+      } else if (!isAnswered && e.key >= "1" && e.key <= "4") {
+        const idx = parseInt(e.key) - 1;
+        if (idx < (question?.options.length ?? 0)) {
+          setSelectedAnswer(idx);
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [activeQuiz, currentQ, selectedAnswer, submitting]);
 
   // Load quizzes on first render
   if (!loaded) {
@@ -52,7 +83,8 @@ export default function QuizTab({ prepId }: { prepId: string }) {
     fetch(`/api/portal/interview-prep/${prepId}/quiz`)
       .then((res) => res.json())
       .then((data) => setQuizzes(data.quizzes ?? []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }
 
   async function generateQuiz() {
@@ -135,7 +167,11 @@ export default function QuizTab({ prepId }: { prepId: string }) {
         );
 
         // Move to next unanswered
-        if (updated.status !== "completed") {
+        if (updated.status === "completed") {
+          toast(`Quiz complete! Score: ${updated.score}%`);
+        } else {
+          const isCorrect = updated.questions[currentQ]?.is_correct;
+          toast(isCorrect ? "Correct!" : "Incorrect", isCorrect ? "success" : "error");
           const nextQ = updated.questions.findIndex(
             (q: QuizQuestion, i: number) => i > currentQ && q.user_answer === null
           );
@@ -145,6 +181,10 @@ export default function QuizTab({ prepId }: { prepId: string }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (loading) {
+    return <p className="text-sm text-gray-400 text-center py-8">Loading quizzes...</p>;
   }
 
   // Active quiz view
@@ -276,6 +316,7 @@ export default function QuizTab({ prepId }: { prepId: string }) {
             </button>
           ))}
         </div>
+        <ToastContainer toasts={toasts} />
       </div>
     );
   }

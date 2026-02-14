@@ -2,6 +2,25 @@ import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { getInterviewerResponse } from "@/lib/portal/ai-voice-interviewer";
 
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const auth = await requireJobSeeker(request);
+  if (!auth.authenticated) {
+    return Response.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { data: sessions } = await supabaseAdmin
+    .from("voice_interview_sessions")
+    .select("id, interviewer_persona, status, total_turns, overall_score, overall_feedback, started_at, completed_at, created_at")
+    .eq("interview_prep_id", params.id)
+    .eq("job_seeker_id", auth.user.id)
+    .order("created_at", { ascending: false });
+
+  return Response.json({ sessions: sessions ?? [] });
+}
+
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }

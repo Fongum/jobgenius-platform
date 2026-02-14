@@ -49,6 +49,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
   const [newContentType, setNewContentType] = useState("article");
   const [newBody, setNewBody] = useState("");
   const [newMinutes, setNewMinutes] = useState(10);
+  const [showPreview, setShowPreview] = useState(false);
 
   const seeker = track.job_seekers;
   const jobPost = track.job_posts;
@@ -302,9 +303,23 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
 
                 {editingLesson === lesson.id && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    <pre className="text-xs text-gray-600 bg-gray-50 rounded p-3 overflow-auto max-h-60">
-                      {JSON.stringify(lesson.content, null, 2)}
-                    </pre>
+                    {lesson.content_type === "article" && typeof lesson.content.body === "string" ? (
+                      <div className="bg-white rounded p-3 border border-gray-200 max-h-60 overflow-auto prose prose-sm max-w-none">
+                        <div
+                          className="whitespace-pre-wrap text-sm text-gray-700"
+                          dangerouslySetInnerHTML={{ __html: simpleMarkdown(lesson.content.body as string) }}
+                        />
+                        {typeof lesson.content.summary === "string" && lesson.content.summary && (
+                          <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-700">
+                            <strong>Summary:</strong> {lesson.content.summary}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <pre className="text-xs text-gray-600 bg-gray-50 rounded p-3 overflow-auto max-h-60">
+                        {JSON.stringify(lesson.content, null, 2)}
+                      </pre>
+                    )}
                   </div>
                 )}
               </div>
@@ -346,19 +361,54 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
                   <span className="text-sm text-gray-500">minutes</span>
                 </div>
               </div>
-              <textarea
-                value={newBody}
-                onChange={(e) => setNewBody(e.target.value)}
-                rows={5}
-                placeholder={
-                  newContentType === "article"
-                    ? "Markdown content..."
-                    : newContentType === "video" || newContentType === "resource_link"
-                    ? "URL..."
-                    : "Content..."
-                }
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
-              />
+              {newContentType === "article" && (
+                <div className="flex gap-1 border-b border-gray-200 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    className={`px-3 py-1 text-xs font-medium rounded-t-md ${
+                      !showPreview ? "bg-white text-gray-900 border border-b-white -mb-px" : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Write
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    className={`px-3 py-1 text-xs font-medium rounded-t-md ${
+                      showPreview ? "bg-white text-gray-900 border border-b-white -mb-px" : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Preview
+                  </button>
+                </div>
+              )}
+              {showPreview && newContentType === "article" ? (
+                <div className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 bg-white min-h-[140px] prose prose-sm max-w-none">
+                  {newBody.trim() ? (
+                    <div
+                      className="whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{ __html: simpleMarkdown(newBody) }}
+                    />
+                  ) : (
+                    <p className="text-gray-400 italic">Nothing to preview</p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  value={newBody}
+                  onChange={(e) => setNewBody(e.target.value)}
+                  rows={5}
+                  placeholder={
+                    newContentType === "article"
+                      ? "Markdown content... (supports # headings, **bold**, *italic*, - lists)"
+                      : newContentType === "video" || newContentType === "resource_link"
+                      ? "URL..."
+                      : "Content..."
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              )}
               <div className="flex gap-2">
                 <button
                   onClick={addLesson}
@@ -380,4 +430,18 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
       </div>
     </div>
   );
+}
+
+function simpleMarkdown(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-gray-900 mt-4 mb-2">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-gray-900 mt-5 mb-2">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-gray-900 mt-6 mb-3">$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/\n\n/g, "<br/><br/>");
 }

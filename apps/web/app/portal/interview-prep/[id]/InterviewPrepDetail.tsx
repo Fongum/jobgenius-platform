@@ -325,6 +325,7 @@ export default function InterviewPrepDetail({
               onClick={() => {
                 setActiveTab(tab.key);
                 setActiveSession(null);
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               className={`flex-shrink-0 sm:flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
                 activeTab === tab.key

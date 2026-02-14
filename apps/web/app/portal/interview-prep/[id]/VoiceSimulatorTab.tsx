@@ -63,8 +63,12 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
   // Load sessions list
   if (!loaded) {
     setLoaded(true);
-    // We'll load sessions from the voice-session endpoint
-    // For now, there's no list endpoint, so we start fresh
+    fetch(`/api/portal/interview-prep/${prepId}/voice-session`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.sessions) setSessions(data.sessions);
+      })
+      .catch(() => {});
   }
 
   const stopRecording = useCallback(() => {
@@ -106,6 +110,7 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
       );
       if (res.ok) {
         const { session, turn } = await res.json();
+        setSessions((prev) => [session, ...prev]);
         setActiveSession(session);
         setTurns([turn]);
         speak(turn.content);
@@ -114,6 +119,17 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
       setError("Failed to start session.");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function loadSession(sessionId: string) {
+    const res = await fetch(
+      `/api/portal/interview-prep/${prepId}/voice-session/${sessionId}`
+    );
+    if (res.ok) {
+      const { session, turns: sessionTurns } = await res.json();
+      setActiveSession(session);
+      setTurns(sessionTurns ?? []);
     }
   }
 
@@ -443,6 +459,49 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
 
       {error && (
         <p className="text-sm text-red-600 text-center mt-3">{error}</p>
+      )}
+
+      {/* Past sessions */}
+      {sessions.length > 0 && (
+        <div className="mt-6">
+          <h4 className="text-sm font-medium text-gray-900 mb-3">Past Sessions</h4>
+          <div className="space-y-2">
+            {sessions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => loadSession(s.id)}
+                className="w-full text-left bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        s.status === "completed"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}>
+                        {s.status === "completed" ? "completed" : "in progress"}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {PERSONAS.find((p) => p.value === s.interviewer_persona)?.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {s.total_turns} turn{s.total_turns !== 1 ? "s" : ""}
+                      {" - "}
+                      {new Date(s.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {s.overall_score !== null && (
+                    <span className="text-sm font-bold text-gray-900">
+                      {s.overall_score}%
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

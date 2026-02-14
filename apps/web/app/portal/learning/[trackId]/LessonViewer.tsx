@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useToast, ToastContainer } from "@/lib/use-toast";
 
 type Lesson = {
   id: string;
@@ -46,6 +47,7 @@ export default function LessonViewer({
   const [showNotes, setShowNotes] = useState(false);
   const [saving, setSaving] = useState(false);
   const startTimeRef = useRef(Date.now());
+  const { toasts, toast } = useToast();
 
   const isCompleted = lesson.progress?.status === "completed";
 
@@ -83,6 +85,7 @@ export default function LessonViewer({
       const data = await res.json();
       setBookmarked(data.bookmarked);
       onLessonUpdated({ id: lesson.id, is_bookmarked: data.bookmarked });
+      toast(data.bookmarked ? "Bookmarked" : "Bookmark removed");
     }
   }
 
@@ -107,6 +110,7 @@ export default function LessonViewer({
           id: lesson.id,
           progress,
         });
+        toast("Lesson completed!");
       }
     } finally {
       setSaving(false);
@@ -129,6 +133,7 @@ export default function LessonViewer({
         const { note } = await res.json();
         setNotes((prev) => [note, ...prev]);
         setNewNote("");
+        toast("Note saved");
       }
     } finally {
       setSaving(false);
@@ -369,6 +374,7 @@ export default function LessonViewer({
           )}
         </div>
       )}
+      <ToastContainer toasts={toasts} />
     </div>
   );
 }

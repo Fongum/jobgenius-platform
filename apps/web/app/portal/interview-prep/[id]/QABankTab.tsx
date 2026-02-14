@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useToast, ToastContainer } from "@/lib/use-toast";
 
 type QAResponse = {
   qa_card_id: string;
@@ -34,6 +35,7 @@ export default function QABankTab({ prepId }: { prepId: string }) {
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterDifficulty, setFilterDifficulty] = useState("all");
   const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const { toasts, toast } = useToast();
 
   useEffect(() => {
     fetch(`/api/portal/interview-prep/${prepId}/qa-cards`)
@@ -72,6 +74,8 @@ export default function QABankTab({ prepId }: { prepId: string }) {
           )
         );
         setUserAnswer("");
+        const score = data.response?.score;
+        toast(score != null ? `Scored ${score}%` : "Answer submitted");
       }
     } finally {
       setSubmitting(false);
@@ -292,6 +296,7 @@ export default function QABankTab({ prepId }: { prepId: string }) {
           })}
         </div>
       )}
+      <ToastContainer toasts={toasts} />
     </div>
   );
 }
