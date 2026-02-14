@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import ConfirmClient from "./ConfirmClient";
 
@@ -27,6 +28,11 @@ export default async function InterviewConfirmPage({ params }: PageProps) {
   if (error || !interview) {
     return (
       <main style={{ fontFamily: "sans-serif", maxWidth: 600, margin: "40px auto", padding: "0 16px" }}>
+        <p style={{ marginBottom: 24 }}>
+          <Link href="/" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            JobGenius
+          </Link>
+        </p>
         <h1>Interview Not Found</h1>
         <p>This link is invalid or has expired.</p>
       </main>
@@ -70,6 +76,11 @@ export default async function InterviewConfirmPage({ params }: PageProps) {
 
     return (
       <main style={{ fontFamily: "sans-serif", maxWidth: 600, margin: "40px auto", padding: "0 16px" }}>
+        <p style={{ marginBottom: 24 }}>
+          <Link href="/" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            JobGenius
+          </Link>
+        </p>
         <h1>Interview Confirmed</h1>
         <p>
           <strong>{jobPost?.title ?? "Position"}</strong>
@@ -114,6 +125,11 @@ export default async function InterviewConfirmPage({ params }: PageProps) {
   if (interview.status === "cancelled") {
     return (
       <main style={{ fontFamily: "sans-serif", maxWidth: 600, margin: "40px auto", padding: "0 16px" }}>
+        <p style={{ marginBottom: 24 }}>
+          <Link href="/" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            JobGenius
+          </Link>
+        </p>
         <h1>Interview Cancelled</h1>
         <p>This interview has been cancelled. Please contact the hiring team for more information.</p>
       </main>
@@ -122,6 +138,11 @@ export default async function InterviewConfirmPage({ params }: PageProps) {
 
   return (
     <main style={{ fontFamily: "sans-serif", maxWidth: 600, margin: "40px auto", padding: "0 16px" }}>
+      <p style={{ marginBottom: 24 }}>
+        <Link href="/" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+          JobGenius
+        </Link>
+      </p>
       <h1>Choose Your Interview Time</h1>
       <p>
         <strong>{jobPost?.title ?? "Position"}</strong>

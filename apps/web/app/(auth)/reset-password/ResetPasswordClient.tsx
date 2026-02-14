@@ -90,9 +90,9 @@ export default function ResetPasswordClient() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div>
-            <h1 className="text-center text-3xl font-bold text-gray-900">
+            <Link href="/" className="block text-center text-3xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
               JobGenius
-            </h1>
+            </Link>
             <h2 className="mt-6 text-center text-2xl font-semibold text-gray-900">
               Set new password
             </h2>
@@ -159,6 +159,12 @@ export default function ResetPasswordClient() {
                 {loading ? "Updating..." : "Update password"}
               </button>
             </div>
+
+            <div className="text-center text-sm text-gray-600">
+              <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+                Back to login
+              </Link>
+            </div>
           </form>
         </div>
       </div>
@@ -169,9 +175,9 @@ export default function ResetPasswordClient() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h1 className="text-center text-3xl font-bold text-gray-900">
+          <Link href="/" className="block text-center text-3xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
             JobGenius
-          </h1>
+          </Link>
           <h2 className="mt-6 text-center text-2xl font-semibold text-gray-900">
             Reset your password
           </h2>

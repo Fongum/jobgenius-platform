@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import Link from "next/link";
+import LogoutButton from "@/app/portal/logout-button";
 
 export default async function PendingApprovalPage() {
   const user = await getCurrentUser();
@@ -105,13 +106,16 @@ export default async function PendingApprovalPage() {
             You can also refresh to check your status.
           </p>
 
-          {/* Sign out link */}
-          <Link
-            href="/auth/signout"
-            className="text-sm text-gray-500 hover:text-gray-700 underline"
-          >
-            Sign out
-          </Link>
+          {/* Actions */}
+          <div className="flex items-center justify-center gap-4">
+            <Link
+              href="/"
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Go to homepage
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
 
         {/* Footer */}

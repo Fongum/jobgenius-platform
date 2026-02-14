@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import Link from "next/link";
+import LogoutButton from "@/app/portal/logout-button";
 
 export default async function AccountRejectedPage() {
   const user = await getCurrentUser();
@@ -61,13 +62,16 @@ export default async function AccountRejectedPage() {
             </p>
           </div>
 
-          {/* Sign out link */}
-          <Link
-            href="/auth/signout"
-            className="inline-block px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            Sign out
-          </Link>
+          {/* Actions */}
+          <div className="flex items-center justify-center gap-4">
+            <Link
+              href="/"
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Go to homepage
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
       </div>
     </div>
