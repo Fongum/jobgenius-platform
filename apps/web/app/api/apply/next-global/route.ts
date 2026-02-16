@@ -1,4 +1,4 @@
-import { getAccountManagerFromRequest } from "@/lib/am-access";
+import { getAccountManagerFromRequest, isRunnerAccountManager } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseAdmin } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -10,54 +10,63 @@ export async function GET(request: Request) {
     return Response.json({ success: false, error: amResult.error }, { status: 401 });
   }
 
-  const { data: assignments, error: assignmentsError } = await supabaseServer
-    .from("job_seeker_assignments")
-    .select("job_seeker_id")
-    .eq("account_manager_id", amResult.accountManager.id);
+  const isRunner = await isRunnerAccountManager(amResult.accountManager.id);
 
-  if (assignmentsError) {
-    return Response.json(
-      { success: false, error: "Failed to load job seeker assignments." },
-      { status: 500 }
-    );
+  let assignedIds: string[] = [];
+  if (!isRunner) {
+    const { data: assignments, error: assignmentsError } = await supabaseServer
+      .from("job_seeker_assignments")
+      .select("job_seeker_id")
+      .eq("account_manager_id", amResult.accountManager.id);
+
+    if (assignmentsError) {
+      return Response.json(
+        { success: false, error: "Failed to load job seeker assignments." },
+        { status: 500 }
+      );
+    }
+
+    assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
+    if (assignedIds.length === 0) {
+      return Response.json({ success: true, status: "IDLE" });
+    }
+
+    const { data: runningRuns, error: runningError } = await supabaseServer
+      .from("application_runs")
+      .select("id")
+      .in("job_seeker_id", assignedIds)
+      .in("status", ["RUNNING", "RETRYING"]);
+
+    if (runningError) {
+      return Response.json(
+        { success: false, error: "Failed to check concurrency." },
+        { status: 500 }
+      );
+    }
+
+    if ((runningRuns?.length ?? 0) >= 5) {
+      return Response.json({
+        success: false,
+        blocked: true,
+        reason: "MAX_CONCURRENCY",
+        limit: 5,
+      });
+    }
   }
 
-  const assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
-  if (assignedIds.length === 0) {
-    return Response.json({ success: true, status: "IDLE" });
-  }
-
-  const { data: runningRuns, error: runningError } = await supabaseServer
-    .from("application_runs")
-    .select("id")
-    .in("job_seeker_id", assignedIds)
-    .in("status", ["RUNNING", "RETRYING"]);
-
-  if (runningError) {
-    return Response.json(
-      { success: false, error: "Failed to check concurrency." },
-      { status: 500 }
-    );
-  }
-
-  if ((runningRuns?.length ?? 0) >= 5) {
-    return Response.json({
-      success: false,
-      blocked: true,
-      reason: "MAX_CONCURRENCY",
-      limit: 5,
-    });
-  }
-
-  const { data: nextRun, error: nextRunError } = await supabaseServer
+  let nextRunQuery = supabaseServer
     .from("application_runs")
     .select("id, queue_id, job_post_id, ats_type, status, current_step, attempt_count, max_retries, job_seeker_id")
-    .in("job_seeker_id", assignedIds)
     .in("status", ["READY", "RETRYING"])
     .is("locked_at", null)
     .order("updated_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (!isRunner) {
+    nextRunQuery = nextRunQuery.in("job_seeker_id", assignedIds);
+  }
+
+  const { data: nextRun, error: nextRunError } = await nextRunQuery.maybeSingle();
 
   if (nextRunError) {
     return Response.json(

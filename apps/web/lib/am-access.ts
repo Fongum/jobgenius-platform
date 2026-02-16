@@ -5,7 +5,7 @@
  * It supports unified Bearer token and cookie-based auth.
  */
 
-import { authenticateRequest } from "@/lib/auth";
+import { authenticateRequest, supabaseAdmin } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 
 // Cookie names for new auth
@@ -14,6 +14,34 @@ export type AccountManager = {
   name: string | null;
   email: string;
 };
+
+let cachedRunnerAccountManagerId: string | null | undefined;
+
+async function getRunnerAccountManagerId() {
+  if (cachedRunnerAccountManagerId !== undefined) {
+    return cachedRunnerAccountManagerId;
+  }
+
+  const runnerEmail = process.env.RUNNER_AM_EMAIL;
+  if (!runnerEmail) {
+    cachedRunnerAccountManagerId = null;
+    return cachedRunnerAccountManagerId;
+  }
+
+  const { data } = await supabaseAdmin
+    .from("account_managers")
+    .select("id")
+    .eq("email", runnerEmail)
+    .maybeSingle();
+
+  cachedRunnerAccountManagerId = data?.id ?? null;
+  return cachedRunnerAccountManagerId;
+}
+
+export async function isRunnerAccountManager(accountManagerId: string) {
+  const runnerId = await getRunnerAccountManagerId();
+  return Boolean(runnerId && runnerId === accountManagerId);
+}
 
 /**
  * Get account manager from request
@@ -50,6 +78,10 @@ export async function hasJobSeekerAccess(
   accountManagerId: string,
   jobSeekerId: string
 ) {
+  if (await isRunnerAccountManager(accountManagerId)) {
+    return true;
+  }
+
   const { data, error } = await supabaseServer
     .from("job_seeker_assignments")
     .select("id")
