@@ -43,6 +43,10 @@ export async function authenticateRequest(
     if (extensionUser) {
       return { authenticated: true, user: extensionUser };
     }
+    const runnerUser = await getUserFromRunnerToken(token);
+    if (runnerUser) {
+      return { authenticated: true, user: runnerUser };
+    }
   }
 
   // 2. Check cookie
@@ -113,6 +117,41 @@ async function getUserFromExtensionToken(token: string): Promise<AuthUser | null
       .select("id, email, name, role, status, am_code")
       .eq("id", session.account_manager_id)
       .single();
+
+    if (!am) {
+      return null;
+    }
+
+    return {
+      id: am.id,
+      email: am.email,
+      name: am.name ?? undefined,
+      userType: "am",
+      role: am.role,
+      status: am.status,
+      amCode: am.am_code ?? undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getUserFromRunnerToken(token: string): Promise<AuthUser | null> {
+  if (!token) return null;
+
+  const runnerToken = process.env.RUNNER_AUTH_TOKEN;
+  const runnerEmail = process.env.RUNNER_AM_EMAIL;
+
+  if (!runnerToken || !runnerEmail || token !== runnerToken) {
+    return null;
+  }
+
+  try {
+    const { data: am } = await supabaseAdmin
+      .from("account_managers")
+      .select("id, email, name, role, status, am_code")
+      .eq("email", runnerEmail)
+      .maybeSingle();
 
     if (!am) {
       return null;
