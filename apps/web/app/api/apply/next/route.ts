@@ -410,7 +410,7 @@ export async function GET(request: Request) {
       .single(),
     supabaseServer
       .from("tailored_resumes")
-      .select("tailored_text")
+      .select("tailored_text, resume_url")
       .eq("job_seeker_id", jobSeekerId)
       .eq("job_post_id", lockedRun.job_post_id)
       .maybeSingle(),
@@ -422,6 +422,9 @@ export async function GET(request: Request) {
       { status: 404 }
     );
   }
+
+  const tailoredResumeUrl = tailoredResume?.resume_url ?? null;
+  const resumeUrl = tailoredResumeUrl ?? jobSeeker?.resume_url ?? null;
 
   return Response.json({
     success: true,
@@ -436,7 +439,8 @@ export async function GET(request: Request) {
       max_retries: lockedRun.max_retries ?? 2,
     },
     resume: {
-      url: jobSeeker?.resume_url ?? null,
+      url: resumeUrl,
+      tailored_url: tailoredResumeUrl,
       tailored_text: tailoredResume?.tailored_text ?? null,
     },
     profile: jobSeeker

@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { computeMatchScore, parseJobPost } from "@/lib/matching";
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { tailorResume } from "@/lib/resume-tailor";
+import { buildPagedPdf } from "@/lib/pdf";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { randomUUID } from "crypto";
 
@@ -79,6 +80,36 @@ function resolveFlag(name: string, fallback: boolean) {
     return fallback;
   }
   return ["1", "true", "yes", "on"].includes(String(raw).toLowerCase());
+}
+
+function wrapTextToLines(text: string, maxLen = 90) {
+  const lines: string[] = [];
+  const paragraphs = (text ?? "").split(/\r?\n/);
+  for (const paragraph of paragraphs) {
+    const trimmed = paragraph.trim();
+    if (!trimmed) {
+      lines.push("");
+      continue;
+    }
+    const words = trimmed.split(/\s+/);
+    let current = "";
+    for (const word of words) {
+      if (!current) {
+        current = word;
+        continue;
+      }
+      if ((current + " " + word).length > maxLen) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = `${current} ${word}`;
+      }
+    }
+    if (current) {
+      lines.push(current);
+    }
+  }
+  return lines.length > 0 ? lines : [""];
 }
 
 function getBaseUrl() {
@@ -501,16 +532,59 @@ async function runTailorResume(payload: Record<string, unknown>) {
   });
 
   const nowIso = new Date().toISOString();
+  let tailoredResumeUrl: string | null = null;
+
+  try {
+    const lines = wrapTextToLines(result.tailoredText);
+    const pdfBuffer = buildPagedPdf(lines);
+    const storagePath = `${jobSeekerId}/tailored/${jobPostId}.pdf`;
+    const { error: uploadError } = await supabaseServer.storage
+      .from("resumes")
+      .upload(storagePath, pdfBuffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data: signedUrlData } = await supabaseServer.storage
+      .from("resumes")
+      .createSignedUrl(storagePath, 365 * 24 * 60 * 60);
+
+    if (signedUrlData?.signedUrl) {
+      tailoredResumeUrl = signedUrlData.signedUrl;
+    } else {
+      const { data: urlData } = supabaseServer.storage
+        .from("resumes")
+        .getPublicUrl(storagePath);
+      tailoredResumeUrl = urlData.publicUrl ?? null;
+    }
+  } catch (error) {
+    console.error("Tailored resume file upload failed:", error);
+  }
+
   await supabaseServer.from("tailored_resumes").upsert(
     {
       job_seeker_id: jobSeekerId,
       job_post_id: jobPostId,
+      original_text: seeker.resume_text,
       tailored_text: result.tailoredText,
       changes_summary: result.changesSummary,
+      resume_url: tailoredResumeUrl,
       updated_at: nowIso,
     },
     { onConflict: "job_seeker_id,job_post_id" }
   );
+
+  if (AUTO_TAILOR_REQUIRED && !tailoredResumeUrl && queueId) {
+    await flagQueueAttention(
+      queueId,
+      "TAILOR_FAILED",
+      "Tailored resume file unavailable."
+    );
+    return;
+  }
 
   if (AUTO_APPLY_ENABLED && queueId) {
     await enqueueBackgroundJob("AUTO_START_RUN", {
@@ -577,12 +651,13 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
   if (AUTO_TAILOR_REQUIRED) {
     const { data: tailored } = await supabaseServer
       .from("tailored_resumes")
-      .select("id")
+      .select("id, resume_url")
       .eq("job_seeker_id", queueItem.job_seeker_id)
       .eq("job_post_id", queueItem.job_post_id)
       .maybeSingle();
 
-    if (!tailored?.id) {
+    const hasTailored = Boolean(tailored?.id && tailored.resume_url);
+    if (!hasTailored) {
       if (AUTO_TAILOR_ENABLED) {
         await supabaseServer
           .from("application_queue")

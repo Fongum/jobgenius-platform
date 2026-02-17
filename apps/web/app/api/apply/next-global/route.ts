@@ -118,7 +118,8 @@ export async function GET(request: Request) {
     payload: { step: lockedRun.current_step },
   });
 
-  const [{ data: jobSeeker }, { data: jobPost }] = await Promise.all([
+  const [{ data: jobSeeker }, { data: jobPost }, { data: tailoredResume }] =
+    await Promise.all([
     supabaseServer
       .from("job_seekers")
       .select(
@@ -131,6 +132,12 @@ export async function GET(request: Request) {
       .select("id, url, title, company, source")
       .eq("id", lockedRun.job_post_id)
       .single(),
+    supabaseServer
+      .from("tailored_resumes")
+      .select("resume_url")
+      .eq("job_seeker_id", lockedRun.job_seeker_id)
+      .eq("job_post_id", lockedRun.job_post_id)
+      .maybeSingle(),
   ]);
 
   if (!jobPost?.id) {
@@ -153,6 +160,9 @@ export async function GET(request: Request) {
     storageStateUrl = null;
   }
 
+  const tailoredResumeUrl = tailoredResume?.resume_url ?? null;
+  const resumeUrl = tailoredResumeUrl ?? jobSeeker?.resume_url ?? null;
+
   return Response.json({
     success: true,
     run_id: lockedRun.id,
@@ -166,7 +176,8 @@ export async function GET(request: Request) {
       max_retries: lockedRun.max_retries ?? 2,
     },
     resume: {
-      url: jobSeeker?.resume_url ?? null,
+      url: resumeUrl,
+      tailored_url: tailoredResumeUrl,
     },
     storage_state_url: storageStateUrl,
     profile: jobSeeker
