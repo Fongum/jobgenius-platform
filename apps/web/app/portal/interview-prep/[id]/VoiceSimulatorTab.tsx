@@ -44,8 +44,8 @@ type JobContext = {
 function extractMessageText(item: RealtimeItem): string | null {
   if (item.type !== "message") return null;
   if (item.role === "system") return null;
-  // @ts-expect-error status exists on user/assistant items
-  if (item.status && item.status !== "completed") return null;
+  const status = "status" in item ? (item as { status?: string }).status : undefined;
+  if (status && status !== "completed") return null;
   const parts: string[] = [];
   for (const chunk of item.content ?? []) {
     if (chunk.type === "input_text" && chunk.text) {
