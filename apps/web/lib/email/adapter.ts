@@ -1,4 +1,6 @@
 import { ResendEmailProvider } from "@/lib/email/providers/resend";
+import { GmailEmailProvider } from "@/lib/email/providers/gmail";
+import { supabaseServer } from "@/lib/supabase/server";
 
 export type EmailSendRequest = {
   from: string;
@@ -83,4 +85,43 @@ export function getEmailAdapter(): EmailSendAdapter {
   }
 
   return new StubEmailAdapter();
+}
+
+/**
+ * Get the outreach email adapter for a specific job seeker.
+ * Uses the seeker's connected Gmail if available, otherwise falls back to the system adapter.
+ * Returns { adapter, fromEmail, provider } so callers know which provider was used.
+ */
+export async function getOutreachAdapter(jobSeekerId: string): Promise<{
+  adapter: EmailSendAdapter;
+  fromEmail: string;
+  provider: string;
+}> {
+  // Check if the seeker has an active Gmail connection
+  const { data: connection } = await supabaseServer
+    .from("seeker_email_connections")
+    .select("id, email_address")
+    .eq("job_seeker_id", jobSeekerId)
+    .eq("provider", "gmail")
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (connection) {
+    return {
+      adapter: new GmailEmailProvider(connection.id),
+      fromEmail: connection.email_address,
+      provider: "gmail",
+    };
+  }
+
+  // Fallback to system email adapter (Resend / stub)
+  const fromEmail =
+    process.env.OUTREACH_FROM_EMAIL ??
+    process.env.EMAIL_FROM_ADDRESS ??
+    "noreply@job-genius.com";
+  return {
+    adapter: getEmailAdapter(),
+    fromEmail,
+    provider: process.env.EMAIL_SEND_PROVIDER ?? "stub",
+  };
 }

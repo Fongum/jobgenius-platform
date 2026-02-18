@@ -177,6 +177,23 @@ interface Document {
   uploaded_at: string;
 }
 
+interface InboundEmail {
+  id: string;
+  from_email: string;
+  from_name: string;
+  subject: string;
+  body_snippet: string;
+  received_at: string;
+  classification: string;
+  classification_confidence: number;
+  matched_application_id: string | null;
+}
+
+interface GmailConnectionInfo {
+  email: string;
+  connectedAt: string;
+}
+
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "profile", label: "Profile" },
@@ -185,6 +202,7 @@ const TABS = [
   { id: "outreach", label: "Outreach" },
   { id: "interviews", label: "Interviews" },
   { id: "prep", label: "Prep" },
+  { id: "inbox", label: "Inbox" },
 ];
 
 export default function SeekerDetailClient({
@@ -198,6 +216,8 @@ export default function SeekerDetailClient({
   interviewPrep,
   references,
   documents,
+  gmailConnection,
+  inboundEmails,
 }: {
   seeker: SeekerData;
   matchedJobs: MatchedJob[];
@@ -209,6 +229,8 @@ export default function SeekerDetailClient({
   interviewPrep: InterviewPrep[];
   references: Reference[];
   documents: Document[];
+  gmailConnection: GmailConnectionInfo | null;
+  inboundEmails: InboundEmail[];
 }) {
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -248,6 +270,18 @@ export default function SeekerDetailClient({
                   {seeker.work_type}
                 </span>
               )}
+              {gmailConnection ? (
+                <span className="px-2 py-1 bg-green-100 text-green-700 text-sm rounded flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Gmail: {gmailConnection.email}
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-red-50 text-red-400 text-sm rounded">
+                  Gmail not connected
+                </span>
+              )}
               {seeker.salary_min && seeker.salary_max && (
                 <span className="px-2 py-1 bg-purple-100 text-purple-700 text-sm rounded">
                   ${seeker.salary_min.toLocaleString()} - ${seeker.salary_max.toLocaleString()}
@@ -264,6 +298,7 @@ export default function SeekerDetailClient({
               <StatBox label="Needs Attention" value={needsAttention} color="orange" />
             )}
             <StatBox label="Interviews" value={interviews.filter((i) => i.status === "confirmed").length} color="purple" />
+            <StatBox label="Inbox" value={inboundEmails.length} />
           </div>
         </div>
       </div>
@@ -286,6 +321,11 @@ export default function SeekerDetailClient({
                 {tab.id === "applications" && needsAttention > 0 && (
                   <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">
                     {needsAttention}
+                  </span>
+                )}
+                {tab.id === "inbox" && inboundEmails.length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                    {inboundEmails.length}
                   </span>
                 )}
               </button>
@@ -323,6 +363,9 @@ export default function SeekerDetailClient({
           )}
           {activeTab === "prep" && (
             <PrepTab prep={interviewPrep} seekerId={seeker.id} />
+          )}
+          {activeTab === "inbox" && (
+            <InboxTab emails={inboundEmails} gmailConnection={gmailConnection} />
           )}
         </div>
       </div>
@@ -1401,6 +1444,251 @@ function PrepTab({
               </div>
             </Link>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CLASSIFICATION_LABELS: Record<string, { label: string; color: string }> = {
+  rejection: { label: "Rejection", color: "bg-red-100 text-red-800" },
+  interview_invite: { label: "Interview Invite", color: "bg-green-100 text-green-800" },
+  offer: { label: "Offer", color: "bg-emerald-100 text-emerald-800" },
+  follow_up: { label: "Follow-up", color: "bg-blue-100 text-blue-800" },
+  verification: { label: "Verification", color: "bg-yellow-100 text-yellow-800" },
+  application_confirmation: { label: "Confirmation", color: "bg-indigo-100 text-indigo-800" },
+  other: { label: "Other", color: "bg-gray-100 text-gray-700" },
+};
+
+function InboxTab({
+  emails,
+  gmailConnection,
+}: {
+  emails: InboundEmail[];
+  gmailConnection: GmailConnectionInfo | null;
+}) {
+  const [filter, setFilter] = useState("all");
+  const [selectedEmail, setSelectedEmail] = useState<InboundEmail | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [replying, setReplying] = useState(false);
+  const [replyResult, setReplyResult] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const handleReply = async () => {
+    if (!selectedEmail || !replyBody.trim()) return;
+    setReplying(true);
+    setReplyResult(null);
+    try {
+      const res = await fetch("/api/am/inbox/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email_id: selectedEmail.id,
+          body: replyBody,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReplyResult({ type: "success", text: "Reply sent successfully!" });
+        setReplyBody("");
+      } else {
+        setReplyResult({
+          type: "error",
+          text: data.error || "Failed to send reply.",
+        });
+      }
+    } catch {
+      setReplyResult({ type: "error", text: "Failed to send reply." });
+    } finally {
+      setReplying(false);
+    }
+  };
+
+  if (!gmailConnection) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">Gmail is not connected for this seeker.</p>
+        <p className="text-sm text-gray-400 mt-1">
+          Ask them to connect Gmail in their Portal profile to enable inbox scanning.
+        </p>
+      </div>
+    );
+  }
+
+  // Count by classification
+  const counts: Record<string, number> = {};
+  for (const e of emails) {
+    counts[e.classification] = (counts[e.classification] ?? 0) + 1;
+  }
+
+  const filtered =
+    filter === "all" ? emails : emails.filter((e) => e.classification === filter);
+
+  const filterOptions = [
+    { value: "all", label: "All" },
+    { value: "interview_invite", label: "Interview Invites" },
+    { value: "offer", label: "Offers" },
+    { value: "rejection", label: "Rejections" },
+    { value: "follow_up", label: "Follow-ups" },
+    { value: "application_confirmation", label: "Confirmations" },
+    { value: "other", label: "Other" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">
+            Connected: <span className="font-medium text-gray-900">{gmailConnection.email}</span>
+          </p>
+          <p className="text-xs text-gray-400">
+            Since {new Date(gmailConnection.connectedAt).toLocaleDateString()}
+          </p>
+        </div>
+        <span className="text-sm text-gray-500">{emails.length} emails scanned</span>
+      </div>
+
+      {/* Classification summary */}
+      <div className="flex flex-wrap gap-2">
+        {filterOptions.map((opt) => {
+          const count = opt.value === "all" ? emails.length : counts[opt.value] ?? 0;
+          return (
+            <button
+              key={opt.value}
+              onClick={() => setFilter(opt.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                filter === opt.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {opt.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-gray-500 text-center py-8">No emails match this filter</p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Email list */}
+          <div className="space-y-2">
+            {filtered.map((email) => {
+              const cls =
+                CLASSIFICATION_LABELS[email.classification] ??
+                CLASSIFICATION_LABELS.other;
+              const isSelected = selectedEmail?.id === email.id;
+              return (
+                <button
+                  key={email.id}
+                  onClick={() => {
+                    setSelectedEmail(email);
+                    setReplyBody("");
+                    setReplyResult(null);
+                  }}
+                  className={`w-full text-left p-4 rounded-lg border transition-colors ${
+                    isSelected
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        {email.from_name || email.from_email}
+                      </p>
+                      <p className="text-sm text-gray-700 truncate">
+                        {email.subject || "(no subject)"}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                        {email.body_snippet}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cls.color}`}
+                      >
+                        {cls.label}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(email.received_at).toLocaleDateString()}
+                      </span>
+                      {email.classification_confidence > 0 && (
+                        <span className="text-[10px] text-gray-400">
+                          {Math.round(email.classification_confidence * 100)}% conf
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Detail + Reply panel */}
+          {selectedEmail && (
+            <div className="bg-white rounded-lg border p-5 sticky top-4">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {selectedEmail.subject || "(no subject)"}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    From: {selectedEmail.from_name}{" "}
+                    <span className="text-gray-400">
+                      &lt;{selectedEmail.from_email}&gt;
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(selectedEmail.received_at).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="border-t pt-3">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {selectedEmail.body_snippet}
+                  </p>
+                </div>
+
+                {/* Reply section */}
+                <div className="border-t pt-3">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">
+                    Reply (as seeker via Gmail)
+                  </h4>
+
+                  {replyResult && (
+                    <div
+                      className={`p-2 rounded text-sm mb-2 ${
+                        replyResult.type === "success"
+                          ? "bg-green-50 text-green-800"
+                          : "bg-red-50 text-red-800"
+                      }`}
+                    >
+                      {replyResult.text}
+                    </div>
+                  )}
+
+                  <textarea
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    placeholder="Type a reply on behalf of the seeker..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  />
+                  <button
+                    onClick={handleReply}
+                    disabled={replying || !replyBody.trim()}
+                    className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {replying ? "Sending..." : "Send Reply"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

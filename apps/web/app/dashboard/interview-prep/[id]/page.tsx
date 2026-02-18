@@ -6,6 +6,26 @@ type PageProps = {
   params: { id: string };
 };
 
+
+type VoiceSession = {
+  id: string;
+  interviewer_persona: string;
+  status: string;
+  overall_score: number | null;
+  overall_feedback: string | null;
+  created_at: string;
+};
+
+type VoiceTurn = {
+  id: string;
+  session_id: string;
+  turn_number: number;
+  speaker: string;
+  content: string;
+  score: number | null;
+  feedback: string | null;
+};
+
 type PrepRow = {
   id: string;
   job_seeker_id: string;
@@ -95,6 +115,32 @@ export default async function InterviewPrepDetailPage({ params }: PageProps) {
     );
   }
 
+  const { data: voiceSessions } = await supabaseServer
+    .from("voice_interview_sessions")
+    .select(
+      "id, interviewer_persona, status, overall_score, overall_feedback, created_at"
+    )
+    .eq("interview_prep_id", prepId)
+    .order("created_at", { ascending: false });
+
+  const sessionIds = (voiceSessions ?? []).map((s) => s.id);
+  let voiceTurns: VoiceTurn[] = [];
+  if (sessionIds.length > 0) {
+    const { data: turnsData } = await supabaseServer
+      .from("voice_interview_turns")
+      .select("id, session_id, turn_number, speaker, content, score, feedback")
+      .in("session_id", sessionIds)
+      .order("turn_number", { ascending: true });
+    voiceTurns = (turnsData ?? []) as VoiceTurn[];
+  }
+
+  const turnsBySession = new Map<string, VoiceTurn[]>();
+  for (const turn of voiceTurns) {
+    const list = turnsBySession.get(turn.session_id) ?? [];
+    list.push(turn);
+    turnsBySession.set(turn.session_id, list);
+  }
+
   const row = prep as PrepRow;
   const post = Array.isArray(row.job_posts) ? row.job_posts[0] : row.job_posts;
   const seeker = Array.isArray(row.job_seekers)
@@ -129,6 +175,46 @@ export default async function InterviewPrepDetailPage({ params }: PageProps) {
         {renderList(row.content?.checklist)}
         <h2>30/60/90 Day Prompts</h2>
         {renderList(row.content?.thirty_sixty_ninety)}
+      </section>
+
+      <section>
+        <h2>Voice Interview Transcripts</h2>
+        {voiceSessions && voiceSessions.length > 0 ? (
+          voiceSessions.map((session) => {
+            const sessionTurns = turnsBySession.get(session.id) ?? [];
+            return (
+              <div key={session.id} style={{ marginBottom: "24px" }}>
+                <h3>
+                  Session {new Date(session.created_at).toLocaleDateString()} ({session.status})
+                </h3>
+                {session.overall_score !== null && (
+                  <p>
+                    Overall score: {session.overall_score}%
+                    {session.overall_feedback ? ` - ${session.overall_feedback}` : ""}
+                  </p>
+                )}
+                {sessionTurns.length > 0 ? (
+                  <div>
+                    {sessionTurns.map((turn) => (
+                      <div key={turn.id} style={{ marginBottom: "12px" }}>
+                        <strong>{turn.speaker === "candidate" ? "Candidate" : "Interviewer"}:</strong> {turn.content}
+                        {turn.speaker === "candidate" && turn.score !== null && (
+                          <div>
+                            <small>Score: {turn.score}%{turn.feedback ? ` - ${turn.feedback}` : ""}</small>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No transcript available for this session.</p>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <p>No voice interview transcripts yet.</p>
+        )}
       </section>
     </main>
   );

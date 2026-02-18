@@ -6,6 +6,7 @@ import {
   pauseRun,
   completeRun,
   retryRun,
+  fetchVerificationCode,
 } from "./api.js";
 
 export async function runPlan({
@@ -104,21 +105,65 @@ export async function runPlan({
   }
 
   if (await hasEmailOtp(page)) {
-    await pauseRun(apiBaseUrl, {
-      run_id: ctx.runId,
-      reason: "OTP_EMAIL",
-      message: "Email verification required.",
-      last_seen_url: page.url(),
-      step: "DETECT_ATS",
-    }, authToken, claimToken, runnerId);
-    onProgress?.({
-      type: "PAUSED",
-      reason: "OTP_EMAIL",
-      runId: ctx.runId,
-      atsType: ctx.atsType,
-      step: "DETECT_ATS",
-    });
-    return;
+    // Try to auto-fetch verification code from seeker's Gmail
+    const code = await fetchVerificationCode(
+      apiBaseUrl,
+      ctx.jobSeekerId,
+      authToken,
+      runnerId
+    );
+
+    if (code) {
+      logLine({
+        level: "INFO",
+        runId: ctx.runId,
+        step: "DETECT_ATS",
+        msg: `Auto-fetched verification code from Gmail.`,
+      });
+
+      // Try to fill the OTP input
+      const otpInput = await page.$('input[type="text"][name*="code"], input[type="text"][name*="otp"], input[type="text"][name*="verif"], input[type="number"][name*="code"], input[autocomplete="one-time-code"]');
+      if (otpInput) {
+        await otpInput.fill(code);
+        // Try to submit the OTP form
+        const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
+        if (submitBtn) {
+          await submitBtn.click();
+          await page.waitForTimeout(3000);
+        }
+        logLine({
+          level: "INFO",
+          runId: ctx.runId,
+          step: "DETECT_ATS",
+          msg: `Verification code entered and submitted.`,
+        });
+        // Don't return — continue with the rest of the plan
+      } else {
+        logLine({
+          level: "WARN",
+          runId: ctx.runId,
+          step: "DETECT_ATS",
+          msg: `Got code but couldn't find OTP input field.`,
+        });
+      }
+    } else {
+      // No code found — pause as before
+      await pauseRun(apiBaseUrl, {
+        run_id: ctx.runId,
+        reason: "OTP_EMAIL",
+        message: "Email verification required — no Gmail connection or code not found.",
+        last_seen_url: page.url(),
+        step: "DETECT_ATS",
+      }, authToken, claimToken, runnerId);
+      onProgress?.({
+        type: "PAUSED",
+        reason: "OTP_EMAIL",
+        runId: ctx.runId,
+        atsType: ctx.atsType,
+        step: "DETECT_ATS",
+      });
+      return;
+    }
   }
 
   for (const step of plan.steps ?? []) {

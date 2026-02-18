@@ -54,7 +54,7 @@ export default function SignUpPage() {
 
       // Redirect based on user type
       if (data.user.userType === "job_seeker") {
-        router.push("/portal");
+        router.push("/portal/onboarding");
       } else {
         router.push("/dashboard");
       }

@@ -1,5 +1,5 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
-import { getEmailAdapter } from "@/lib/email/adapter";
+import { getOutreachAdapter } from "@/lib/email/adapter";
 import { assertOutreachConsent, getRecruiterOptOut } from "@/lib/outreach-consent";
 import { buildOutreachPlan, inferPreferredTone, inferRecruiterType } from "@/lib/outreach-intelligence";
 import {
@@ -196,10 +196,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL;
-  if (!fromEmail) {
-    return Response.json({ success: false, error: "Missing OUTREACH_FROM_EMAIL." }, { status: 500 });
-  }
+  // Resolve outreach adapter for this seeker (Gmail if connected, else system)
+  const { fromEmail, provider: outreachProvider } =
+    await getOutreachAdapter(thread.job_seeker_id);
 
   const nowIso = new Date().toISOString();
   const nowMs = Date.now();
@@ -249,7 +248,7 @@ export async function POST(request: Request) {
       to_email: recruiter.email,
       subject: subject || "Follow-up from JobGenius",
       body: body || "Quick follow-up from JobGenius.",
-      provider: process.env.EMAIL_SEND_PROVIDER ?? "stub",
+      provider: outreachProvider,
       status: "QUEUED",
       follow_up_tone: preferredTone,
       open_tracking_token: trackingToken,
@@ -332,8 +331,9 @@ export async function POST(request: Request) {
         });
         const htmlBody = buildHtmlBodyWithTracking(firstStep.body ?? "", trackingUrl);
 
-        const adapter = getEmailAdapter();
-        const result = await adapter.sendEmail({
+        const { adapter: outreachAdapter } =
+          await getOutreachAdapter(thread.job_seeker_id);
+        const result = await outreachAdapter.sendEmail({
           from: fromEmail,
           to: [recruiter.email],
           subject: firstStep.subject ?? "Follow-up from JobGenius",

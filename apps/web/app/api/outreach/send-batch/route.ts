@@ -1,5 +1,5 @@
 import { getAccountManagerFromRequest } from "@/lib/am-access";
-import { getEmailAdapter } from "@/lib/email/adapter";
+import { getOutreachAdapter } from "@/lib/email/adapter";
 import { assertOutreachConsent } from "@/lib/outreach-consent";
 import {
   buildHtmlBodyWithTracking,
@@ -131,16 +131,13 @@ export async function POST(request: Request) {
     });
   }
 
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL;
-  if (!fromEmail) {
-    return Response.json(
-      { success: false, error: "Missing OUTREACH_FROM_EMAIL." },
-      { status: 500 }
-    );
-  }
-
-  const adapter = getEmailAdapter();
   const nowIso = new Date().toISOString();
+
+  // Cache outreach adapters per seeker to avoid redundant lookups
+  const adapterCache = new Map<
+    string,
+    { adapter: Awaited<ReturnType<typeof getOutreachAdapter>>["adapter"]; fromEmail: string; provider: string }
+  >();
   let sent = 0;
   let failed = 0;
   let skipped = 0;
@@ -240,6 +237,14 @@ export async function POST(request: Request) {
       threadId = createdThread.id;
     }
 
+    // Resolve outreach adapter for this seeker (cached)
+    if (!adapterCache.has(draft.job_seeker_id)) {
+      const resolved = await getOutreachAdapter(draft.job_seeker_id);
+      adapterCache.set(draft.job_seeker_id, resolved);
+    }
+    const { adapter: outreachAdapter, fromEmail, provider: outreachProvider } =
+      adapterCache.get(draft.job_seeker_id)!;
+
     // Create outreach message
     const trackingToken = ensureTrackingToken();
     const trackingUrl = buildTrackingOpenUrl({
@@ -257,7 +262,7 @@ export async function POST(request: Request) {
         to_email: contactEmail,
         subject: draft.subject,
         body: draft.body,
-        provider: process.env.EMAIL_SEND_PROVIDER ?? "stub",
+        provider: outreachProvider,
         status: "QUEUED",
         step_number: 1,
         scheduled_for: nowIso,
@@ -274,7 +279,7 @@ export async function POST(request: Request) {
     }
 
     // Send email
-    const result = await adapter.sendEmail({
+    const result = await outreachAdapter.sendEmail({
       from: fromEmail,
       to: [contactEmail],
       subject: draft.subject,

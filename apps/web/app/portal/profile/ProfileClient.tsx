@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import GmailConnect from "./GmailConnect";
+import MultiCheckbox from "../components/MultiCheckbox";
+import BooleanToggle from "../components/BooleanToggle";
+import LocationMultiSelect, { US_CANADA_LOCATIONS } from "../components/LocationMultiSelect";
+import Field from "../components/Field";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -91,22 +96,6 @@ interface DocRecord {
 
 // ─── Constants ─────────────────────────────────────────────────
 
-const US_CANADA_LOCATIONS = [
-  "Anywhere in USA", "Anywhere in Canada",
-  "New York, NY", "Los Angeles, CA", "Chicago, IL", "Houston, TX", "Phoenix, AZ",
-  "Philadelphia, PA", "San Antonio, TX", "San Diego, CA", "Dallas, TX", "San Jose, CA",
-  "Austin, TX", "Jacksonville, FL", "Fort Worth, TX", "Columbus, OH", "Charlotte, NC",
-  "San Francisco, CA", "Indianapolis, IN", "Seattle, WA", "Denver, CO", "Washington, DC",
-  "Nashville, TN", "Oklahoma City, OK", "El Paso, TX", "Boston, MA", "Portland, OR",
-  "Las Vegas, NV", "Memphis, TN", "Louisville, KY", "Baltimore, MD", "Milwaukee, WI",
-  "Albuquerque, NM", "Tucson, AZ", "Fresno, CA", "Mesa, AZ", "Sacramento, CA",
-  "Atlanta, GA", "Kansas City, MO", "Omaha, NE", "Raleigh, NC", "Miami, FL",
-  "Cleveland, OH", "Tampa, FL", "Minneapolis, MN", "Pittsburgh, PA", "Cincinnati, OH",
-  "Richmond, TX", "Salt Lake City, UT",
-  // Canada
-  "Toronto, ON", "Montreal, QC", "Vancouver, BC", "Calgary, AB", "Edmonton, AB",
-  "Ottawa, ON", "Winnipeg, MB", "Quebec City, QC", "Hamilton, ON", "Halifax, NS",
-];
 
 const WORK_TYPE_OPTIONS = [
   { value: "remote", label: "Remote" },
@@ -213,161 +202,6 @@ function Section({
   );
 }
 
-function MultiCheckbox({
-  options,
-  selected,
-  onChange,
-}: {
-  options: { value: string; label: string }[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-}) {
-  const toggle = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter((v) => v !== value));
-    } else {
-      onChange([...selected, value]);
-    }
-  };
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => toggle(opt.value)}
-          className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-            selected.includes(opt.value)
-              ? "bg-blue-600 text-white border-blue-600"
-              : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function BooleanToggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean | undefined;
-  onChange: (val: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-sm text-gray-700">{label}</span>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onChange(true)}
-          className={`px-3 py-1 rounded text-sm ${
-            value === true ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          Yes
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(false)}
-          className={`px-3 py-1 rounded text-sm ${
-            value === false ? "bg-red-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          No
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LocationMultiSelect({
-  selected,
-  onChange,
-}: {
-  selected: string[];
-  onChange: (vals: string[]) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [customInput, setCustomInput] = useState("");
-
-  const filtered = US_CANADA_LOCATIONS.filter(
-    (loc) => loc.toLowerCase().includes(search.toLowerCase()) && !selected.includes(loc)
-  ).slice(0, 10);
-
-  const addLocation = (loc: string) => {
-    if (!selected.includes(loc)) onChange([...selected, loc]);
-    setSearch("");
-    setShowDropdown(false);
-  };
-
-  const addCustom = () => {
-    const val = customInput.trim();
-    if (val && !selected.includes(val)) {
-      onChange([...selected, val]);
-    }
-    setCustomInput("");
-  };
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-2 mb-2">
-        {selected.map((loc) => (
-          <span
-            key={loc}
-            className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-          >
-            {loc}
-            <button onClick={() => onChange(selected.filter((l) => l !== loc))} className="hover:text-blue-600">&times;</button>
-          </span>
-        ))}
-      </div>
-      <div className="relative">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }}
-          onFocus={() => setShowDropdown(true)}
-          placeholder="Search US & Canada cities..."
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-        {showDropdown && filtered.length > 0 && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowDropdown(false)} />
-            <div className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-              {filtered.map((loc) => (
-                <button
-                  key={loc}
-                  onClick={() => addLocation(loc)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                >
-                  {loc}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-      <div className="flex gap-2 mt-2">
-        <input
-          type="text"
-          value={customInput}
-          onChange={(e) => setCustomInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustom())}
-          placeholder="Or type a custom location..."
-          className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-        <button onClick={addCustom} className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200">Add</button>
-      </div>
-    </div>
-  );
-}
 
 const WORK_TYPE_LABELS: Record<string, string> = {
   remote: "Remote",
@@ -631,6 +465,9 @@ export default function ProfileClient({
           </div>
         )}
       </div>
+
+      {/* ═══ Gmail Connection ═══ */}
+      <GmailConnect />
 
       {/* ═══ Personal Information ═══ */}
       <Section
@@ -1028,34 +865,3 @@ export default function ProfileClient({
   );
 }
 
-// ─── Simple Field Component ────────────────────────────────────
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  disabled,
-}: {
-  label: string;
-  value: string | undefined | null;
-  onChange?: (val: string) => void;
-  placeholder?: string;
-  type?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div>
-      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
-      <input
-        type={type}
-        value={value || ""}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${disabled ? "bg-gray-50 text-gray-500" : ""}`}
-      />
-    </div>
-  );
-}

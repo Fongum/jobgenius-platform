@@ -1,0 +1,82 @@
+"use client";
+
+import Field from "../../components/Field";
+import type { ProfileData } from "../OnboardingWizard";
+
+export default function AboutYouStep({
+  profile,
+  update,
+  saving,
+  saveFields,
+  onContinue,
+  onBack,
+}: {
+  profile: ProfileData;
+  update: (key: keyof ProfileData, value: unknown) => void;
+  saving: boolean;
+  saveFields: (fields: Partial<ProfileData>) => Promise<boolean>;
+  onContinue: () => void;
+  onBack: () => void;
+}) {
+  const handleContinue = async () => {
+    const ok = await saveFields({
+      full_name: profile.full_name,
+      phone: profile.phone,
+      location: profile.location,
+      linkedin_url: profile.linkedin_url,
+      bio: profile.bio,
+      years_experience: profile.years_experience,
+    });
+    if (ok) onContinue();
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow p-6">
+      <h2 className="text-xl font-semibold text-gray-900 mb-1">About You</h2>
+      <p className="text-sm text-gray-500 mb-6">Tell us a bit about yourself so employers can find you.</p>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+        <p className="text-sm text-blue-800">
+          Candidates with a LinkedIn URL receive 40% more recruiter responses.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Full Name" value={profile.full_name} onChange={(v) => update("full_name", v)} />
+        <Field label="Phone" value={profile.phone} onChange={(v) => update("phone", v)} type="tel" />
+        <Field label="Location" value={profile.location} onChange={(v) => update("location", v)} placeholder="City, State" />
+        <Field label="LinkedIn URL" value={profile.linkedin_url} onChange={(v) => update("linkedin_url", v)} placeholder="https://linkedin.com/in/..." type="url" />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Years of Experience</label>
+          <input
+            type="number"
+            value={profile.years_experience ?? ""}
+            onChange={(e) => update("years_experience", e.target.value ? parseInt(e.target.value) : undefined)}
+            placeholder="e.g. 5"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Bio / Summary</label>
+        <textarea
+          value={profile.bio || ""}
+          onChange={(e) => update("bio", e.target.value)}
+          placeholder="A short summary about yourself, your experience, and what you're looking for..."
+          rows={3}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div className="flex justify-between mt-8">
+        <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+          Back
+        </button>
+        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          {saving ? "Saving..." : "Continue"}
+        </button>
+      </div>
+    </div>
+  );
+}

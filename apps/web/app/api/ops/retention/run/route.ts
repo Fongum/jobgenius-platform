@@ -37,12 +37,27 @@ async function runRetention(request: Request) {
     );
   }
 
+  const cutoffIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: voiceSessions, error: voiceError } = await supabaseServer
+    .from("voice_interview_sessions")
+    .delete()
+    .lt("created_at", cutoffIso)
+    .select("id");
+
+  if (voiceError) {
+    return Response.json(
+      { success: false, error: "Failed to cleanup voice interview transcripts." },
+      { status: 500 }
+    );
+  }
+
   return Response.json({
     success: true,
     deleted: {
       runner_heartbeats: heartbeatsCount ?? 0,
       apply_run_events: eventsCount ?? 0,
       ops_alerts: alertsCount ?? 0,
+      voice_sessions: voiceSessions?.length ?? 0,
     },
   });
 }

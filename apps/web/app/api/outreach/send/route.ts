@@ -1,5 +1,5 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
-import { getEmailAdapter } from "@/lib/email/adapter";
+import { getOutreachAdapter } from "@/lib/email/adapter";
 import { assertOutreachConsent, getRecruiterOptOut } from "@/lib/outreach-consent";
 import {
   buildAdaptiveFollowUpCopy,
@@ -248,10 +248,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL;
-  if (!fromEmail) {
-    return Response.json({ success: false, error: "Missing OUTREACH_FROM_EMAIL." }, { status: 500 });
-  }
+  // Resolve outreach adapter — uses seeker's Gmail if connected, else Resend
+  const { adapter: outreachAdapter, fromEmail, provider: outreachProvider } =
+    await getOutreachAdapter(thread.job_seeker_id);
 
   const nowIso = new Date().toISOString();
   let subject = (message?.subject ?? payload.subject ?? "").trim();
@@ -310,7 +309,7 @@ export async function POST(request: Request) {
         to_email: recruiter.email,
         subject,
         body,
-        provider: process.env.EMAIL_SEND_PROVIDER ?? "stub",
+        provider: outreachProvider,
         status: "QUEUED",
         scheduled_for: nowIso,
         open_tracking_token: trackingToken,
@@ -356,8 +355,7 @@ export async function POST(request: Request) {
     .eq("id", thread.job_seeker_id)
     .maybeSingle();
 
-  const adapter = getEmailAdapter();
-  const result = await adapter.sendEmail({
+  const result = await outreachAdapter.sendEmail({
     from: fromEmail,
     to: [recruiter.email],
     subject,

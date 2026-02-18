@@ -4,7 +4,13 @@ import { computeMatchScore, parseJobPost } from "@/lib/matching";
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { tailorResume } from "@/lib/resume-tailor";
 import { buildPagedPdf } from "@/lib/pdf";
+import { buildInterviewPrepContent } from "@/lib/interview-prep";
+import { buildInterviewPrepContentWithAI } from "@/lib/interview-prep-ai";
+import { isOpenAIConfigured } from "@/lib/openai";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
+import { interviewPrepReadyEmail } from "@/lib/email-templates/interview-prep-ready";
+import { scanAllInboxes, scanSeekerInbox } from "@/lib/gmail/inbox-scanner";
 import { randomUUID } from "crypto";
 
 type BackgroundJobRow = {
@@ -595,6 +601,103 @@ async function runTailorResume(payload: Record<string, unknown>) {
   }
 }
 
+async function runInterviewPrepReady(payload: Record<string, unknown>) {
+  const jobSeekerId = getPayloadString(payload, "job_seeker_id");
+  const jobPostId = getPayloadString(payload, "job_post_id");
+  const interviewId = getPayloadString(payload, "interview_id");
+
+  if (!jobSeekerId || !jobPostId) {
+    throw new Error("Missing job_seeker_id or job_post_id for interview prep.");
+  }
+
+  const { data: jobPost } = await supabaseServer
+    .from("job_posts")
+    .select("id, title, company, description_text, location")
+    .eq("id", jobPostId)
+    .single();
+
+  if (!jobPost) {
+    throw new Error("Job post not found.");
+  }
+
+  const { data: jobSeeker } = await supabaseServer
+    .from("job_seekers")
+    .select("id, full_name, email, seniority, work_type, skills")
+    .eq("id", jobSeekerId)
+    .single();
+
+  if (!jobSeeker) {
+    throw new Error("Job seeker not found.");
+  }
+
+  let content;
+  if (isOpenAIConfigured()) {
+    content = await buildInterviewPrepContentWithAI({
+      jobTitle: jobPost.title ?? "Role",
+      companyName: jobPost.company,
+      descriptionText: jobPost.description_text,
+      location: jobPost.location,
+      seniority: jobSeeker.seniority,
+      workType: jobSeeker.work_type,
+      seekerSkills: jobSeeker.skills,
+    });
+  } else {
+    content = buildInterviewPrepContent({
+      jobTitle: jobPost.title ?? "Role",
+      companyName: jobPost.company,
+      descriptionText: jobPost.description_text,
+      location: jobPost.location,
+      seniority: jobSeeker.seniority,
+      workType: jobSeeker.work_type,
+    });
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: prep, error: prepError } = await supabaseServer
+    .from("interview_prep")
+    .upsert(
+      {
+        job_seeker_id: jobSeekerId,
+        job_post_id: jobPostId,
+        content,
+        updated_at: nowIso,
+      },
+      { onConflict: "job_seeker_id,job_post_id" }
+    )
+    .select("id")
+    .single();
+
+  if (prepError || !prep) {
+    throw new Error("Failed to save interview prep.");
+  }
+
+  if (jobSeeker.email) {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "http://localhost:3000";
+    const prepUrl = `${baseUrl}/portal/interview-prep/${prep.id}`;
+    const template = interviewPrepReadyEmail({
+      recipientName: jobSeeker.full_name ?? "Candidate",
+      jobTitle: jobPost.title ?? "Interview",
+      company: jobPost.company,
+      prepUrl,
+    });
+
+    await sendAndLogEmail({
+      to: jobSeeker.email,
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
+      template_key: "interview_prep_ready",
+      job_seeker_id: jobSeekerId,
+      job_post_id: jobPostId,
+      interview_id: interviewId ?? undefined,
+    });
+  }
+}
+
+
 async function runAutoStartRun(payload: Record<string, unknown>) {
   if (!AUTO_APPLY_ENABLED) {
     return;
@@ -677,6 +780,22 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
       }
       return;
     }
+  }
+
+  // Verify seeker has a resume before starting an application run
+  const { data: seekerForResume } = await supabaseServer
+    .from("job_seekers")
+    .select("resume_url")
+    .eq("id", queueItem.job_seeker_id)
+    .maybeSingle();
+
+  if (!seekerForResume?.resume_url) {
+    await flagQueueAttention(
+      queueItem.id,
+      "RESUME_MISSING",
+      "Job seeker has no resume uploaded. Upload a resume before applying."
+    );
+    return;
   }
 
   const { data: jobPost } = await supabaseServer
@@ -900,6 +1019,17 @@ async function runAutoOutreach(payload: Record<string, unknown>) {
   }
 }
 
+async function runScanInbox(payload: Record<string, unknown>) {
+  const seekerId = getPayloadString(payload, "job_seeker_id");
+  if (seekerId) {
+    // Scan a specific seeker's inbox
+    await scanSeekerInbox(seekerId);
+  } else {
+    // Scan all active Gmail connections
+    await scanAllInboxes();
+  }
+}
+
 async function handleJob(job: BackgroundJobRow) {
   if (!job.payload || typeof job.payload !== "object" || Array.isArray(job.payload)) {
     throw new Error("Invalid payload.");
@@ -918,6 +1048,12 @@ async function handleJob(job: BackgroundJobRow) {
       return;
     case "AUTO_OUTREACH":
       await runAutoOutreach(job.payload);
+      return;
+    case "INTERVIEW_PREP_READY":
+      await runInterviewPrepReady(job.payload);
+      return;
+    case "SCAN_INBOX":
+      await runScanInbox(job.payload);
       return;
     default:
       throw new Error(`Unknown job type: ${job.type}`);

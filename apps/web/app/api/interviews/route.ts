@@ -1,6 +1,7 @@
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { supabaseServer } from "@/lib/supabase/server";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { interviewInviteEmail } from "@/lib/email-templates/interview-invite";
 import { interviewConfirmedEmail } from "@/lib/email-templates/interview-confirmed";
@@ -190,6 +191,18 @@ export async function POST(request: Request) {
         job_post_id: body.job_post_id,
         interview_id: interview.id,
       });
+    }
+  }
+
+  if (hasDirect) {
+    try {
+      await enqueueBackgroundJob("INTERVIEW_PREP_READY", {
+        job_seeker_id: body.job_seeker_id,
+        job_post_id: body.job_post_id,
+        interview_id: interview.id,
+      });
+    } catch (err) {
+      console.error("Failed to enqueue interview prep job:", err);
     }
   }
 

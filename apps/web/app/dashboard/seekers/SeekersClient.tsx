@@ -20,6 +20,10 @@ interface SeekerWithStats {
     applied: number;
     needsAttention: number;
     interviews: number;
+    gmailConnected: boolean;
+    gmailEmail: string | null;
+    inboxTotal: number;
+    inboxInterviews: number;
   };
 }
 
@@ -136,6 +140,8 @@ export default function SeekersClient({
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Applied</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Attention</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Interviews</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase hidden lg:table-cell">Gmail</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase hidden lg:table-cell">Inbox</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -164,6 +170,14 @@ export default function SeekersClient({
                     )}
                   </td>
                   <td className="px-4 py-3 text-center text-sm text-purple-600 font-medium">{seeker.stats.interviews}</td>
+                  <td className="px-4 py-3 text-center hidden lg:table-cell">
+                    {seeker.stats.gmailConnected ? (
+                      <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">Connected</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">--</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center text-sm hidden lg:table-cell">{seeker.stats.inboxTotal}</td>
                   <td className="px-4 py-3 text-right">
                     <Link
                       href={`/dashboard/seekers/${seeker.id}`}
@@ -231,6 +245,18 @@ function SeekerCard({ seeker }: { seeker: SeekerWithStats }) {
               {seeker.work_type}
             </span>
           )}
+          {seeker.stats.gmailConnected ? (
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Gmail
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 bg-red-50 text-red-400 text-xs rounded">
+              No Gmail
+            </span>
+          )}
         </div>
 
         {seeker.target_titles && seeker.target_titles.length > 0 && (
@@ -240,12 +266,13 @@ function SeekerCard({ seeker }: { seeker: SeekerWithStats }) {
           </p>
         )}
 
-        <div className="grid grid-cols-5 gap-2 pt-3 border-t">
+        <div className="grid grid-cols-6 gap-2 pt-3 border-t">
           <Stat label="Match" value={seeker.stats.matched} />
           <Stat label="Queue" value={seeker.stats.queued} color="blue" />
           <Stat label="Applied" value={seeker.stats.applied} color="green" />
           <Stat label="Alert" value={seeker.stats.needsAttention} color={seeker.stats.needsAttention > 0 ? "orange" : undefined} />
           <Stat label="Intv" value={seeker.stats.interviews} color="purple" />
+          <Stat label="Inbox" value={seeker.stats.inboxTotal} />
         </div>
       </div>
     </Link>

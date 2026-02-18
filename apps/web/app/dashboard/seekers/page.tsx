@@ -22,6 +22,10 @@ interface SeekerStats {
   applied: number;
   needsAttention: number;
   interviews: number;
+  gmailConnected: boolean;
+  gmailEmail: string | null;
+  inboxTotal: number;
+  inboxInterviews: number;
 }
 
 export default async function SeekersPage() {
@@ -70,7 +74,7 @@ export default async function SeekersPage() {
   const seekerIds = seekers.map((s) => s.id);
 
   // Get stats for each seeker
-  const [matchesData, queueData, runsData, interviewsData] = await Promise.all([
+  const [matchesData, queueData, runsData, interviewsData, gmailData, inboxData] = await Promise.all([
     supabaseAdmin
       .from("job_match_scores")
       .select("job_seeker_id, score")
@@ -88,12 +92,41 @@ export default async function SeekersPage() {
       .select("job_seeker_id, status, scheduled_at")
       .in("job_seeker_id", seekerIds)
       .gte("scheduled_at", new Date().toISOString()),
+    supabaseAdmin
+      .from("seeker_email_connections")
+      .select("job_seeker_id, is_active, gmail_email")
+      .in("job_seeker_id", seekerIds)
+      .eq("is_active", true),
+    supabaseAdmin
+      .from("inbound_emails")
+      .select("job_seeker_id, classification")
+      .in("job_seeker_id", seekerIds),
   ]);
 
   // Build stats map
   const statsMap = new Map<string, SeekerStats>();
   for (const s of seekers) {
-    statsMap.set(s.id, { matched: 0, queued: 0, applied: 0, needsAttention: 0, interviews: 0 });
+    statsMap.set(s.id, { matched: 0, queued: 0, applied: 0, needsAttention: 0, interviews: 0, gmailConnected: false, gmailEmail: null, inboxTotal: 0, inboxInterviews: 0 });
+  }
+
+  // Gmail connections
+  for (const g of gmailData.data || []) {
+    const stats = statsMap.get(g.job_seeker_id);
+    if (stats) {
+      stats.gmailConnected = true;
+      stats.gmailEmail = g.gmail_email;
+    }
+  }
+
+  // Inbox counts
+  for (const e of inboxData.data || []) {
+    const stats = statsMap.get(e.job_seeker_id);
+    if (stats) {
+      stats.inboxTotal++;
+      if (e.classification === "interview_invite") {
+        stats.inboxInterviews++;
+      }
+    }
   }
 
   // Count matches above threshold
@@ -136,7 +169,7 @@ export default async function SeekersPage() {
   // Combine data
   const seekersWithStats = seekers.map((s) => ({
     ...s,
-    stats: statsMap.get(s.id) || { matched: 0, queued: 0, applied: 0, needsAttention: 0, interviews: 0 },
+    stats: statsMap.get(s.id) || { matched: 0, queued: 0, applied: 0, needsAttention: 0, interviews: 0, gmailConnected: false, gmailEmail: null, inboxTotal: 0, inboxInterviews: 0 },
   }));
 
   return <SeekersClient seekers={seekersWithStats} />;

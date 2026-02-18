@@ -125,3 +125,19 @@ export async function retryRun(apiBaseUrl, payload, authToken, claimToken, runne
     runnerId
   );
 }
+
+export async function fetchVerificationCode(apiBaseUrl, jobSeekerId, authToken, runnerId) {
+  try {
+    const result = await postJson(
+      `${apiBaseUrl}/api/apply/verification`,
+      { job_seeker_id: jobSeekerId, minutes_ago: 10 },
+      authToken,
+      null,
+      runnerId
+    );
+    return result?.codes?.[0] ?? null;
+  } catch (err) {
+    logLine({ level: "WARN", msg: `Verification code fetch failed: ${err.message}` });
+    return null;
+  }
+}

@@ -42,7 +42,7 @@ export async function POST(
     return Response.json({ error: "Interview prep not found." }, { status: 404 });
   }
 
-  let body: { persona?: string } = {};
+  let body: { persona?: string; mode?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -53,6 +53,7 @@ export async function POST(
   const persona = validPersonas.includes(body.persona ?? "")
     ? body.persona!
     : "professional";
+  const mode = body.mode === "realtime" ? "realtime" : "legacy";
 
   // Get job details for context
   let jobTitle = "Position";
@@ -88,6 +89,10 @@ export async function POST(
 
   if (sessionError || !session) {
     return Response.json({ error: "Failed to create session." }, { status: 500 });
+  }
+
+  if (mode === "realtime") {
+    return Response.json({ session, turn: null }, { status: 201 });
   }
 
   // Generate the opening question

@@ -5,13 +5,16 @@ export type BackgroundJobType =
   | "AUTO_MATCH_JOB_POSTS"
   | "TAILOR_RESUME"
   | "AUTO_START_RUN"
-  | "AUTO_OUTREACH";
+  | "AUTO_OUTREACH"
+  | "SCAN_INBOX"
+  | "INTERVIEW_PREP_READY";
 
 export type BackgroundJobPayload = {
   job_post_id?: string;
   job_post_ids?: string[];
   am_id?: string | null;
   job_seeker_id?: string;
+  interview_id?: string;
   queue_id?: string;
   contact_ids?: string[];
 };

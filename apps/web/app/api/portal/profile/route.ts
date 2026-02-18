@@ -84,6 +84,8 @@ const ALLOWED_FIELDS = [
   "resume_text",
   "resume_url",
   "profile_photo_url",
+  // Onboarding
+  "onboarding_completed_at",
 ];
 
 export async function PATCH(request: Request) {

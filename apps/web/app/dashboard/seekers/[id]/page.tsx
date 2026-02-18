@@ -129,6 +129,24 @@ export default async function SeekerDetailPage({ params }: PageProps) {
     .select("*")
     .eq("job_seeker_id", id);
 
+  // Load Gmail connection
+  const { data: gmailConnection } = await supabaseAdmin
+    .from("seeker_email_connections")
+    .select("id, gmail_email, is_active, created_at")
+    .eq("job_seeker_id", id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  // Load inbound emails
+  const { data: inboundEmails } = await supabaseAdmin
+    .from("inbound_emails")
+    .select(
+      "id, from_email, from_name, subject, body_snippet, received_at, classification, classification_confidence, matched_application_id"
+    )
+    .eq("job_seeker_id", id)
+    .order("received_at", { ascending: false })
+    .limit(50);
+
   // Process matches with routing decisions
   const matchedJobs = (matchScores || []).map((m) => {
     const job = m.job_posts as unknown as { id: string; title: string; company: string; location: string; url: string } | null;
@@ -153,6 +171,8 @@ export default async function SeekerDetailPage({ params }: PageProps) {
       interviewPrep={(interviewPrep || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["interviewPrep"]}
       references={(references || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["references"]}
       documents={(documents || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["documents"]}
+      gmailConnection={gmailConnection ? { email: gmailConnection.gmail_email, connectedAt: gmailConnection.created_at } : null}
+      inboundEmails={(inboundEmails || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["inboundEmails"]}
     />
   );
 }

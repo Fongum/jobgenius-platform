@@ -1,4 +1,4 @@
-import { getEmailAdapter } from "@/lib/email/adapter";
+import { getOutreachAdapter } from "@/lib/email/adapter";
 import { getRecruiterOptOut } from "@/lib/outreach-consent";
 import {
   buildAdaptiveFollowUpCopy,
@@ -286,16 +286,20 @@ async function runScheduler(request: Request) {
       companySignal: plan.companySignal,
     });
 
+    // Resolve outreach adapter for this seeker to get the right from_email
+    const { fromEmail: seekerFromEmail, provider: seekerProvider } =
+      await getOutreachAdapter(thread.job_seeker_id);
+
     autoFollowUpRows.push({
       recruiter_thread_id: thread.id,
       sequence_id: latest.sequence_id ?? null,
       step_number: nextStepNumber,
       direction: "OUTBOUND",
-      from_email: latest.from_email ?? process.env.OUTREACH_FROM_EMAIL ?? "",
+      from_email: seekerFromEmail,
       to_email: recruiter.email,
       subject: followUp.subject,
       body: followUp.body,
-      provider: process.env.EMAIL_SEND_PROVIDER ?? "stub",
+      provider: seekerProvider,
       status: "QUEUED",
       follow_up_tone: plan.preferredTone,
       open_tracking_token: ensureTrackingToken(null),
@@ -385,7 +389,11 @@ async function runScheduler(request: Request) {
     threadMap.set(row.id, row);
   }
 
-  const adapter = getEmailAdapter();
+  // Cache outreach adapters per seeker
+  const adapterCache = new Map<
+    string,
+    Awaited<ReturnType<typeof getOutreachAdapter>>
+  >();
   let sent = 0;
   let failed = 0;
   let skippedOptOut = 0;
@@ -467,7 +475,13 @@ async function runScheduler(request: Request) {
     const trackingUrl = buildTrackingOpenUrl({ token: trackingToken, requestUrl: request.url });
     const htmlBody = buildHtmlBodyWithTracking(message.body ?? "", trackingUrl);
 
-    const result = await adapter.sendEmail({
+    // Resolve outreach adapter per seeker (cached)
+    if (!adapterCache.has(thread.job_seeker_id)) {
+      adapterCache.set(thread.job_seeker_id, await getOutreachAdapter(thread.job_seeker_id));
+    }
+    const { adapter: outreachAdapter } = adapterCache.get(thread.job_seeker_id)!;
+
+    const result = await outreachAdapter.sendEmail({
       from: message.from_email,
       to: [message.to_email],
       subject: message.subject ?? "Follow-up from JobGenius",

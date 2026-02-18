@@ -62,6 +62,18 @@ jobs:
         run: |
           curl -fsS "${WEB_BASE_URL}/api/ops/retention/run?ops_key=${OPS_API_KEY}"
 
+  gmail-inbox-scan:
+    name: Gmail Inbox Scan
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan Gmail inboxes
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS "${WEB_BASE_URL}/api/gmail/scan?ops_key=${OPS_API_KEY}"
+
   intelligence-feedback:
     name: Intelligence Feedback Loop
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * *'

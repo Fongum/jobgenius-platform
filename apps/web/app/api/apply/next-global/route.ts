@@ -134,7 +134,7 @@ export async function GET(request: Request) {
       .single(),
     supabaseServer
       .from("tailored_resumes")
-      .select("resume_url")
+      .select("tailored_text, resume_url")
       .eq("job_seeker_id", lockedRun.job_seeker_id)
       .eq("job_post_id", lockedRun.job_post_id)
       .maybeSingle(),
@@ -178,6 +178,7 @@ export async function GET(request: Request) {
     resume: {
       url: resumeUrl,
       tailored_url: tailoredResumeUrl,
+      tailored_text: tailoredResume?.tailored_text ?? null,
     },
     storage_state_url: storageStateUrl,
     profile: jobSeeker

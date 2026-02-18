@@ -1,4 +1,4 @@
-import { getEmailAdapter } from "@/lib/email/adapter";
+import { getOutreachAdapter } from "@/lib/email/adapter";
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { assertOutreachConsent, getRecruiterOptOut } from "@/lib/outreach-consent";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -92,16 +92,10 @@ export async function POST(
     }
   }
 
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL;
-  if (!fromEmail) {
-    return Response.json(
-      { success: false, error: "Missing OUTREACH_FROM_EMAIL." },
-      { status: 500 }
-    );
-  }
+  const { adapter: outreachAdapter, fromEmail, provider: outreachProvider } =
+    await getOutreachAdapter(draft.job_seeker_id);
 
-  const adapter = getEmailAdapter();
-  const result = await adapter.sendEmail({
+  const result = await outreachAdapter.sendEmail({
     from: fromEmail,
     to: [contact.email],
     subject: draft.subject ?? "",

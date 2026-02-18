@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 
@@ -6,6 +8,10 @@ export default async function PortalPage() {
   const user = await getCurrentUser();
   // Layout already handles redirect, but guard for safety
   if (!user) return null;
+
+  // Check if user needs onboarding
+  const cookieStore = await cookies();
+  const skippedOnboarding = cookieStore.get("jg_onboarding_skipped");
 
   // Get job seeker details
   const { data: jobSeeker } = await supabaseAdmin
@@ -21,6 +27,11 @@ export default async function PortalPage() {
     `)
     .eq("id", user.id)
     .single();
+
+  // Redirect to onboarding if new user (hasn't completed onboarding and hasn't skipped)
+  if (jobSeeker && !jobSeeker.onboarding_completed_at && !skippedOnboarding) {
+    redirect("/portal/onboarding");
+  }
 
   // Get application stats
   const { count: completedApplications } = await supabaseAdmin

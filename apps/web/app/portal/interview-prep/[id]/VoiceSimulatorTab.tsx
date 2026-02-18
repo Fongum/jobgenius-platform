@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
+import { RealtimeAgent, RealtimeSession } from "@openai/agents-realtime";
+import type { RealtimeItem } from "@openai/agents-realtime";
 
 type Turn = {
   id: string;
@@ -23,24 +25,81 @@ type VoiceSession = {
   created_at: string;
 };
 
-type RecordingState = "idle" | "recording" | "processing";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SpeechRecognitionConstructor = new () => any;
-
-function getSpeechRecognition(): SpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const win = window as any;
-  return win.SpeechRecognition || win.webkitSpeechRecognition || null;
-}
-
 const PERSONAS = [
   { value: "professional", label: "Professional (HR)" },
   { value: "technical", label: "Technical (Engineer)" },
   { value: "behavioral", label: "Behavioral (Hiring Manager)" },
   { value: "stress", label: "Stress (Challenging)" },
-];
+] as const;
+
+const KICKOFF_PROMPT = "Please start the interview with an opening question.";
+const CONSENT_STORAGE_KEY = "jobgenius_voice_consent";
+
+type JobContext = {
+  title: string;
+  company: string | null;
+  description: string | null;
+};
+
+function extractMessageText(item: RealtimeItem): string | null {
+  if (item.type !== "message") return null;
+  if (item.role === "system") return null;
+  // @ts-expect-error status exists on user/assistant items
+  if (item.status && item.status !== "completed") return null;
+  const parts: string[] = [];
+  for (const chunk of item.content ?? []) {
+    if (chunk.type === "input_text" && chunk.text) {
+      parts.push(chunk.text);
+    }
+    if (chunk.type === "input_audio" && chunk.transcript) {
+      parts.push(chunk.transcript);
+    }
+    if (chunk.type === "output_text" && chunk.text) {
+      parts.push(chunk.text);
+    }
+    if (chunk.type === "output_audio" && chunk.transcript) {
+      parts.push(chunk.transcript);
+    }
+  }
+  const text = parts.join(" ").trim();
+  return text.length > 0 ? text : null;
+}
+
+function historyToTurns(history: RealtimeItem[]): Turn[] {
+  const turns: Turn[] = [];
+  for (const item of history) {
+    if (item.type !== "message") continue;
+    if (item.role !== "user" && item.role !== "assistant") continue;
+    const text = extractMessageText(item);
+    if (!text) continue;
+    if (item.role === "user" && text === KICKOFF_PROMPT) continue;
+    turns.push({
+      id: item.itemId,
+      turn_number: turns.length,
+      speaker: item.role === "user" ? "candidate" : "interviewer",
+      content: text,
+      score: null,
+      feedback: null,
+    });
+  }
+  return turns;
+}
+
+function buildInstructions(persona: string, context: JobContext | null) {
+  const personaDescriptions: Record<string, string> = {
+    professional: "a friendly but thorough HR interviewer",
+    technical: "a senior engineer conducting a technical screen",
+    behavioral: "a hiring manager focused on culture fit and leadership",
+    stress: "a direct, challenging interviewer who pushes back on vague answers",
+  };
+  const personaText = personaDescriptions[persona] || personaDescriptions.professional;
+  const jobTitle = context?.title || "the role";
+  const company = context?.company ? ` at ${context.company}` : "";
+  const description = context?.description
+    ? `\nContext: ${context.description.slice(0, 1200)}`
+    : "";
+  return `You are ${personaText}. You are conducting a mock interview for the position of ${jobTitle}${company}.\n\nRules:\n- Ask one question at a time\n- Keep questions concise and role-specific\n- Use relevant follow-up questions\n- After 6-8 exchanges, wrap up and ask if the candidate has questions\n- Do not mention you are AI${description}`;
+}
 
 export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
   const [sessions, setSessions] = useState<VoiceSession[]>([]);
@@ -48,84 +107,168 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [persona, setPersona] = useState("professional");
   const [creating, setCreating] = useState(false);
-  const [recordingState, setRecordingState] = useState<RecordingState>("idle");
-  const [transcript, setTranscript] = useState("");
-  const [interimText, setInterimText] = useState("");
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [jobContext, setJobContext] = useState<JobContext | null>(null);
+  const [pendingStart, setPendingStart] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const SpeechRecognitionClass = getSpeechRecognition();
-  const isSupported = !!SpeechRecognitionClass;
+  const sessionRef = useRef<RealtimeSession | null>(null);
 
-  // Load sessions list
-  if (!loaded) {
+  useEffect(() => {
+    if (loaded) return;
     setLoaded(true);
     fetch(`/api/portal/interview-prep/${prepId}/voice-session`)
-      .then((res) => res.ok ? res.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.sessions) setSessions(data.sessions);
       })
       .catch(() => {});
-  }
-
-  const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-  }, []);
+  }, [loaded, prepId]);
 
   useEffect(() => {
-    return () => stopRecording();
-  }, [stopRecording]);
+    fetch(`/api/portal/interview-prep/${prepId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const post = Array.isArray(data?.prep?.job_posts)
+          ? data?.prep?.job_posts[0]
+          : data?.prep?.job_posts;
+        if (post) {
+          setJobContext({
+            title: post.title || "Role",
+            company: post.company ?? null,
+            description: post.description_text ?? null,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [prepId]);
 
-  // Scroll to bottom when turns change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+    if (stored === "true") setConsentAccepted(true);
+  }, []);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
 
-  // TTS for interviewer turns
-  function speak(text: string) {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.95;
-    utterance.pitch = 1;
-    window.speechSynthesis.speak(utterance);
+  useEffect(() => {
+    return () => {
+      if (sessionRef.current) {
+        sessionRef.current.close();
+        sessionRef.current = null;
+      }
+    };
+  }, []);
+
+  async function connectRealtime() {
+    setConnecting(true);
+    setError(null);
+    try {
+      const tokenRes = await fetch(`/api/portal/interview-prep/${prepId}/realtime-token`, {
+        method: "POST",
+      });
+      if (!tokenRes.ok) {
+        const msg = await tokenRes.text();
+        throw new Error(msg || "Failed to fetch realtime token.");
+      }
+      const tokenData = await tokenRes.json();
+      const token = tokenData?.token;
+      if (!token) {
+        throw new Error("Realtime token missing.");
+      }
+
+      const agent = new RealtimeAgent({
+        name: "JobGenius Interviewer",
+        instructions: buildInstructions(persona, jobContext),
+      });
+
+      const session = new RealtimeSession(agent, {
+        transport: "webrtc",
+        historyStoreAudio: false,
+      });
+
+      session.on("history_updated", (history) => {
+        setTurns(historyToTurns(history));
+      });
+
+      session.on("error", () => {
+        setError("Realtime session error. Please try again.");
+      });
+
+      await session.connect({ apiKey: token });
+      sessionRef.current = session;
+      session.sendMessage(KICKOFF_PROMPT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start realtime session.";
+      setError(message);
+    } finally {
+      setConnecting(false);
+    }
   }
 
-  async function startSession() {
+  async function beginSession() {
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/portal/interview-prep/${prepId}/voice-session`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ persona }),
-        }
-      );
-      if (res.ok) {
-        const { session, turn } = await res.json();
+      const res = await fetch(`/api/portal/interview-prep/${prepId}/voice-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona, mode: "realtime" }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to start session.");
+      }
+      const { session } = await res.json();
+      if (session) {
         setSessions((prev) => [session, ...prev]);
         setActiveSession(session);
-        setTurns([turn]);
-        speak(turn.content);
+        setTurns([]);
+        await connectRealtime();
       }
-    } catch {
-      setError("Failed to start session.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start session.";
+      setError(message);
     } finally {
       setCreating(false);
     }
   }
 
+  function requestConsent() {
+    setPendingStart(true);
+    setConsentOpen(true);
+  }
+
+  async function startSession() {
+    if (!consentAccepted) {
+      requestConsent();
+      return;
+    }
+    await beginSession();
+  }
+
+  function handleConsent(accepted: boolean) {
+    setConsentOpen(false);
+    if (!accepted) {
+      setPendingStart(false);
+      return;
+    }
+    setConsentAccepted(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(CONSENT_STORAGE_KEY, "true");
+    }
+    if (pendingStart) {
+      setPendingStart(false);
+      beginSession();
+    }
+  }
+
   async function loadSession(sessionId: string) {
-    const res = await fetch(
-      `/api/portal/interview-prep/${prepId}/voice-session/${sessionId}`
-    );
+    const res = await fetch(`/api/portal/interview-prep/${prepId}/voice-session/${sessionId}`);
     if (res.ok) {
       const { session, turns: sessionTurns } = await res.json();
       setActiveSession(session);
@@ -133,139 +276,48 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
     }
   }
 
-  function startRecording() {
-    if (!SpeechRecognitionClass) return;
-
-    setTranscript("");
-    setInterimText("");
-    setError(null);
-    setRecordingState("recording");
-
-    const recognition = new SpeechRecognitionClass();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    let finalText = "";
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalText += event.results[i][0].transcript + " ";
-          setTranscript(finalText.trim());
-        } else {
-          interim += event.results[i][0].transcript;
-        }
-      }
-      setInterimText(interim);
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onerror = (event: any) => {
-      if (event.error !== "aborted") {
-        setError(`Speech recognition error: ${event.error}`);
-        setRecordingState("idle");
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  }
-
-  async function handleStopAndSubmit(overrideText?: string) {
-    stopRecording();
-    const finalAnswer = (overrideText || transcript).trim();
-
-    if (!finalAnswer || !activeSession) {
-      setRecordingState("idle");
-      if (!finalAnswer) setError("No speech detected. Please try again.");
-      return;
-    }
-
-    setRecordingState("processing");
-    setTranscript(finalAnswer);
-    setInterimText("");
-
-    try {
-      const res = await fetch(
-        `/api/portal/interview-prep/${prepId}/voice-session/${activeSession.id}/turn`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: finalAnswer }),
-        }
-      );
-
-      if (res.ok) {
-        const data = await res.json();
-
-        // Add candidate turn
-        setTurns((prev) => [
-          ...prev,
-          {
-            ...data.candidate_turn,
-            score: data.score,
-            feedback: data.feedback,
-          },
-          data.interviewer_turn,
-        ]);
-
-        speak(data.interviewer_turn.content);
-
-        // If final, complete the session
-        if (data.is_final) {
-          const completeRes = await fetch(
-            `/api/portal/interview-prep/${prepId}/voice-session/${activeSession.id}`,
-            { method: "PATCH" }
-          );
-          if (completeRes.ok) {
-            const { session: completed } = await completeRes.json();
-            setActiveSession(completed);
-          }
-        } else {
-          setActiveSession((prev) =>
-            prev ? { ...prev, total_turns: (prev.total_turns ?? 0) + 2 } : prev
-          );
-        }
-
-        setTranscript("");
-      } else {
-        setError("Failed to submit your answer.");
-      }
-    } catch {
-      setError("Failed to submit your answer.");
-    } finally {
-      setRecordingState("idle");
-    }
-  }
-
-  async function endSession() {
+  async function completeSession() {
     if (!activeSession) return;
+    sessionRef.current?.close();
+    sessionRef.current = null;
+    const payload = {
+      turns: turns.map((t) => ({ speaker: t.speaker, content: t.content })),
+    };
     const res = await fetch(
-      `/api/portal/interview-prep/${prepId}/voice-session/${activeSession.id}`,
-      { method: "PATCH" }
+      `/api/portal/interview-prep/${prepId}/voice-session/${activeSession.id}/complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
     );
     if (res.ok) {
-      const { session: completed } = await res.json();
-      setActiveSession(completed);
+      const data = await res.json();
+      setActiveSession(data.session);
+      setTurns(data.turns ?? []);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === data.session.id ? data.session : s))
+      );
+    } else {
+      setError("Failed to save transcript.");
     }
   }
 
-  // Active session view
+  function handleBack() {
+    if (activeSession && activeSession.status !== "completed") {
+      completeSession();
+    }
+    setActiveSession(null);
+    setTurns([]);
+  }
+
   if (activeSession) {
     const isCompleted = activeSession.status === "completed";
-
     return (
       <div>
         <div className="flex items-center justify-between gap-2 mb-4">
           <button
-            onClick={() => {
-              setActiveSession(null);
-              setTurns([]);
-              window.speechSynthesis?.cancel();
-            }}
+            onClick={handleBack}
             className="text-sm text-blue-600 hover:text-blue-800 flex-shrink-0"
           >
             &larr; Back
@@ -276,7 +328,7 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
             </span>
             {!isCompleted && (
               <button
-                onClick={endSession}
+                onClick={completeSession}
                 className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 whitespace-nowrap"
               >
                 End Interview
@@ -285,7 +337,12 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
           </div>
         </div>
 
-        {/* Completed banner */}
+        {connecting && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 mb-4">
+            Connecting live voice session...
+          </div>
+        )}
+
         {isCompleted && activeSession.overall_score !== null && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 text-center">
             <p className="text-lg font-bold text-green-700">
@@ -299,7 +356,6 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
           </div>
         )}
 
-        {/* Chat-style conversation */}
         <div className="bg-white rounded-lg shadow p-3 sm:p-4 mb-4 max-h-[60vh] sm:max-h-96 overflow-y-auto">
           <div className="space-y-3 sm:space-y-4">
             {turns.map((turn) => (
@@ -317,19 +373,18 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
                   }`}
                 >
                   <p className="text-sm">{turn.content}</p>
-                  {turn.speaker === "candidate" &&
-                    turn.score !== null && (
-                      <div className="mt-2 pt-2 border-t border-blue-500">
-                        <span className="text-xs text-blue-200">
-                          Score: {turn.score}%
-                        </span>
-                        {turn.feedback && (
-                          <p className="text-xs text-blue-200 mt-0.5">
-                            {turn.feedback}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                  {turn.speaker === "candidate" && turn.score !== null && (
+                    <div className="mt-2 pt-2 border-t border-blue-500">
+                      <span className="text-xs text-blue-200">
+                        Score: {turn.score}%
+                      </span>
+                      {turn.feedback && (
+                        <p className="text-xs text-blue-200 mt-0.5">
+                          {turn.feedback}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -337,93 +392,28 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
           </div>
         </div>
 
-        {/* Recording controls */}
-        {!isCompleted && isSupported && (
-          <div className="bg-white rounded-lg shadow p-4">
-            {recordingState === "recording" && (
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1 bg-red-500 rounded-full animate-pulse"
-                      style={{
-                        height: `${12 + Math.random() * 20}px`,
-                        animationDelay: `${i * 0.15}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <span className="text-sm text-red-600 font-medium">
-                  Recording...
-                </span>
-              </div>
-            )}
-
-            {(transcript || interimText) && (
-              <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                <p className="text-sm text-gray-700">
-                  {transcript}
-                  {interimText && (
-                    <span className="text-gray-400"> {interimText}</span>
-                  )}
-                </p>
-              </div>
-            )}
-
-            <div className="flex justify-center gap-3">
-              {recordingState === "idle" && (
-                <button
-                  onClick={startRecording}
-                  className="px-6 py-4 sm:py-3 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 w-full sm:w-auto"
-                >
-                  <span className="w-3 h-3 bg-white rounded-full" />
-                  Record Answer
-                </button>
-              )}
-              {recordingState === "recording" && (
-                <button
-                  onClick={() => handleStopAndSubmit()}
-                  className="px-6 py-4 sm:py-3 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-900 w-full sm:w-auto"
-                >
-                  Stop & Send
-                </button>
-              )}
-              {recordingState === "processing" && (
-                <div className="px-6 py-4 sm:py-3 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg w-full sm:w-auto text-center">
-                  Processing...
-                </div>
-              )}
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 text-center mt-3">{error}</p>
-            )}
+        {!isCompleted && (
+          <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-600">
+            Speak naturally. The interviewer will respond automatically.
           </div>
         )}
 
-        {!isSupported && !isCompleted && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-            <p className="text-sm text-yellow-800">
-              Speech recognition is not supported in this browser. Use Chrome or Edge.
-            </p>
-          </div>
+        {error && (
+          <p className="text-sm text-red-600 text-center mt-3">{error}</p>
         )}
       </div>
     );
   }
 
-  // Session start view
   return (
     <div>
       <h3 className="text-lg font-medium text-gray-900 mb-4">
-        Voice Interview Simulator
+        Live Voice Interview
       </h3>
 
       <div className="bg-white rounded-lg shadow p-4 sm:p-6 text-center">
         <p className="text-gray-600 mb-4 text-sm sm:text-base">
-          Practice with an AI interviewer. Select a persona and start.
-          The interviewer will ask questions and you respond by speaking.
+          Practice with a live voice interviewer powered by OpenAI Realtime. Select a persona and start.
         </p>
 
         <div className="grid grid-cols-2 sm:flex sm:justify-center gap-2 mb-6">
@@ -444,24 +434,17 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
 
         <button
           onClick={startSession}
-          disabled={creating || !isSupported}
+          disabled={creating}
           className="px-6 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors w-full sm:w-auto"
         >
-          {creating ? "Starting..." : "Start Interview"}
+          {creating ? "Starting..." : "Start Live Interview"}
         </button>
-
-        {!isSupported && (
-          <p className="text-sm text-yellow-600 mt-3">
-            Speech recognition requires Chrome or Edge browser.
-          </p>
-        )}
       </div>
 
       {error && (
         <p className="text-sm text-red-600 text-center mt-3">{error}</p>
       )}
 
-      {/* Past sessions */}
       {sessions.length > 0 && (
         <div className="mt-6">
           <h4 className="text-sm font-medium text-gray-900 mb-3">Past Sessions</h4>
@@ -500,6 +483,45 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
                 </div>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {consentOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Voice Interview Consent</h4>
+            <p className="text-sm text-gray-600 mb-4">
+              We will access your microphone and send audio to our AI provider to run the live interview.
+              We store text transcripts for 90 days and do not store audio. You can end anytime.
+            </p>
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                id="voice-consent"
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={consentAccepted}
+                onChange={(e) => setConsentAccepted(e.target.checked)}
+              />
+              <label htmlFor="voice-consent" className="text-sm text-gray-700">
+                I agree to the voice interview consent.
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => handleConsent(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleConsent(consentAccepted)}
+                disabled={!consentAccepted}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                Agree & Start
+              </button>
+            </div>
           </div>
         </div>
       )}

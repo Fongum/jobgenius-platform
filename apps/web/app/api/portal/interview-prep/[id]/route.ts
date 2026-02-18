@@ -14,7 +14,7 @@ export async function GET(
     .from("interview_prep")
     .select(`
       *,
-      job_posts ( title, company, description_raw )
+      job_posts ( title, company, description_text )
     `)
     .eq("id", params.id)
     .eq("job_seeker_id", auth.user.id)
