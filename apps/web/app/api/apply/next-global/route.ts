@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 
   let nextRunQuery = supabaseServer
     .from("application_runs")
-    .select("id, queue_id, job_post_id, ats_type, status, current_step, attempt_count, max_retries, job_seeker_id")
+    .select("id, queue_id, job_post_id, ats_type, status, current_step, attempt_count, max_retries, job_seeker_id, resume_url_used, resume_source")
     .in("status", ["READY", "RETRYING"])
     .is("locked_at", null)
     .order("updated_at", { ascending: true })
@@ -96,7 +96,7 @@ export async function GET(request: Request) {
     .eq("id", nextRun.id)
     .is("locked_at", null)
     .in("status", ["READY", "RETRYING"])
-    .select("id, queue_id, ats_type, current_step, attempt_count, max_retries, job_post_id, job_seeker_id")
+    .select("id, queue_id, ats_type, current_step, attempt_count, max_retries, job_post_id, job_seeker_id, resume_url_used, resume_source")
     .single();
 
   if (lockError || !lockedRun) {
@@ -162,6 +162,19 @@ export async function GET(request: Request) {
 
   const tailoredResumeUrl = tailoredResume?.resume_url ?? null;
   const resumeUrl = tailoredResumeUrl ?? jobSeeker?.resume_url ?? null;
+  const resumeSource = tailoredResumeUrl ? "TAILORED" : resumeUrl ? "BASE" : null;
+
+  if (resumeUrl && !lockedRun.resume_url_used) {
+    await supabaseServer
+      .from("application_runs")
+      .update({
+        resume_url_used: resumeUrl,
+        resume_source: resumeSource,
+        updated_at: nowIso,
+      })
+      .eq("id", lockedRun.id)
+      .is("resume_url_used", null);
+  }
 
   return Response.json({
     success: true,

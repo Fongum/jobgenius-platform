@@ -4,6 +4,7 @@ import { useState } from "react";
 
 interface Interview {
   id: string;
+  job_post_id?: string | null;
   company_name: string;
   role_title: string;
   interview_type?: string;
@@ -23,9 +24,11 @@ interface PrepItem {
 export default function InterviewsClient({
   initialInterviews,
   initialPrep,
+  resumeByJobPostId,
 }: {
   initialInterviews: Interview[];
   initialPrep: Record<string, unknown>[];
+  resumeByJobPostId: Record<string, { url: string; source: string | null }>;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -50,6 +53,9 @@ export default function InterviewsClient({
     const isExpanded = expandedId === interview.id;
     const prep = prepByInterview[interview.id] || [];
     const dateObj = new Date(interview.scheduled_at);
+    const resume = interview.job_post_id
+      ? resumeByJobPostId[interview.job_post_id]
+      : null;
 
     return (
       <div className="bg-white rounded-lg shadow">
@@ -87,6 +93,17 @@ export default function InterviewsClient({
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
                 Join Meeting
+              </a>
+            )}
+            {resume?.url && (
+              <a
+                href={resume.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm text-purple-700 hover:text-purple-900"
+              >
+                Resume Used{resume.source ? ` (${resume.source === "TAILORED" ? "Tailored" : "Base"})` : ""}
               </a>
             )}
             {prep.length > 0 && (

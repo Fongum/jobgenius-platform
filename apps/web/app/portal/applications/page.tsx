@@ -23,6 +23,7 @@ export default async function ApplicationsPage() {
     .from("application_runs")
     .select(`
       id, status, created_at, updated_at, error_message,
+      resume_url_used, resume_source,
       job_post_id,
       job_posts (
         id, title, company, location, url, work_type

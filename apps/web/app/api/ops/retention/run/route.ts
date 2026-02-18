@@ -1,6 +1,8 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
 
+type Pair = { job_seeker_id: string; job_post_id: string };
+
 async function runRetention(request: Request) {
   const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
@@ -37,7 +39,210 @@ async function runRetention(request: Request) {
     );
   }
 
-  const cutoffIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  // Job bank retention: archive at 7 days, delete at 30 days
+  const now = Date.now();
+  const archiveCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const deleteCutoff = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: archiveCandidates, error: archiveError } = await supabaseServer
+    .from("job_posts")
+    .select("id")
+    .or(`created_at.lt.${archiveCutoff},discovered_at.lt.${archiveCutoff}`)
+    .is("archived_at", null)
+    .eq("is_active", true);
+
+  if (archiveError) {
+    return Response.json(
+      { success: false, error: "Failed to load job post archive candidates." },
+      { status: 500 }
+    );
+  }
+
+  const { data: deleteCandidates, error: deleteError } = await supabaseServer
+    .from("job_posts")
+    .select("id")
+    .lt("archived_at", deleteCutoff);
+
+  if (deleteError) {
+    return Response.json(
+      { success: false, error: "Failed to load job post delete candidates." },
+      { status: 500 }
+    );
+  }
+
+  const archiveIds = (archiveCandidates ?? []).map((row) => row.id);
+  const deleteIds = (deleteCandidates ?? []).map((row) => row.id);
+  const candidateIds = Array.from(new Set([...archiveIds, ...deleteIds]));
+
+  let jobPostsArchived = 0;
+  let jobPostsDeleted = 0;
+
+  if (candidateIds.length > 0) {
+    const [{ data: queueRows, error: queueError }, { data: runRows, error: runError }] =
+      await Promise.all([
+        supabaseServer
+          .from("application_queue")
+          .select("job_post_id")
+          .in("job_post_id", candidateIds),
+        supabaseServer
+          .from("application_runs")
+          .select("job_post_id")
+          .in("job_post_id", candidateIds),
+      ]);
+
+    if (queueError || runError) {
+      return Response.json(
+        { success: false, error: "Failed to load job post references." },
+        { status: 500 }
+      );
+    }
+
+    const blockedIds = new Set<string>();
+    for (const row of queueRows ?? []) {
+      if (row.job_post_id) blockedIds.add(row.job_post_id);
+    }
+    for (const row of runRows ?? []) {
+      if (row.job_post_id) blockedIds.add(row.job_post_id);
+    }
+
+    const toArchive = archiveIds.filter((id) => !blockedIds.has(id));
+    const toDelete = deleteIds.filter((id) => !blockedIds.has(id));
+
+    const nowIso = new Date().toISOString();
+    const chunkSize = 200;
+
+    for (let i = 0; i < toArchive.length; i += chunkSize) {
+      const chunk = toArchive.slice(i, i + chunkSize);
+      const { error } = await supabaseServer
+        .from("job_posts")
+        .update({ is_active: false, archived_at: nowIso })
+        .in("id", chunk);
+      if (error) {
+        return Response.json(
+          { success: false, error: "Failed to archive job posts." },
+          { status: 500 }
+        );
+      }
+      jobPostsArchived += chunk.length;
+    }
+
+    for (let i = 0; i < toDelete.length; i += chunkSize) {
+      const chunk = toDelete.slice(i, i + chunkSize);
+      const { error } = await supabaseServer
+        .from("job_posts")
+        .delete()
+        .in("id", chunk);
+      if (error) {
+        return Response.json(
+          { success: false, error: "Failed to delete job posts." },
+          { status: 500 }
+        );
+      }
+      jobPostsDeleted += chunk.length;
+    }
+  }
+
+  // Tailored resume cleanup for rejected/failed jobs
+  const { data: rejectedQueue, error: rejectedError } = await supabaseServer
+    .from("application_queue")
+    .select("job_seeker_id, job_post_id")
+    .in("status", ["REJECTED", "FAILED"]);
+
+  if (rejectedError) {
+    return Response.json(
+      { success: false, error: "Failed to load rejected queue items." },
+      { status: 500 }
+    );
+  }
+
+  const { data: failedRuns, error: failedRunsError } = await supabaseServer
+    .from("application_runs")
+    .select("job_seeker_id, job_post_id")
+    .eq("status", "FAILED");
+
+  if (failedRunsError) {
+    return Response.json(
+      { success: false, error: "Failed to load failed runs." },
+      { status: 500 }
+    );
+  }
+
+  const pairSet = new Set<string>();
+  const addPair = (row: Pair) => {
+    if (row.job_seeker_id && row.job_post_id) {
+      pairSet.add(`${row.job_seeker_id}:${row.job_post_id}`);
+    }
+  };
+
+  (rejectedQueue ?? []).forEach(addPair);
+  (failedRuns ?? []).forEach(addPair);
+
+  let tailoredResumesDeleted = 0;
+  let tailoredResumeFilesDeleted = 0;
+
+  if (pairSet.size > 0) {
+    const jobSeekerIds = new Set<string>();
+    const jobPostIds = new Set<string>();
+
+    for (const key of pairSet) {
+      const [jobSeekerId, jobPostId] = key.split(":");
+      jobSeekerIds.add(jobSeekerId);
+      jobPostIds.add(jobPostId);
+    }
+
+    const { data: tailoredRows, error: tailoredError } = await supabaseServer
+      .from("tailored_resumes")
+      .select("id, job_seeker_id, job_post_id")
+      .in("job_seeker_id", Array.from(jobSeekerIds))
+      .in("job_post_id", Array.from(jobPostIds));
+
+    if (tailoredError) {
+      return Response.json(
+        { success: false, error: "Failed to load tailored resumes." },
+        { status: 500 }
+      );
+    }
+
+    const toDeleteRows = (tailoredRows ?? []).filter((row) =>
+      pairSet.has(`${row.job_seeker_id}:${row.job_post_id}`)
+    );
+
+    if (toDeleteRows.length > 0) {
+      const paths = toDeleteRows.map(
+        (row) => `${row.job_seeker_id}/tailored/${row.job_post_id}.pdf`
+      );
+
+      const { data: removedFiles, error: removeError } = await supabaseServer.storage
+        .from("resumes")
+        .remove(paths);
+
+      if (removeError) {
+        console.error("Failed to remove tailored resume files:", removeError);
+      }
+
+      tailoredResumeFilesDeleted = removedFiles?.length ?? 0;
+
+      const chunkSize = 200;
+      const ids = toDeleteRows.map((row) => row.id);
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        const { error } = await supabaseServer
+          .from("tailored_resumes")
+          .delete()
+          .in("id", chunk);
+        if (error) {
+          return Response.json(
+            { success: false, error: "Failed to delete tailored resumes." },
+            { status: 500 }
+          );
+        }
+      }
+
+      tailoredResumesDeleted = toDeleteRows.length;
+    }
+  }
+
+  const cutoffIso = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
   const { data: voiceSessions, error: voiceError } = await supabaseServer
     .from("voice_interview_sessions")
     .delete()
@@ -58,6 +263,10 @@ async function runRetention(request: Request) {
       apply_run_events: eventsCount ?? 0,
       ops_alerts: alertsCount ?? 0,
       voice_sessions: voiceSessions?.length ?? 0,
+      job_posts_archived: jobPostsArchived,
+      job_posts_deleted: jobPostsDeleted,
+      tailored_resumes_deleted: tailoredResumesDeleted,
+      tailored_resume_files_deleted: tailoredResumeFilesDeleted,
     },
   });
 }

@@ -32,6 +32,8 @@ interface AppRun {
   created_at: string;
   updated_at?: string;
   error_message?: string;
+  resume_url_used?: string | null;
+  resume_source?: string | null;
   job_posts?: JobPost | JobPost[] | null;
   // Legacy fields
   job_url?: string;
@@ -97,6 +99,8 @@ export default function ApplicationsClient({
           type: "queued" as const,
           category: q.category || null,
           error: null as string | null,
+          resumeUrl: null as string | null,
+          resumeSource: null as string | null,
         };
       }),
       ...initialRuns.map((r) => {
@@ -113,6 +117,8 @@ export default function ApplicationsClient({
           type: "run" as const,
           error: r.error_message || null,
           category: null as string | null,
+          resumeUrl: r.resume_url_used ?? null,
+          resumeSource: r.resume_source ?? null,
         };
       }),
     ];
@@ -304,6 +310,20 @@ export default function ApplicationsClient({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
                         View Job Posting
+                      </a>
+                    )}
+                    {app.resumeUrl && (
+                      <a
+                        href={app.resumeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-purple-700 hover:underline mt-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 2v6h6" />
+                        </svg>
+                        Resume Used{app.resumeSource ? ` (${app.resumeSource === "TAILORED" ? "Tailored" : "Base"})` : ""}
                       </a>
                     )}
                   </div>
