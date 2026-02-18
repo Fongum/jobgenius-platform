@@ -10,6 +10,7 @@
 
 import { scrapeJobs } from './scraper.js';
 import * as api from './api.js';
+import { getAdapter } from './adapters/base.js';
 import { logLine } from '../logger.js';
 
 // Configuration
@@ -111,13 +112,42 @@ export async function processSearch(search) {
     const { run_id } = await api.startDiscoveryRun(search.id);
     runId = run_id;
 
-    // Execute scraping
-    const result = await scrapeJobs(source, search.search_url, {
-      maxPages: DEFAULT_MAX_PAGES,
-      maxJobs: DEFAULT_MAX_JOBS,
-      headless: true,
-      fetchDescriptions: true
-    });
+    // Dispatch by source_type
+    const sourceType = source.source_type || 'scraper';
+    let result;
+
+    if (sourceType === 'scraper') {
+      // Existing Playwright path
+      result = await scrapeJobs(source, search.search_url, {
+        maxPages: DEFAULT_MAX_PAGES,
+        maxJobs: DEFAULT_MAX_JOBS,
+        headless: true,
+        fetchDescriptions: true
+      });
+    } else {
+      // API/Feed adapter path
+      const adapter = getAdapter(source.name);
+      if (!adapter) {
+        throw new Error(`No adapter for source: ${source.name}`);
+      }
+
+      const jobs = await adapter.fetchJobs(source, {
+        searchUrl: search.search_url,
+        keywords: search.keywords,
+        location: search.location,
+        ...search.filters,
+        maxJobs: DEFAULT_MAX_JOBS,
+      });
+
+      result = {
+        status: 'COMPLETED',
+        jobs_found: jobs.length,
+        jobs_new: 0,
+        jobs_updated: 0,
+        pages_scraped: 0,
+        jobs,
+      };
+    }
 
     result.run_id = runId;
 
@@ -155,10 +185,10 @@ export async function processSearch(search) {
 }
 
 /**
- * Run a one-off discovery for a specific URL
- * @param {string} sourceName - 'linkedin', 'indeed', 'glassdoor'
- * @param {string} searchUrl - Full search URL
- * @param {Object} options - Scraping options
+ * Run a one-off discovery for a specific URL or adapter source
+ * @param {string} sourceName - 'linkedin', 'indeed', 'glassdoor', 'remotive', etc.
+ * @param {string} searchUrl - Full search URL (for scraper sources)
+ * @param {Object} options - Scraping/adapter options
  * @returns {Promise<import('./types.js').DiscoveryRunResult>}
  */
 export async function runOnce(sourceName, searchUrl, options = {}) {
@@ -172,13 +202,39 @@ export async function runOnce(sourceName, searchUrl, options = {}) {
     throw new Error(`Unknown source: ${sourceName}. Available: ${sources.map(s => s.name).join(', ')}`);
   }
 
-  // Run scraper
-  const result = await scrapeJobs(source, searchUrl, {
-    maxPages: options.maxPages || DEFAULT_MAX_PAGES,
-    maxJobs: options.maxJobs || DEFAULT_MAX_JOBS,
-    headless: options.headless !== false,
-    fetchDescriptions: options.fetchDescriptions !== false
-  });
+  const sourceType = source.source_type || 'scraper';
+  let result;
+
+  if (sourceType === 'scraper') {
+    // Existing Playwright path
+    result = await scrapeJobs(source, searchUrl, {
+      maxPages: options.maxPages || DEFAULT_MAX_PAGES,
+      maxJobs: options.maxJobs || DEFAULT_MAX_JOBS,
+      headless: options.headless !== false,
+      fetchDescriptions: options.fetchDescriptions !== false
+    });
+  } else {
+    // API/Feed adapter path
+    const adapter = getAdapter(source.name);
+    if (!adapter) {
+      throw new Error(`No adapter for source: ${source.name}`);
+    }
+
+    const jobs = await adapter.fetchJobs(source, {
+      searchUrl,
+      maxJobs: options.maxJobs || DEFAULT_MAX_JOBS,
+      ...options,
+    });
+
+    result = {
+      status: 'COMPLETED',
+      jobs_found: jobs.length,
+      jobs_new: 0,
+      jobs_updated: 0,
+      pages_scraped: 0,
+      jobs,
+    };
+  }
 
   // Save jobs if requested
   if (options.save !== false && result.jobs.length > 0) {

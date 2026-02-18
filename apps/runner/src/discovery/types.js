@@ -77,4 +77,16 @@
  * @property {string} [userAgent] - Custom user agent
  */
 
+/**
+ * @typedef {Object} AdapterSearchConfig
+ * @property {string} [searchUrl]
+ * @property {string|string[]} [keywords]
+ * @property {string} [location]
+ * @property {string} [category]
+ * @property {string} [company] - For ATS feed adapters (greenhouse, lever, ashby)
+ * @property {string} [level]
+ * @property {number} [maxJobs]
+ * @property {number} [page]
+ */
+
 export {};

@@ -751,6 +751,7 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
     return;
   }
 
+  let hasTailoredResumeUrl = false;
   if (AUTO_TAILOR_REQUIRED) {
     const { data: tailored } = await supabaseServer
       .from("tailored_resumes")
@@ -759,8 +760,8 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
       .eq("job_post_id", queueItem.job_post_id)
       .maybeSingle();
 
-    const hasTailored = Boolean(tailored?.id && tailored.resume_url);
-    if (!hasTailored) {
+    hasTailoredResumeUrl = Boolean(tailored?.id && tailored.resume_url);
+    if (!hasTailoredResumeUrl) {
       if (AUTO_TAILOR_ENABLED) {
         await supabaseServer
           .from("application_queue")
@@ -789,7 +790,7 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
     .eq("id", queueItem.job_seeker_id)
     .maybeSingle();
 
-  if (!seekerForResume?.resume_url) {
+  if (!seekerForResume?.resume_url && !hasTailoredResumeUrl) {
     await flagQueueAttention(
       queueItem.id,
       "RESUME_MISSING",
