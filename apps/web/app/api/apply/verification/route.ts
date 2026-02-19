@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { requireAuth } from "@/lib/auth/middleware";
 import { supabaseServer } from "@/lib/supabase/server";
 import { GmailClient } from "@/lib/gmail/client";
 
@@ -12,9 +13,12 @@ import { GmailClient } from "@/lib/gmail/client";
  * Returns: { codes: string[], emails: [...] } or { codes: [] } if none found
  */
 export async function POST(request: Request) {
-  const auth = requireOpsAuth(request.headers, request.url);
-  if (!auth.ok) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const opsAuth = requireOpsAuth(request.headers, request.url);
+  if (!opsAuth.ok) {
+    const auth = await requireAuth(request);
+    if (!auth.authenticated || auth.user.userType !== "am") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   let body: { job_seeker_id?: string; minutes_ago?: number };
@@ -92,3 +96,5 @@ export async function POST(request: Request) {
     });
   }
 }
+
+
