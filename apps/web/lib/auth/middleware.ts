@@ -6,12 +6,20 @@
 
 import { cookies } from "next/headers";
 import crypto from "crypto";
-import { getCurrentUser, getUserByAuthId, supabaseAdmin } from "./server";
+import { getCurrentUser, getUserByAuthId, supabaseAdmin, refreshSession } from "./server";
 import type { AuthUser, UserType } from "./types";
 
 // Cookie names
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
+const REFRESH_TOKEN_COOKIE = "jg_refresh_token";
 const USER_TYPE_COOKIE = "jg_user_type";
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+};
 
 /**
  * Result of authentication check
@@ -56,6 +64,30 @@ export async function authenticateRequest(
     const user = await verifyToken(accessToken);
     if (user) {
       return { authenticated: true, user };
+    }
+  }
+
+  // 3. Access token missing or expired — try auto-refresh using refresh token
+  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
+  if (refreshToken) {
+    try {
+      const result = await refreshSession(refreshToken);
+      if (result.success && result.session && result.user) {
+        // Update cookies with new tokens
+        cookieStore.set(ACCESS_TOKEN_COOKIE, result.session.accessToken, {
+          ...COOKIE_OPTIONS,
+          maxAge: 60 * 60, // 1 hour
+        });
+        if (result.session.refreshToken) {
+          cookieStore.set(REFRESH_TOKEN_COOKIE, result.session.refreshToken, {
+            ...COOKIE_OPTIONS,
+            maxAge: 60 * 60 * 24 * 7, // 7 days
+          });
+        }
+        return { authenticated: true, user: result.user };
+      }
+    } catch {
+      // Refresh failed — fall through to unauthenticated
     }
   }
 

@@ -184,11 +184,11 @@ async function runRetention(request: Request) {
     const jobSeekerIds = new Set<string>();
     const jobPostIds = new Set<string>();
 
-    for (const key of pairSet) {
+    pairSet.forEach((key) => {
       const [jobSeekerId, jobPostId] = key.split(":");
       jobSeekerIds.add(jobSeekerId);
       jobPostIds.add(jobPostId);
-    }
+    });
 
     const { data: tailoredRows, error: tailoredError } = await supabaseServer
       .from("tailored_resumes")

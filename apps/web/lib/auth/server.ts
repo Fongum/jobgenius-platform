@@ -44,6 +44,11 @@ if (!serviceKeyRole) {
   });
 }
 
+const adminHeaders = {
+  Authorization: `Bearer ${supabaseServiceKey}`,
+  apikey: supabaseServiceKey,
+};
+
 // Service client for admin operations
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -51,8 +56,16 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
     persistSession: false,
   },
   global: {
+    headers: adminHeaders,
     fetch: (url: RequestInfo | URL, init?: RequestInit) => {
-      return fetch(url, { ...init, cache: 'no-store' });
+      const headers = new Headers(init?.headers ?? {});
+      if (!headers.has("Authorization")) {
+        headers.set("Authorization", adminHeaders.Authorization);
+      }
+      if (!headers.has("apikey")) {
+        headers.set("apikey", adminHeaders.apikey);
+      }
+      return fetch(url, { ...init, headers, cache: 'no-store' });
     },
   },
 });
