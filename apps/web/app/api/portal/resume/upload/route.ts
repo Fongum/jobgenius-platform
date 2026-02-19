@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
+import { calculateProfileCompletion } from "@/lib/portal/profile-completion";
 import { getOpenAIClient, isOpenAIConfigured, OPENAI_MODEL } from "@/lib/openai";
 
 /**
@@ -220,10 +221,22 @@ export async function POST(request: Request) {
     seekerUpdates.resume_text = rawText.slice(0, 50000);
   }
 
-  await supabaseAdmin
+  const { data: updatedSeeker } = await supabaseAdmin
     .from("job_seekers")
     .update(seekerUpdates)
-    .eq("id", auth.user.id);
+    .eq("id", auth.user.id)
+    .select("*")
+    .single();
+
+  if (updatedSeeker) {
+    const completion = calculateProfileCompletion(updatedSeeker as Record<string, unknown>);
+    if (typeof completion.percentage === "number") {
+      await supabaseAdmin
+        .from("job_seekers")
+        .update({ profile_completion: completion.percentage })
+        .eq("id", auth.user.id);
+    }
+  }
 
   // Parse resume to extract structured profile data
   // Try AI parsing first, fall back to regex parser

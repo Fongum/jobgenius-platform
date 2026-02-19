@@ -196,6 +196,13 @@ export async function PATCH(request: Request) {
 
   const completion = calculateProfileCompletion(data);
 
+  if (typeof completion.percentage === "number") {
+    await supabaseAdmin
+      .from("job_seekers")
+      .update({ profile_completion: completion.percentage })
+      .eq("id", auth.user.id);
+  }
+
   return Response.json({ profile: data, completion });
 }
 
