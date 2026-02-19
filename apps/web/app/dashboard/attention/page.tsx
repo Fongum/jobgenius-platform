@@ -54,6 +54,14 @@ const reasonOptions = [
   "OTP_REQUIRED",
   "OTP_EMAIL",
   "OTP_SMS",
+  "SMS_OTP",
+  "ACCOUNT_CREATE",
+  "ACCOUNT_REQUIRED",
+  "WORKDAY_ACCOUNT",
+  "CREATE_ACCOUNT",
+  "REAUTH_REQUIRED",
+  "REQUIRED_FIELDS",
+  "UNKNOWN_ATS",
   "DRY_RUN_CONFIRM_SUBMIT",
   "NAVIGATION_ERROR",
   "VALIDATION_ERROR",
@@ -104,7 +112,7 @@ export default async function AttentionPage({ searchParams }: PageProps) {
   }
 
   if (reasonFilter) {
-    query = query.eq("last_error_code", reasonFilter);
+    query = query.or(`needs_attention_reason.eq.${reasonFilter},last_error_code.eq.${reasonFilter}`);
   }
 
   const { data: runRows, error: runError } = await query.order("updated_at", {
@@ -172,3 +180,5 @@ export default async function AttentionPage({ searchParams }: PageProps) {
     </main>
   );
 }
+
+

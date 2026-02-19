@@ -168,6 +168,13 @@ export default function AttentionClient({ rows }: AttentionClientProps) {
         const isDryRun = reason === "DRY_RUN_CONFIRM_SUBMIT";
         const isOtpEmail = reason === "OTP_EMAIL" || reason === "OTP_REQUIRED";
         const isOtpSms = reason === "OTP_SMS" || reason === "SMS_OTP";
+        const isAccountCreate = [
+          "ACCOUNT_CREATE",
+          "ACCOUNT_REQUIRED",
+          "WORKDAY_ACCOUNT",
+          "CREATE_ACCOUNT",
+        ].includes(reason);
+        const isUnknownAts = reason === "UNKNOWN_ATS";
         const otpChannel = isOtpSms ? "SMS" : "EMAIL";
         const missingFields = Array.isArray(
           (row.attention_payload as Record<string, unknown> | null)?.missing_fields
@@ -204,8 +211,21 @@ export default function AttentionClient({ rows }: AttentionClientProps) {
               <div>Reason: {row.last_error_code}</div>
             ) : null}
             {row.last_error ? <div>Last error: {row.last_error}</div> : null}
-            {row.last_seen_url ? <div>Last URL: {row.last_seen_url}</div> : null}
+            {row.last_seen_url ? (
+              <div>
+                Last URL:{" "}
+                <a href={row.last_seen_url} target="_blank" rel="noreferrer">
+                  Open application
+                </a>
+              </div>
+            ) : null}
             <div>Updated: {new Date(row.updated_at).toLocaleString()}</div>
+            {isAccountCreate ? (
+              <div>Action: Create or login to the ATS account, then resume.</div>
+            ) : null}
+            {isUnknownAts ? (
+              <div>Action: Use the extension or tag the ATS adapter.</div>
+            ) : null}
             {reason === "REQUIRED_FIELDS" && missingFields.length > 0 && (
               <div style={{ marginTop: "8px" }}>
                 <strong>Missing required fields:</strong>
@@ -265,7 +285,7 @@ export default function AttentionClient({ rows }: AttentionClientProps) {
                 }
                 disabled={busyId === row.id}
               >
-                {isDryRun ? "Resume (real submit)" : "Resolve"}
+                {isDryRun ? "Resume (real submit)" : "Resume run"}
               </button>
             </div>
           </li>
@@ -275,3 +295,5 @@ export default function AttentionClient({ rows }: AttentionClientProps) {
     </>
   );
 }
+
+

@@ -1,5 +1,6 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 type EnqueuePayload = {
   job_post_id?: string;
@@ -46,13 +47,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const { error } = await supabaseServer.from("application_queue").insert({
+  const { data, error } = await supabaseServer.from("application_queue").insert({
     job_post_id: payload.job_post_id,
     job_seeker_id: payload.job_seeker_id,
     status: "QUEUED",
     category: payload.category ?? "manual",
     updated_at: new Date().toISOString(),
-  });
+  }).select("id").single();
 
   if (error) {
     return Response.json(
@@ -61,5 +62,20 @@ export async function POST(request: Request) {
     );
   }
 
+  if (data?.id) {
+    try {
+      await enqueueBackgroundJob("AUTO_START_RUN", {
+        queue_id: data.id,
+        job_seeker_id: payload.job_seeker_id,
+        job_post_id: payload.job_post_id,
+      });
+    } catch (err) {
+      console.error("Failed to enqueue AUTO_START_RUN", err);
+    }
+  }
+
   return Response.json({ success: true });
 }
+
+
+
