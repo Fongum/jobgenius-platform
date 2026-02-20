@@ -3,6 +3,9 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import WelcomeResumeStep from "./steps/WelcomeResumeStep";
+import PlanSelectionStep from "./steps/PlanSelectionStep";
+import ContractStep from "./steps/ContractStep";
+import InstallmentPlanStep from "./steps/InstallmentPlanStep";
 import AboutYouStep from "./steps/AboutYouStep";
 import JobPreferencesStep from "./steps/JobPreferencesStep";
 import WorkStyleLocationStep from "./steps/WorkStyleLocationStep";
@@ -55,12 +58,15 @@ export interface DocRecord {
 // ─── Step Definitions ──────────────────────────────────────────
 
 const STEPS = [
-  { id: "welcome", label: "Welcome" },
-  { id: "about", label: "About You" },
+  { id: "welcome",     label: "Welcome" },
+  { id: "plan",        label: "Choose Plan" },
+  { id: "contract",    label: "Agreement" },
+  { id: "payment",     label: "Payment Plan" },
+  { id: "about",       label: "About You" },
   { id: "preferences", label: "Job Preferences" },
-  { id: "workstyle", label: "Work Style" },
-  { id: "salary", label: "Salary & Availability" },
-  { id: "review", label: "Review" },
+  { id: "workstyle",   label: "Work Style" },
+  { id: "salary",      label: "Salary & Availability" },
+  { id: "review",      label: "Review" },
 ];
 
 // ─── Progress Bar ──────────────────────────────────────────────
@@ -135,6 +141,7 @@ export default function OnboardingWizard({
   const [profile, setProfile] = useState<ProfileData>(initial);
   const [docs, setDocs] = useState<DocRecord[]>(initialDocs);
   const [saving, setSaving] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<"essentials" | "premium" | null>(null);
 
   const update = useCallback((key: keyof ProfileData, value: unknown) => {
     setProfile((p) => ({ ...p, [key]: value }));
@@ -214,6 +221,30 @@ export default function OnboardingWizard({
         />
       )}
       {currentStep === 1 && (
+        <PlanSelectionStep
+          selectedPlan={selectedPlan}
+          onSelectPlan={(plan) => setSelectedPlan(plan)}
+          onContinue={goNext}
+          onBack={goBack}
+        />
+      )}
+      {currentStep === 2 && selectedPlan && (
+        <ContractStep
+          seekerName={profile.full_name || userEmail}
+          seekerEmail={profile.email || userEmail}
+          planType={selectedPlan}
+          onContinue={goNext}
+          onBack={goBack}
+        />
+      )}
+      {currentStep === 3 && selectedPlan && (
+        <InstallmentPlanStep
+          planType={selectedPlan}
+          onContinue={goNext}
+          onBack={goBack}
+        />
+      )}
+      {currentStep === 4 && (
         <AboutYouStep
           profile={profile}
           update={update}
@@ -223,7 +254,7 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 2 && (
+      {currentStep === 5 && (
         <JobPreferencesStep
           profile={profile}
           update={update}
@@ -233,7 +264,7 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 3 && (
+      {currentStep === 6 && (
         <WorkStyleLocationStep
           profile={profile}
           update={update}
@@ -243,7 +274,7 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 4 && (
+      {currentStep === 7 && (
         <SalaryAvailabilityStep
           profile={profile}
           update={update}
@@ -253,7 +284,7 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 5 && (
+      {currentStep === 8 && (
         <ReviewFinishStep
           profile={profile}
           saving={saving}
