@@ -42,14 +42,7 @@ import { getAdapter, listAdapters } from './discovery/adapters/base.js';
 import fs from 'fs';
 
 // Import adapters to trigger self-registration
-import './discovery/adapters/adzuna.js';
-import './discovery/adapters/remotive.js';
-import './discovery/adapters/themuse.js';
-import './discovery/adapters/arbeitnow.js';
-import './discovery/adapters/greenhouse-feed.js';
-import './discovery/adapters/lever-feed.js';
-import './discovery/adapters/ashby-feed.js';
-import './discovery/adapters/hn-hiring.js';
+import './discovery/adapters/register.js';
 
 // Default job source configurations (scraper sources only — adapters self-register)
 const DEFAULT_SOURCES = {

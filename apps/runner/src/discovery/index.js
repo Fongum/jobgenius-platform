@@ -30,14 +30,7 @@ import * as api from './api.js';
 import { getAdapter, listAdapters } from './adapters/base.js';
 
 // Import adapters to trigger self-registration
-import './adapters/adzuna.js';
-import './adapters/remotive.js';
-import './adapters/themuse.js';
-import './adapters/arbeitnow.js';
-import './adapters/greenhouse-feed.js';
-import './adapters/lever-feed.js';
-import './adapters/ashby-feed.js';
-import './adapters/hn-hiring.js';
+import './adapters/register.js';
 
 export {
   agent,

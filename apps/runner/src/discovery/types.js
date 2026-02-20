@@ -3,11 +3,13 @@
  * @property {string} id
  * @property {string} name - 'linkedin', 'indeed', 'glassdoor'
  * @property {string} base_url
+ * @property {'scraper' | 'api' | 'feed'} [source_type]
  * @property {boolean} enabled
  * @property {number} rate_limit_per_minute
  * @property {boolean} requires_auth
  * @property {Object} auth_config
- * @property {SourceSelectors} selectors
+ * @property {Object} [adapter_config]
+ * @property {SourceSelectors | Object} selectors
  */
 
 /**
@@ -36,8 +38,11 @@
  * @property {Object} filters
  * @property {boolean} enabled
  * @property {string} [last_run_at]
+ * @property {string} [next_run_at]
  * @property {number} last_job_count
  * @property {number} run_frequency_hours
+ * @property {string} [source_name]
+ * @property {JobSource} [source]
  */
 
 /**
