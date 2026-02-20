@@ -1,0 +1,244 @@
+"use client";
+
+import { useState } from "react";
+import type { ContactRow } from "./NetworkClient";
+
+interface AddContactFormProps {
+  onClose: () => void;
+  onAdded: (contact: ContactRow) => void;
+}
+
+export default function AddContactForm({ onClose, onAdded }: AddContactFormProps) {
+  const [contactType, setContactType] = useState<"recruiter" | "referral">("recruiter");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [industriesText, setIndustriesText] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullName.trim()) {
+      setError("Name is required.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    const industries = industriesText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    try {
+      const res = await fetch("/api/am/network/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_type: contactType,
+          full_name: fullName.trim(),
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
+          linkedin_url: linkedinUrl.trim() || undefined,
+          company_name: companyName.trim() || undefined,
+          job_title: jobTitle.trim() || undefined,
+          industries: industries.length > 0 ? industries : undefined,
+          notes: notes.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create contact.");
+      }
+
+      const data = await res.json();
+      onAdded({ ...data.contact, pending_match_count: 0 });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b">
+          <h2 className="text-lg font-semibold text-gray-900">Add Contact</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+          >
+            &times;
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Contact Type Toggle */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Contact Type
+            </label>
+            <div className="flex gap-2">
+              {(["recruiter", "referral"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setContactType(type)}
+                  className={`px-4 py-2 text-sm rounded-lg border transition ${
+                    contactType === type
+                      ? "bg-blue-50 border-blue-300 text-blue-700 font-medium"
+                      : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Full Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Full Name *
+            </label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Jane Smith"
+            />
+          </div>
+
+          {/* Email + Phone row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="jane@company.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone
+              </label>
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="+1 555-0123"
+              />
+            </div>
+          </div>
+
+          {/* LinkedIn */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              LinkedIn URL
+            </label>
+            <input
+              type="url"
+              value={linkedinUrl}
+              onChange={(e) => setLinkedinUrl(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://linkedin.com/in/janesmith"
+            />
+          </div>
+
+          {/* Company + Job Title row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Company
+              </label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Google"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Job Title
+              </label>
+              <input
+                type="text"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Senior Recruiter"
+              />
+            </div>
+          </div>
+
+          {/* Industries */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Industries{" "}
+              <span className="text-gray-400 font-normal">(comma-separated)</span>
+            </label>
+            <input
+              type="text"
+              value={industriesText}
+              onChange={(e) => setIndustriesText(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Software Engineering, Data Science"
+            />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="Any additional notes..."
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600">{error}</p>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+            >
+              {saving ? "Saving..." : "Add Contact"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

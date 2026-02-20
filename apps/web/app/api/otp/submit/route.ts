@@ -1,4 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
+import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { requireOpsAuth } from "@/lib/ops-auth";
 
 type OtpPayload = {
   job_seeker_id?: string;
@@ -33,6 +35,30 @@ export async function POST(request: Request) {
       { success: false, error: "Invalid channel." },
       { status: 400 }
     );
+  }
+
+  // Authorize: OPS key or AM assigned to this seeker.
+  const opsAuth = requireOpsAuth(request.headers, request.url);
+  if (!opsAuth.ok) {
+    const amResult = await getAccountManagerFromRequest(request.headers);
+    if ("error" in amResult) {
+      return Response.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
+    const allowed = await hasJobSeekerAccess(
+      amResult.accountManager.id,
+      payload.job_seeker_id
+    );
+
+    if (!allowed) {
+      return Response.json(
+        { success: false, error: "Not authorized for this job seeker." },
+        { status: 403 }
+      );
+    }
   }
 
   const { error } = await supabaseServer.from("otp_inbox").insert({

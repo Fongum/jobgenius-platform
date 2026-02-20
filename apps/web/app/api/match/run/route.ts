@@ -1,4 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
+import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { requireOpsAuth } from "@/lib/ops-auth";
 import {
   computeMatchScore,
   parseJobPost,
@@ -48,6 +50,30 @@ export async function POST(request: Request) {
       { success: false, error: "Missing job_seeker_id." },
       { status: 400 }
     );
+  }
+
+  // Authorize: OPS key or AM with access to this job seeker.
+  const opsAuth = requireOpsAuth(request.headers, request.url);
+  if (!opsAuth.ok) {
+    const amResult = await getAccountManagerFromRequest(request.headers);
+    if ("error" in amResult) {
+      return Response.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
+    const allowed = await hasJobSeekerAccess(
+      amResult.accountManager.id,
+      payload.job_seeker_id
+    );
+
+    if (!allowed) {
+      return Response.json(
+        { success: false, error: "Not authorized for this job seeker." },
+        { status: 403 }
+      );
+    }
   }
 
   // Fetch job seeker with all preference fields including custom weights
@@ -335,7 +361,18 @@ export async function POST(request: Request) {
  *
  * Returns information about the matching algorithm and scoring weights.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const opsAuth = requireOpsAuth(request.headers, request.url);
+  if (!opsAuth.ok) {
+    const amResult = await getAccountManagerFromRequest(request.headers);
+    if ("error" in amResult) {
+      return Response.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+  }
+
   return Response.json({
     algorithm: "intelligent_match_v1",
     weights: {

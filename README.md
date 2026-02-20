@@ -72,8 +72,8 @@ An autonomous job application, interview prep, and recruiter collaboration platf
   - `/api/background/run` processes queued background jobs via GitHub Actions every 5 minutes (`OPS_API_KEY` required).
   - `/api/outreach/metrics` exposes conversion + telemetry metrics (ops or authorized AM).
   - One-time backfill (safe dry-run default):
-    - `GET /api/outreach/backfill/run?ops_key=${OPS_API_KEY}`
-    - Apply changes: `GET /api/outreach/backfill/run?ops_key=${OPS_API_KEY}&dry_run=false`
+    - `curl -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/outreach/backfill/run"`
+    - Apply changes: `curl -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/outreach/backfill/run?dry_run=false"`
   - Dashboard view: `/dashboard/outreach/conversion`.
 
 ## Scheduling
@@ -91,3 +91,14 @@ Schedules:
 ## Demo seed/reset
 - `POST /api/seed/demo` creates a demo AM/jobseeker, two jobs, one READY run, and one NEEDS_ATTENTION run.
 - `POST /api/seed/reset` deletes the demo data.
+- Seed routes are disabled in production unless `ALLOW_SEED_ENDPOINTS=true`, and production calls must include `x-ops-key: ${OPS_API_KEY}`.
+
+## Security controls
+- Login rate limit envs:
+  - `AUTH_LOGIN_RATE_LIMIT_MAX` (default `10`)
+  - `AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC` (default `900`)
+  - `AUTH_LOGIN_RATE_LIMIT_BLOCK_SEC` (default `900`)
+- Extension auth rate limit envs:
+  - `EXTENSION_AUTH_RATE_LIMIT_MAX` (default `8`)
+  - `EXTENSION_AUTH_RATE_LIMIT_WINDOW_SEC` (default `900`)
+  - `EXTENSION_AUTH_RATE_LIMIT_BLOCK_SEC` (default `900`)

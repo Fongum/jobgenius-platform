@@ -24,7 +24,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS "${WEB_BASE_URL}/api/ops/alerts/run?ops_key=${OPS_API_KEY}"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/alerts/run"
 
   background-jobs:
     name: Background Jobs
@@ -36,7 +36,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS "${WEB_BASE_URL}/api/background/run?ops_key=${OPS_API_KEY}"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run"
 
   outreach-scheduler:
     name: Outreach Scheduler
@@ -48,7 +48,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS "${WEB_BASE_URL}/api/outreach/scheduler/run?ops_key=${OPS_API_KEY}"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/outreach/scheduler/run"
 
   retention:
     name: Retention Cleanup
@@ -60,7 +60,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS "${WEB_BASE_URL}/api/ops/retention/run?ops_key=${OPS_API_KEY}"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/retention/run"
 
   gmail-inbox-scan:
     name: Gmail Inbox Scan
@@ -72,7 +72,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS "${WEB_BASE_URL}/api/gmail/scan?ops_key=${OPS_API_KEY}"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/gmail/scan"
 
   intelligence-feedback:
     name: Intelligence Feedback Loop
@@ -84,4 +84,4 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS "${WEB_BASE_URL}/api/ops/intelligence/run?ops_key=${OPS_API_KEY}"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/intelligence/run"

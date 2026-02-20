@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { guardApiRequest } from "./lib/api-guard";
 
 // Routes that require authentication
 const PROTECTED_ROUTES = ["/dashboard", "/portal"];
@@ -13,6 +14,14 @@ const USER_TYPE_COOKIE = "jg_user_type";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith("/api")) {
+    const blocked = guardApiRequest(request);
+    if (blocked) {
+      return blocked;
+    }
+    return NextResponse.next();
+  }
 
   // Get auth state from cookies
   const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
@@ -59,12 +68,11 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except:
-     * - api routes (they handle their own auth)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public files
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|public).*)",
+    "/((?!_next/static|_next/image|favicon.ico|public).*)",
   ],
 };

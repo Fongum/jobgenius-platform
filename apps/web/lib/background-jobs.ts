@@ -7,7 +7,8 @@ export type BackgroundJobType =
   | "AUTO_START_RUN"
   | "AUTO_OUTREACH"
   | "SCAN_INBOX"
-  | "INTERVIEW_PREP_READY";
+  | "INTERVIEW_PREP_READY"
+  | "MATCH_NETWORK_CONTACTS";
 
 export type BackgroundJobPayload = {
   job_post_id?: string;
@@ -17,6 +18,7 @@ export type BackgroundJobPayload = {
   interview_id?: string;
   queue_id?: string;
   contact_ids?: string[];
+  network_contact_id?: string;
 };
 
 type EnqueueOptions = {

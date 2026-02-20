@@ -3,7 +3,13 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { computeMatchScore, parseJobPost } from "@/lib/matching";
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { tailorResume } from "@/lib/resume-tailor";
+import {
+  tailorResumeStructured,
+  buildStructuredResumeFromSeeker,
+} from "@/lib/resume-tailor";
 import { buildPagedPdf } from "@/lib/pdf";
+import { renderResumePdf } from "@/lib/resume-templates";
+import type { ResumeTemplateId } from "@/lib/resume-templates";
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
 import { buildInterviewPrepContentWithAI } from "@/lib/interview-prep-ai";
 import { isOpenAIConfigured } from "@/lib/openai";
@@ -11,6 +17,7 @@ import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { interviewPrepReadyEmail } from "@/lib/email-templates/interview-prep-ready";
 import { scanAllInboxes, scanSeekerInbox } from "@/lib/gmail/inbox-scanner";
+import { findMatchesForContact, findMatchesForJobPost } from "@/lib/network/matching";
 import { randomUUID } from "crypto";
 
 type BackgroundJobRow = {
@@ -462,6 +469,17 @@ async function runAutoMatch(payload: Record<string, unknown>) {
       }
     }
   }
+
+  // After scoring, check network contacts for matches against these job posts
+  if (amId) {
+    for (const postId of jobPostIds) {
+      try {
+        await findMatchesForJobPost(postId, amId);
+      } catch (err) {
+        console.error("Network contact matching failed for post", postId, err);
+      }
+    }
+  }
 }
 
 async function runTailorResume(payload: Record<string, unknown>) {
@@ -511,7 +529,9 @@ async function runTailorResume(payload: Record<string, unknown>) {
 
   const { data: seeker } = await supabaseServer
     .from("job_seekers")
-    .select("resume_text")
+    .select(
+      "resume_text, full_name, email, phone, linkedin_url, address_city, address_state, skills, work_history, education, bio, resume_template_id"
+    )
     .eq("id", jobSeekerId)
     .maybeSingle();
 
@@ -521,62 +541,140 @@ async function runTailorResume(payload: Record<string, unknown>) {
     .eq("id", jobPostId)
     .maybeSingle();
 
-  if (!seeker?.resume_text || !jobPost?.description_text) {
+  if ((!seeker?.resume_text && !seeker?.email) || !jobPost?.description_text) {
     if (queueId) {
       await flagQueueAttention(queueId, "TAILOR_INPUT_MISSING", "Resume or job description missing.");
     }
     return;
   }
 
-  const result = await tailorResume({
-    resumeText: seeker.resume_text,
-    jobTitle: jobPost.title ?? "",
-    company: jobPost.company ?? null,
-    jobDescription: jobPost.description_text ?? null,
-    requiredSkills: (jobPost.required_skills as string[] | null) ?? null,
-    preferredSkills: (jobPost.preferred_skills as string[] | null) ?? null,
-  });
-
+  const templateId = (seeker.resume_template_id || "classic") as ResumeTemplateId;
   const nowIso = new Date().toISOString();
   let tailoredResumeUrl: string | null = null;
 
+  // Try structured tailoring first, fall back to plain text
+  let tailoredText: string;
+  let changesSummary: string;
+  let tailoredData: unknown = null;
+  let usedTemplateId: string = templateId;
+
   try {
-    const lines = wrapTextToLines(result.tailoredText);
-    const pdfBuffer = buildPagedPdf(lines);
-    const storagePath = `${jobSeekerId}/tailored/${jobPostId}.pdf`;
-    const { error: uploadError } = await supabaseServer.storage
-      .from("resumes")
-      .upload(storagePath, pdfBuffer, {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (uploadError) {
-      throw uploadError;
-    }
+    const baseResume = buildStructuredResumeFromSeeker({
+      full_name: seeker.full_name ?? null,
+      email: seeker.email ?? "",
+      phone: seeker.phone ?? null,
+      linkedin_url: seeker.linkedin_url ?? null,
+      address_city: seeker.address_city ?? null,
+      address_state: seeker.address_state ?? null,
+      bio: seeker.bio ?? null,
+      skills: seeker.skills ?? null,
+      work_history: seeker.work_history,
+      education: seeker.education,
+      resume_text: seeker.resume_text ?? null,
+    });
 
-    const { data: signedUrlData } = await supabaseServer.storage
-      .from("resumes")
-      .createSignedUrl(storagePath, 365 * 24 * 60 * 60);
+    const structuredResult = await tailorResumeStructured({
+      baseResume,
+      jobTitle: jobPost.title ?? "",
+      company: jobPost.company ?? null,
+      jobDescription: jobPost.description_text ?? null,
+      requiredSkills: (jobPost.required_skills as string[] | null) ?? null,
+      preferredSkills: (jobPost.preferred_skills as string[] | null) ?? null,
+    });
 
-    if (signedUrlData?.signedUrl) {
-      tailoredResumeUrl = signedUrlData.signedUrl;
-    } else {
-      const { data: urlData } = supabaseServer.storage
+    tailoredText = structuredResult.tailoredText;
+    changesSummary = structuredResult.changesSummary;
+    tailoredData = structuredResult.tailoredData;
+    usedTemplateId = templateId;
+
+    // Generate formatted PDF from structured data
+    try {
+      const pdfBuffer = renderResumePdf(structuredResult.tailoredData, templateId);
+      const storagePath = `${jobSeekerId}/tailored/${jobPostId}.pdf`;
+      const { error: uploadError } = await supabaseServer.storage
         .from("resumes")
-        .getPublicUrl(storagePath);
-      tailoredResumeUrl = urlData.publicUrl ?? null;
+        .upload(storagePath, pdfBuffer, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: signedUrlData } = await supabaseServer.storage
+        .from("resumes")
+        .createSignedUrl(storagePath, 365 * 24 * 60 * 60);
+
+      if (signedUrlData?.signedUrl) {
+        tailoredResumeUrl = signedUrlData.signedUrl;
+      } else {
+        const { data: urlData } = supabaseServer.storage
+          .from("resumes")
+          .getPublicUrl(storagePath);
+        tailoredResumeUrl = urlData.publicUrl ?? null;
+      }
+    } catch (pdfError) {
+      console.error("Structured PDF upload failed:", pdfError);
     }
-  } catch (error) {
-    console.error("Tailored resume file upload failed:", error);
+  } catch (structuredError) {
+    console.error("Structured tailoring failed, falling back to plain text:", structuredError);
+
+    if (!seeker.resume_text) {
+      if (queueId) {
+        await flagQueueAttention(queueId, "TAILOR_INPUT_MISSING", "Resume text missing and structured tailoring failed.");
+      }
+      return;
+    }
+
+    const result = await tailorResume({
+      resumeText: seeker.resume_text,
+      jobTitle: jobPost.title ?? "",
+      company: jobPost.company ?? null,
+      jobDescription: jobPost.description_text ?? null,
+      requiredSkills: (jobPost.required_skills as string[] | null) ?? null,
+      preferredSkills: (jobPost.preferred_skills as string[] | null) ?? null,
+    });
+
+    tailoredText = result.tailoredText;
+    changesSummary = result.changesSummary;
+
+    // Fall back to plain text PDF
+    try {
+      const lines = wrapTextToLines(result.tailoredText);
+      const pdfBuffer = buildPagedPdf(lines);
+      const storagePath = `${jobSeekerId}/tailored/${jobPostId}.pdf`;
+      const { error: uploadError } = await supabaseServer.storage
+        .from("resumes")
+        .upload(storagePath, pdfBuffer, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: signedUrlData } = await supabaseServer.storage
+        .from("resumes")
+        .createSignedUrl(storagePath, 365 * 24 * 60 * 60);
+
+      if (signedUrlData?.signedUrl) {
+        tailoredResumeUrl = signedUrlData.signedUrl;
+      } else {
+        const { data: urlData } = supabaseServer.storage
+          .from("resumes")
+          .getPublicUrl(storagePath);
+        tailoredResumeUrl = urlData.publicUrl ?? null;
+      }
+    } catch (error) {
+      console.error("Tailored resume file upload failed:", error);
+    }
   }
 
   await supabaseServer.from("tailored_resumes").upsert(
     {
       job_seeker_id: jobSeekerId,
       job_post_id: jobPostId,
-      original_text: seeker.resume_text,
-      tailored_text: result.tailoredText,
-      changes_summary: result.changesSummary,
+      original_text: seeker.resume_text ?? "",
+      tailored_text: tailoredText,
+      tailored_data: tailoredData,
+      template_id: usedTemplateId,
+      changes_summary: changesSummary,
       resume_url: tailoredResumeUrl,
       updated_at: nowIso,
     },
@@ -1031,6 +1129,14 @@ async function runScanInbox(payload: Record<string, unknown>) {
   }
 }
 
+async function runMatchNetworkContacts(payload: Record<string, unknown>) {
+  const contactId = getPayloadString(payload, "network_contact_id");
+  if (!contactId) {
+    throw new Error("Missing network_contact_id.");
+  }
+  await findMatchesForContact(contactId);
+}
+
 async function handleJob(job: BackgroundJobRow) {
   if (!job.payload || typeof job.payload !== "object" || Array.isArray(job.payload)) {
     throw new Error("Invalid payload.");
@@ -1055,6 +1161,9 @@ async function handleJob(job: BackgroundJobRow) {
       return;
     case "SCAN_INBOX":
       await runScanInbox(job.payload);
+      return;
+    case "MATCH_NETWORK_CONTACTS":
+      await runMatchNetworkContacts(job.payload);
       return;
     default:
       throw new Error(`Unknown job type: ${job.type}`);

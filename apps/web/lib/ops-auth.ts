@@ -10,19 +10,7 @@ function getHeaderValue(source?: Headers, key?: string) {
   return null;
 }
 
-function getOpsKeyFromUrl(url?: string) {
-  if (!url) {
-    return null;
-  }
-  try {
-    const parsed = new URL(url);
-    return parsed.searchParams.get("ops_key");
-  } catch {
-    return null;
-  }
-}
-
-export function isOpsApiKey(headersSource?: Headers, url?: string) {
+export function isOpsApiKey(headersSource?: Headers) {
   const configuredKey = process.env.OPS_API_KEY;
   if (!configuredKey) {
     return false;
@@ -33,13 +21,9 @@ export function isOpsApiKey(headersSource?: Headers, url?: string) {
     authHeader && authHeader.toLowerCase().startsWith("bearer ")
       ? authHeader.slice(7).trim()
       : null;
-  const queryKey = getOpsKeyFromUrl(url);
 
-  return (
-    directKey === configuredKey ||
-    bearer === configuredKey ||
-    queryKey === configuredKey
-  );
+  // OPS keys are accepted only via headers to avoid query-string leakage in logs.
+  return directKey === configuredKey || bearer === configuredKey;
 }
 
 export function isServiceKey(headersSource?: Headers) {
@@ -55,9 +39,9 @@ export function isServiceKey(headersSource?: Headers) {
   return bearer === serviceKey;
 }
 
-export function requireOpsAuth(headersSource?: Headers, url?: string) {
+export function requireOpsAuth(headersSource?: Headers, _url?: string) {
   if (
-    isOpsApiKey(headersSource, url) ||
+    isOpsApiKey(headersSource) ||
     isServiceKey(headersSource)
   ) {
     return { ok: true } as const;

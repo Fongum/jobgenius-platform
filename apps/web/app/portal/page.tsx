@@ -4,6 +4,55 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 
+type AccountManagerSummary = {
+  name: string | null;
+  email: string | null;
+};
+
+async function getAssignedAccountManager(jobSeekerId: string): Promise<AccountManagerSummary | null> {
+  const { data: latestAssignment } = await supabaseAdmin
+    .from("job_seeker_assignments")
+    .select("account_manager_id, created_at, account_managers (name, email)")
+    .eq("job_seeker_id", jobSeekerId)
+    .not("account_manager_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latestAssignment) {
+    return null;
+  }
+
+  const joinedManager = Array.isArray(latestAssignment.account_managers)
+    ? latestAssignment.account_managers[0]
+    : latestAssignment.account_managers;
+
+  if (joinedManager) {
+    return {
+      name: joinedManager.name ?? null,
+      email: joinedManager.email ?? null,
+    };
+  }
+
+  // Fallback for legacy rows where relation join is not materialized as expected.
+  if (latestAssignment.account_manager_id) {
+    const { data: manager } = await supabaseAdmin
+      .from("account_managers")
+      .select("name, email")
+      .eq("id", latestAssignment.account_manager_id)
+      .maybeSingle();
+
+    if (manager) {
+      return {
+        name: manager.name ?? null,
+        email: manager.email ?? null,
+      };
+    }
+  }
+
+  return null;
+}
+
 export default async function PortalPage() {
   const user = await getCurrentUser();
   // Layout already handles redirect, but guard for safety
@@ -16,15 +65,7 @@ export default async function PortalPage() {
   // Get job seeker details
   const { data: jobSeeker } = await supabaseAdmin
     .from("job_seekers")
-    .select(`
-      *,
-      job_seeker_assignments (
-        account_managers (
-          name,
-          email
-        )
-      )
-    `)
+    .select("*")
     .eq("id", user.id)
     .single();
 
@@ -73,7 +114,7 @@ export default async function PortalPage() {
     unreadConversations = count ?? 0;
   }
 
-  const accountManager = jobSeeker?.job_seeker_assignments?.[0]?.account_managers;
+  const accountManager = await getAssignedAccountManager(user.id);
   const profileCompletion = jobSeeker?.profile_completion ?? 0;
 
   // Determine action items
@@ -172,8 +213,10 @@ export default async function PortalPage() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Account Manager</h3>
           {accountManager ? (
             <div>
-              <p className="text-gray-900 font-medium">{accountManager.name}</p>
-              <p className="text-gray-600 text-sm">{accountManager.email}</p>
+              <p className="text-gray-900 font-medium">{accountManager.name || "Assigned account manager"}</p>
+              {accountManager.email && (
+                <p className="text-gray-600 text-sm">{accountManager.email}</p>
+              )}
               <p className="mt-3 text-sm text-gray-500">
                 Your account manager is handling your job applications and outreach.
                 Contact them if you have any questions.

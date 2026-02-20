@@ -209,9 +209,14 @@ export async function PATCH(request: Request) {
 function triggerMatchingForSeeker(seekerId: string) {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (process.env.OPS_API_KEY) {
+    headers["x-ops-key"] = process.env.OPS_API_KEY;
+  }
+
   fetch(`${baseUrl}/api/match/run`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ job_seeker_id: seekerId }),
   }).catch((err) => console.error("Auto-match trigger failed:", err));
 }

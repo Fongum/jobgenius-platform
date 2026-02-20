@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import crypto from "crypto";
+import { enforceRateLimit } from "@/lib/rate-limit";
+
+const EXTENSION_AUTH_FAILURE = {
+  error: "Invalid extension credentials.",
+};
 
 /**
  * POST /api/extension/auth
@@ -10,6 +15,29 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { am_code } = body;
+    const normalizedCode =
+      typeof am_code === "string" && am_code.trim().length > 0
+        ? am_code.trim().toUpperCase()
+        : "missing_code";
+
+    const extensionRateLimit = await enforceRateLimit({
+      request,
+      scope: "extension_auth",
+      identifier: normalizedCode,
+      limit: Number(process.env.EXTENSION_AUTH_RATE_LIMIT_MAX ?? 8),
+      windowSeconds: Number(process.env.EXTENSION_AUTH_RATE_LIMIT_WINDOW_SEC ?? 900),
+      blockSeconds: Number(process.env.EXTENSION_AUTH_RATE_LIMIT_BLOCK_SEC ?? 900),
+    });
+
+    if (!extensionRateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many authentication attempts. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.max(1, extensionRateLimit.retryAfterSeconds)) },
+        }
+      );
+    }
 
     if (!am_code) {
       return NextResponse.json(
@@ -27,7 +55,7 @@ export async function POST(request: Request) {
 
     if (amError || !am) {
       return NextResponse.json(
-        { error: "Invalid AM code." },
+        EXTENSION_AUTH_FAILURE,
         { status: 401 }
       );
     }
@@ -35,8 +63,8 @@ export async function POST(request: Request) {
     // Check if account is approved
     if (am.status !== "approved") {
       return NextResponse.json(
-        { error: "Account is not approved yet." },
-        { status: 403 }
+        EXTENSION_AUTH_FAILURE,
+        { status: 401 }
       );
     }
 

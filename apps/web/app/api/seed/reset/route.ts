@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabase/server";
+import { requireOpsAuth } from "@/lib/ops-auth";
 
 const DEMO_AM_EMAIL = "demo.am@jobgenius.local";
 const DEMO_SEEKER_EMAIL = "demo.seeker@jobgenius.local";
@@ -7,7 +8,31 @@ const DEMO_JOB_URLS = [
   "https://example.com/jobs/demo-backend",
 ];
 
-export async function POST() {
+function canUseSeedRoute() {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_SEED_ENDPOINTS === "true"
+  );
+}
+
+export async function POST(request: Request) {
+  if (!canUseSeedRoute()) {
+    return Response.json(
+      { success: false, error: "Not found." },
+      { status: 404 }
+    );
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    const auth = requireOpsAuth(request.headers, request.url);
+    if (!auth.ok) {
+      return Response.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+  }
+
   const { data: am } = await supabaseServer
     .from("account_managers")
     .select("id")

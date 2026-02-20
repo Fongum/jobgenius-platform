@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { signIn } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const REFRESH_TOKEN_COOKIE = "jg_refresh_token";
@@ -37,6 +38,26 @@ export async function POST(request: Request) {
   }
 
   const { email, password } = payload;
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "unknown";
+
+  const loginRateLimit = await enforceRateLimit({
+    request,
+    scope: "auth_login",
+    identifier: normalizedEmail,
+    limit: Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX ?? 10),
+    windowSeconds: Number(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC ?? 900),
+    blockSeconds: Number(process.env.AUTH_LOGIN_RATE_LIMIT_BLOCK_SEC ?? 900),
+  });
+
+  if (!loginRateLimit.allowed) {
+    return Response.json(
+      { success: false, error: "Too many login attempts. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(1, loginRateLimit.retryAfterSeconds)) },
+      }
+    );
+  }
 
   if (!email || !password) {
     return Response.json(

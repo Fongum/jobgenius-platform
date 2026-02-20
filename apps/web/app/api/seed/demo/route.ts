@@ -1,6 +1,31 @@
 import { supabaseServer } from "@/lib/supabase/server";
+import { requireOpsAuth } from "@/lib/ops-auth";
 
-export async function POST() {
+function canUseSeedRoute() {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_SEED_ENDPOINTS === "true"
+  );
+}
+
+export async function POST(request: Request) {
+  if (!canUseSeedRoute()) {
+    return Response.json(
+      { success: false, error: "Not found." },
+      { status: 404 }
+    );
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    const auth = requireOpsAuth(request.headers, request.url);
+    if (!auth.ok) {
+      return Response.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+  }
+
   const accountManager = {
     name: "Demo AM",
     email: "demo.am@jobgenius.local",

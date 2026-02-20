@@ -2,6 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import ResumePreview from "./ResumePreview";
+import type { StructuredResume, ResumeTemplateId } from "@/lib/resume-templates/types";
+import { RESUME_TEMPLATES } from "@/lib/resume-templates/types";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -11,6 +14,7 @@ interface SeekerSummary {
   email: string;
   match_threshold: number | null;
   resume_text: string | null;
+  resume_template_id: ResumeTemplateId | null;
 }
 
 interface JobData {
@@ -98,6 +102,9 @@ interface TailoredResume {
   job_post_id: string;
   tailored_text: string;
   changes_summary: string | null;
+  tailored_data: StructuredResume | null;
+  template_id: ResumeTemplateId | null;
+  resume_url: string | null;
 }
 
 interface PipelineClientProps {
@@ -865,6 +872,10 @@ function ResumesTab({
   const [tailoring, setTailoring] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [changesSummary, setChangesSummary] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editedData, setEditedData] = useState<StructuredResume | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplateId>("classic");
+  const [saving, setSaving] = useState(false);
 
   const queuedJobs = queueItems.filter((q) => q.job_posts);
   const selectedItem = queuedJobs.find((q) => q.id === selectedId);
@@ -874,14 +885,40 @@ function ResumesTab({
   const existingTailored = selectedKey ? tailoredMap.get(selectedKey) : null;
   const seeker = selectedItem ? seekerMap.get(selectedItem.job_seeker_id) : null;
 
+  // Active data for preview: edited > existing tailored
+  const activeData = editedData ?? existingTailored?.tailored_data ?? null;
+
   const selectItem = (id: string) => {
     setSelectedId(id);
+    setEditMode(false);
+    setEditedData(null);
     const item = queuedJobs.find((q) => q.id === id);
     if (item) {
       const key = `${item.job_seeker_id}:${item.job_post_id}`;
       const tailored = tailoredMap.get(key);
       setEditedText(tailored?.tailored_text || "");
       setChangesSummary(tailored?.changes_summary || null);
+      const sk = seekerMap.get(item.job_seeker_id);
+      setSelectedTemplate(
+        tailored?.template_id || sk?.resume_template_id || "classic"
+      );
+    }
+  };
+
+  const updateTemplate = async (templateId: ResumeTemplateId) => {
+    setSelectedTemplate(templateId);
+    if (!selectedItem) return;
+    try {
+      await fetch("/api/am/resume-template", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: selectedItem.job_seeker_id,
+          template_id: templateId,
+        }),
+      });
+    } catch {
+      // Best effort - template is stored locally regardless
     }
   };
 
@@ -903,8 +940,13 @@ function ResumesTab({
       } else {
         setEditedText(data.tailored_resume.tailored_text);
         setChangesSummary(data.changes_summary);
+        setEditedData(null);
+        setEditMode(false);
         const key = `${selectedItem.job_seeker_id}:${selectedItem.job_post_id}`;
         tailoredMap.set(key, data.tailored_resume);
+        if (data.tailored_resume.template_id) {
+          setSelectedTemplate(data.tailored_resume.template_id);
+        }
         setMsg({ type: "success", text: "Resume tailored successfully." });
       }
     } catch {
@@ -914,24 +956,63 @@ function ResumesTab({
     }
   };
 
-  const saveResume = async () => {
-    if (!selectedItem || !editedText.trim()) return;
+  const saveEdits = async () => {
+    if (!selectedItem || !editedData) return;
+    setSaving(true);
     try {
-      const res = await fetch("/api/am/resume-tailor", {
+      const res = await fetch("/api/am/resume-tailor/save", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: selectedItem.job_seeker_id,
+          job_post_id: selectedItem.job_post_id,
+          tailored_data: editedData,
+          template_id: selectedTemplate,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Save failed." });
+      } else {
+        const key = `${selectedItem.job_seeker_id}:${selectedItem.job_post_id}`;
+        tailoredMap.set(key, data.tailored_resume);
+        setEditedData(null);
+        setEditMode(false);
+        setMsg({ type: "success", text: "Resume saved." });
+      }
+    } catch {
+      setMsg({ type: "error", text: "Network error." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (!selectedItem) return;
+    try {
+      const res = await fetch("/api/am/resume-tailor/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_id: selectedItem.job_seeker_id,
           job_post_id: selectedItem.job_post_id,
+          template_id: selectedTemplate,
         }),
       });
-      // For manual save, we actually need a separate endpoint or use the upsert logic.
-      // For now, we re-use the tailoring API which will store the result.
-      // A cleaner approach would be a PUT endpoint, but we store the manually edited text
-      // in the same way.
-      if (res.ok) {
-        setMsg({ type: "success", text: "Resume saved." });
+      if (!res.ok) {
+        const data = await res.json();
+        setMsg({ type: "error", text: data.error || "PDF download failed." });
+        return;
       }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tailored_resume.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch {
       setMsg({ type: "error", text: "Network error." });
     }
@@ -940,10 +1021,19 @@ function ResumesTab({
   const revertResume = () => {
     setEditedText("");
     setChangesSummary(null);
+    setEditedData(null);
+    setEditMode(false);
     if (selectedKey) {
       tailoredMap.delete(selectedKey);
     }
     setMsg({ type: "success", text: "Reverted to default resume." });
+  };
+
+  const toggleEditMode = () => {
+    if (!editMode && activeData) {
+      setEditedData(JSON.parse(JSON.stringify(activeData)));
+    }
+    setEditMode(!editMode);
   };
 
   return (
@@ -955,6 +1045,7 @@ function ResumesTab({
           {queuedJobs.map((q) => {
             const key = `${q.job_seeker_id}:${q.job_post_id}`;
             const hasTailored = tailoredMap.has(key);
+            const hasStructured = !!tailoredMap.get(key)?.tailored_data;
             return (
               <button
                 key={q.id}
@@ -969,9 +1060,9 @@ function ResumesTab({
                 <p className="text-xs text-gray-500 truncate">{q.job_posts?.company}</p>
                 <p className="text-xs text-gray-500">{q.job_seekers?.full_name}</p>
                 <span className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full ${
-                  hasTailored ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
+                  hasStructured ? "bg-green-100 text-green-800" : hasTailored ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-600"
                 }`}>
-                  {hasTailored ? "Tailored" : "Default"}
+                  {hasStructured ? "Tailored" : hasTailored ? "Text Only" : "Default"}
                 </span>
               </button>
             );
@@ -990,6 +1081,27 @@ function ResumesTab({
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Template Selector */}
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 mb-2">Resume Template</h4>
+              <div className="flex gap-2 flex-wrap">
+                {RESUME_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => updateTemplate(t.id)}
+                    className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      selectedTemplate === t.id
+                        ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="font-medium">{t.name}</span>
+                    <span className="block text-xs text-gray-400 mt-0.5">{t.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-gray-900">
@@ -1007,7 +1119,32 @@ function ResumesTab({
                 >
                   {tailoring ? "Tailoring..." : "Tailor with AI"}
                 </button>
-                {editedText && (
+                {activeData && (
+                  <>
+                    <button
+                      onClick={downloadPdf}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
+                    >
+                      Download PDF
+                    </button>
+                    <button
+                      onClick={toggleEditMode}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200"
+                    >
+                      {editMode ? "Cancel Edit" : "Edit"}
+                    </button>
+                  </>
+                )}
+                {editMode && editedData && (
+                  <button
+                    onClick={saveEdits}
+                    disabled={saving}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save"}
+                  </button>
+                )}
+                {(editedText || activeData) && (
                   <button
                     onClick={revertResume}
                     className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200"
@@ -1056,28 +1193,45 @@ function ResumesTab({
               </div>
             )}
 
-            {/* Original resume */}
-            {seeker?.resume_text && (
+            {/* Structured resume preview or legacy textarea */}
+            {activeData ? (
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Original Resume</h4>
-                <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
-                  <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans">{seeker.resume_text}</pre>
-                </div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">
+                  Tailored Resume Preview
+                </h4>
+                <ResumePreview
+                  data={editMode && editedData ? editedData : activeData}
+                  templateId={selectedTemplate}
+                  editMode={editMode}
+                  onDataChange={setEditedData}
+                />
               </div>
-            )}
+            ) : (
+              <>
+                {/* Original resume */}
+                {seeker?.resume_text && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Original Resume</h4>
+                    <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                      <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans">{seeker.resume_text}</pre>
+                    </div>
+                  </div>
+                )}
 
-            {/* Tailored resume editor */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">
-                {existingTailored || editedText ? "Tailored Resume" : "Custom Resume (paste or use AI)"}
-              </h4>
-              <textarea
-                value={editedText}
-                onChange={(e) => setEditedText(e.target.value)}
-                placeholder="Use 'Tailor with AI' or paste a custom resume here..."
-                className="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg text-sm font-sans resize-y"
-              />
-            </div>
+                {/* Fallback textarea for legacy text-only tailored resumes */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    {existingTailored || editedText ? "Tailored Resume" : "Custom Resume (paste or use AI)"}
+                  </h4>
+                  <textarea
+                    value={editedText}
+                    onChange={(e) => setEditedText(e.target.value)}
+                    placeholder="Use 'Tailor with AI' or paste a custom resume here..."
+                    className="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg text-sm font-sans resize-y"
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -1,11 +1,30 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { parseJobPost } from "@/lib/matching";
+import { getAccountManagerFromRequest } from "@/lib/am-access";
+import { requireOpsAuth } from "@/lib/ops-auth";
 
 type ParsePayload = {
   job_post_id?: string; // Parse specific job, or omit to parse all unparsed
   force?: boolean; // Force re-parse even if already parsed
   limit?: number; // Max jobs to parse (default 100)
 };
+
+async function ensureAuthorized(request: Request) {
+  const opsAuth = requireOpsAuth(request.headers, request.url);
+  if (opsAuth.ok) {
+    return null;
+  }
+
+  const amResult = await getAccountManagerFromRequest(request.headers);
+  if ("error" in amResult) {
+    return Response.json(
+      { success: false, error: "Unauthorized." },
+      { status: 401 }
+    );
+  }
+
+  return null;
+}
 
 /**
  * POST /api/jobs/parse
@@ -23,6 +42,11 @@ type ParsePayload = {
  * - employment_type
  */
 export async function POST(request: Request) {
+  const authError = await ensureAuthorized(request);
+  if (authError) {
+    return authError;
+  }
+
   let payload: ParsePayload;
 
   try {
@@ -123,7 +147,13 @@ export async function POST(request: Request) {
  *
  * Returns parsing statistics.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // Require AM or OPS auth for parsing stats.
+  const authError = await ensureAuthorized(request);
+  if (authError) {
+    return authError;
+  }
+
   const { count: totalCount } = await supabaseServer
     .from("job_posts")
     .select("id", { count: "exact", head: true });

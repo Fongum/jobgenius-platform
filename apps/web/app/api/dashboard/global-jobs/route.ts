@@ -101,6 +101,9 @@ export async function POST(request: Request) {
         ...(request.headers.get("authorization")
           ? { Authorization: request.headers.get("authorization") as string }
           : {}),
+        ...(request.headers.get("cookie")
+          ? { cookie: request.headers.get("cookie") as string }
+          : {}),
       },
       body: JSON.stringify({
         job_seeker_id: body.job_seeker_id,

@@ -13,6 +13,7 @@
   - 3 READY runs (LinkedIn, Greenhouse, Workday)
   - 1 NEEDS_ATTENTION run (SMS OTP)
 - `POST /api/seed/reset` removes the demo data.
+- Seed routes are for local/test use. In production, they require `ALLOW_SEED_ENDPOINTS=true` and `x-ops-key` auth.
 
 Response includes `job_seeker_id`, `job_post_ids`, and `run_ids`.
 
@@ -28,3 +29,13 @@ curl -X POST http://localhost:3000/api/seed/reset
 - OTP email flow:
   - AM can `POST /api/otp/submit` with a code (channel EMAIL/SMS).
   - Runner polls `GET /api/otp/latest?jobSeekerId=...` for email OTP and marks it used via `POST /api/otp/mark-used`.
+
+## Auth rate limits
+- Login:
+  - `AUTH_LOGIN_RATE_LIMIT_MAX` (default `10`)
+  - `AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC` (default `900`)
+  - `AUTH_LOGIN_RATE_LIMIT_BLOCK_SEC` (default `900`)
+- Extension auth:
+  - `EXTENSION_AUTH_RATE_LIMIT_MAX` (default `8`)
+  - `EXTENSION_AUTH_RATE_LIMIT_WINDOW_SEC` (default `900`)
+  - `EXTENSION_AUTH_RATE_LIMIT_BLOCK_SEC` (default `900`)

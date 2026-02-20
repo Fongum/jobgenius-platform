@@ -26,7 +26,7 @@ export default async function PipelinePage() {
   // Fetch seeker profiles
   const { data: seekers } = await supabaseAdmin
     .from("job_seekers")
-    .select("id, full_name, email, match_threshold, resume_text")
+    .select("id, full_name, email, match_threshold, resume_text, resume_template_id")
     .in("id", seekerIds);
 
   // Fetch match scores across all seekers
@@ -88,7 +88,7 @@ export default async function PipelinePage() {
   // Fetch tailored resumes
   const { data: tailoredResumes } = await supabaseAdmin
     .from("tailored_resumes")
-    .select("id, job_seeker_id, job_post_id, tailored_text, changes_summary")
+    .select("id, job_seeker_id, job_post_id, tailored_text, changes_summary, tailored_data, template_id, resume_url")
     .in("job_seeker_id", seekerIds);
 
   return (
