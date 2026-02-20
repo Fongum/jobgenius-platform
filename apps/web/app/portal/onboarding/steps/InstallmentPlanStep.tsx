@@ -13,9 +13,15 @@ interface InstallmentPlanStepProps {
   onBack: () => void;
 }
 
+const PAYMENT_WINDOW_MONTHS = 1;
 const today = new Date();
+today.setHours(0, 0, 0, 0);
 const maxDate = new Date(today);
-maxDate.setDate(today.getDate() + 14);
+maxDate.setMonth(maxDate.getMonth() + PAYMENT_WINDOW_MONTHS);
+const paymentWindowDays = Math.max(
+  1,
+  Math.round((maxDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+);
 
 function formatDateInput(d: Date) {
   return d.toISOString().split("T")[0];
@@ -44,7 +50,7 @@ export default function InstallmentPlanStep({
     const remainder = totalFee - base * count;
     const newInstallments: Installment[] = Array.from({ length: count }, (_, i) => {
       const d = new Date(today);
-      d.setDate(today.getDate() + Math.floor((14 / count) * i));
+      d.setDate(today.getDate() + Math.floor((paymentWindowDays / count) * i));
       return {
         amount: i === count - 1 ? String(base + remainder) : String(base),
         proposedDate: formatDateInput(d),
@@ -107,7 +113,7 @@ export default function InstallmentPlanStep({
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Payment Schedule</h2>
         <p className="text-gray-500 mt-1 text-sm">
-          Your registration fee is <strong>{formatCurrency(totalFee)}</strong>. Choose how you&apos;d like to pay — all installments must be completed within 14 days of today ({maxDate.toLocaleDateString("en-US")}).
+          Your registration fee is <strong>{formatCurrency(totalFee)}</strong>. Choose how you&apos;d like to pay — all installments must be completed within 1 month of today ({maxDate.toLocaleDateString("en-US")}).
         </p>
       </div>
 
@@ -172,7 +178,7 @@ export default function InstallmentPlanStep({
                     }`}
                   />
                   {dateInvalid && (
-                    <p className="text-xs text-red-500 mt-1">Must be within 14 days</p>
+                    <p className="text-xs text-red-500 mt-1">Must be within 1 month</p>
                   )}
                 </div>
               </div>

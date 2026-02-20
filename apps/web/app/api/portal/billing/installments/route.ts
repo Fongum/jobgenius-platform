@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
 
+const PAYMENT_WINDOW_MONTHS = 1;
+
 export async function POST(request: Request) {
   const auth = await requireJobSeeker(request);
   if (!auth.authenticated) {
@@ -52,17 +54,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // Validate all dates within 14 days
+  // Validate all dates within the allowed payment window
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const maxDate = new Date(today);
-  maxDate.setDate(today.getDate() + 14);
+  maxDate.setMonth(maxDate.getMonth() + PAYMENT_WINDOW_MONTHS);
 
   for (const inst of installments) {
     const d = new Date(inst.proposedDate);
     if (d < today || d > maxDate) {
       return NextResponse.json(
-        { error: "All payment dates must be within 14 days of today." },
+        { error: "All payment dates must be within 1 month of today." },
         { status: 400 }
       );
     }

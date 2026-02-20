@@ -131,7 +131,7 @@ export function generateContractHTML(params: ContractParams): string {
     </tbody>
   </table>
   <div class="highlight">
-    <strong>Important:</strong> All installments must be completed within 14 days of this agreement date. Failure to complete payments may result in suspension of services. The registration fee is non-refundable once services have commenced.
+    <strong>Important:</strong> All installments must be completed within 1 month of this agreement date. Failure to complete payments may result in suspension of services. The registration fee is non-refundable once services have commenced.
   </div>
 
   <h2>4. Commission Terms</h2>
