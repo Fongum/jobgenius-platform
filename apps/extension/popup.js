@@ -283,6 +283,30 @@ async function setActiveSeeker(seekerId) {
 
 // ─── Matched Jobs ─────────────────────────────────────────────
 
+function sanitizeText(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatAttentionReason(reason) {
+  if (!reason) return "Needs attention";
+  return String(reason)
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+async function triggerRunnerNow() {
+  await chrome.storage.local.set({ [STORAGE_KEYS.runnerEnabled]: true });
+  chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: true });
+  chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
+  updateRunnerUI(true);
+}
+
 async function loadMatchedJobs() {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !authToken || !activeSeekerId) {
@@ -305,6 +329,7 @@ async function loadMatchedJobs() {
     const data = await response.json();
     const jobs = data.jobs || [];
     const threshold = data.threshold || 50;
+    const attentionJobs = jobs.filter((j) => j.needs_attention || j.queue_status === "NEEDS_ATTENTION");
 
     if (jobs.length === 0) {
       els.matchedJobsList.innerHTML = `
@@ -315,50 +340,85 @@ async function loadMatchedJobs() {
       return;
     }
 
-    // Header with stats, Queue All and Apply All buttons
     const queueableJobs = jobs.filter((j) => !j.queue_status);
-    const applyableJobs = jobs.filter((j) => !j.queue_status || j.queue_status === "QUEUED");
+    const applyableJobs = jobs.filter(
+      (j) => !j.queue_status || ["QUEUED", "READY", "RETRYING"].includes(j.queue_status)
+    );
+    const resumableAttentionJobs = attentionJobs.filter((j) => !!j.run_id);
+
     const headerHtml = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:6px">
-        <span style="font-size:10px;color:#166534">${jobs.length} jobs above ${threshold}% threshold</span>
+        <span style="font-size:10px;color:#166534">${jobs.length} jobs tracked (${attentionJobs.length} need attention)</span>
         <div style="display:flex;gap:4px">
           ${queueableJobs.length > 0 ? `<button class="btn btn-secondary btn-sm" onclick="queueAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Queue All (${queueableJobs.length})</button>` : ""}
           ${applyableJobs.length > 0 ? `<button class="btn btn-apply btn-sm" onclick="applyAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Apply All (${applyableJobs.length})</button>` : ""}
+          ${resumableAttentionJobs.length > 1 ? `<button class="btn btn-secondary btn-sm" onclick="resumeAllAttention()" style="width:auto;padding:2px 8px;font-size:9px">Resume Attention (${resumableAttentionJobs.length})</button>` : ""}
         </div>
       </div>`;
 
     const jobsHtml = jobs.map((job) => {
-      const scoreClass = job.score >= 80 ? "high" : job.score >= 60 ? "medium" : "low";
-      const cardClass = job.score >= 80 ? "score-high" : job.score >= 60 ? "score-medium" : "score-low";
-      const recLabel = job.recommendation === "strong_match" ? "Strong" : job.recommendation === "good_match" ? "Good" : "Fair";
-      const recColor = job.recommendation === "strong_match" ? "#166534" : job.recommendation === "good_match" ? "#1e40af" : "#92400e";
+      const numericScore = Number(job.score);
+      const hasScore = Number.isFinite(numericScore) && numericScore >= 0;
+      const scoreClass = hasScore
+        ? (numericScore >= 80 ? "high" : numericScore >= 60 ? "medium" : "low")
+        : "low";
+      const cardClass = job.needs_attention
+        ? "score-medium"
+        : (hasScore ? (numericScore >= 80 ? "score-high" : numericScore >= 60 ? "score-medium" : "score-low") : "score-low");
+      const recLabel = job.recommendation === "strong_match"
+        ? "Strong"
+        : job.recommendation === "good_match"
+          ? "Good"
+          : job.recommendation
+            ? "Fair"
+            : "Unrated";
+      const recColor = job.recommendation === "strong_match"
+        ? "#166534"
+        : job.recommendation === "good_match"
+          ? "#1e40af"
+          : "#92400e";
+      const scoreLabel = hasScore ? `${Math.round(numericScore)}%` : "--";
 
       let actionHtml;
-      if (job.queue_status === "APPLIED" || job.queue_status === "COMPLETED") {
+      if (job.queue_status === "NEEDS_ATTENTION") {
+        if (job.run_id) {
+          actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge" style="background:#fff7ed;color:#9a3412">Needs Attention</span><button class="btn btn-secondary btn-sm" onclick="resumeJob('${job.run_id}', '${encodeURIComponent(job.url || "")}')" style="width:auto;padding:3px 8px;font-size:9px">Resume</button></div>`;
+        } else {
+          actionHtml = '<span class="queue-badge" style="background:#fff7ed;color:#9a3412">Needs Attention</span>';
+        }
+      } else if (job.queue_status === "APPLIED" || job.queue_status === "COMPLETED") {
         actionHtml = '<span class="queue-badge" style="background:#dcfce7;color:#166534">Applied</span>';
       } else if (job.queue_status === "RUNNING") {
         actionHtml = '<span class="queue-badge" style="background:#dbeafe;color:#1e40af">Running</span>';
-      } else if (job.queue_status === "QUEUED") {
-        actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">Queued</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
+      } else if (job.queue_status === "QUEUED" || job.queue_status === "READY" || job.queue_status === "RETRYING") {
+        actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">${job.queue_status}</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       } else if (job.queue_status) {
         actionHtml = `<span class="queue-badge">${job.queue_status}</span>`;
       } else {
         actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       }
 
+      const attentionReason = job.needs_attention_reason
+        ? `<div style="font-size:9px;color:#9a3412;margin-top:4px">Reason: ${sanitizeText(formatAttentionReason(job.needs_attention_reason))}</div>`
+        : "";
+      const attentionError = job.last_error
+        ? `<div style="font-size:9px;color:#92400e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${sanitizeText(job.last_error)}">${sanitizeText(job.last_error)}</div>`
+        : "";
+
       return `
         <div class="job-card ${cardClass}">
-          <div class="title" title="${job.title}">
-            <a href="${job.url}" target="_blank" style="color:inherit;text-decoration:none">${job.title}</a>
+          <div class="title" title="${sanitizeText(job.title)}">
+            <a href="${sanitizeText(job.url)}" target="_blank" style="color:inherit;text-decoration:none">${sanitizeText(job.title)}</a>
           </div>
-          <div class="meta">${job.company || "Unknown"} ${job.location ? "· " + job.location : ""}</div>
+          <div class="meta">${sanitizeText(job.company || "Unknown")} ${job.location ? " - " + sanitizeText(job.location) : ""}</div>
           <div style="display:flex;gap:4px;margin-top:2px">
-            ${job.work_type ? `<span style="font-size:8px;padding:1px 4px;background:#f3f4f6;border-radius:3px;color:#6b7280;text-transform:capitalize">${job.work_type}</span>` : ""}
+            ${job.work_type ? `<span style="font-size:8px;padding:1px 4px;background:#f3f4f6;border-radius:3px;color:#6b7280;text-transform:capitalize">${sanitizeText(job.work_type)}</span>` : ""}
             <span style="font-size:8px;padding:1px 4px;background:#ede9fe;border-radius:3px;color:${recColor}">${recLabel}</span>
             ${job.confidence === "high" ? '<span style="font-size:8px;padding:1px 4px;background:#dbeafe;border-radius:3px;color:#1e40af">High Conf.</span>' : ""}
           </div>
+          ${job.queue_status === "NEEDS_ATTENTION" ? attentionReason + attentionError : ""}
           <div class="bottom">
-            <span class="score-badge ${scoreClass}">${job.score}%</span>
+            <span class="score-badge ${scoreClass}">${scoreLabel}</span>
             ${actionHtml}
           </div>
         </div>`;
@@ -426,11 +486,7 @@ window.applyJob = async function (jobPostId) {
       body: JSON.stringify({ job_post_id: jobPostId }),
     });
 
-    // Enable runner and trigger immediate run
-    await chrome.storage.local.set({ [STORAGE_KEYS.runnerEnabled]: true });
-    chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: true });
-    chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
-    updateRunnerUI(true);
+    await triggerRunnerNow();
     loadMatchedJobs();
   } catch (error) { console.error("Apply error:", error); }
 };
@@ -445,7 +501,9 @@ window.applyAllJobs = async function () {
     });
     if (!response.ok) return;
     const data = await response.json();
-    const jobs = (data.jobs || []).filter((j) => !j.queue_status || j.queue_status === "QUEUED");
+    const jobs = (data.jobs || []).filter(
+      (j) => !j.queue_status || ["QUEUED", "READY", "RETRYING"].includes(j.queue_status)
+    );
 
     // Queue all unqueued jobs
     for (const job of jobs) {
@@ -460,13 +518,74 @@ window.applyAllJobs = async function () {
       }
     }
 
-    // Enable runner and trigger immediate run
-    await chrome.storage.local.set({ [STORAGE_KEYS.runnerEnabled]: true });
-    chrome.runtime.sendMessage({ type: "RUNNER_TOGGLE", enabled: true });
-    chrome.runtime.sendMessage({ type: "RUNNER_RUN_NOW" });
-    updateRunnerUI(true);
+    await triggerRunnerNow();
     loadMatchedJobs();
   } catch (error) { console.error("Apply all error:", error); }
+};
+
+
+window.resumeJob = async function (runId, encodedJobUrl) {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken || !runId) return;
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/apply/resume`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ run_id: runId, note: "Resumed from extension." }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      console.error("Resume error:", data.error || response.status);
+      return;
+    }
+
+    const jobUrl = encodedJobUrl ? decodeURIComponent(encodedJobUrl) : "";
+    if (jobUrl && /^https?:\/\//i.test(jobUrl)) {
+      chrome.tabs.create({ url: jobUrl, active: true }).catch(() => {});
+    }
+
+    await triggerRunnerNow();
+    loadMatchedJobs();
+  } catch (error) {
+    console.error("Resume error:", error);
+  }
+};
+
+window.resumeAllAttention = async function () {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken) return;
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/extension/matched-jobs`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    const jobs = (data.jobs || []).filter(
+      (job) => (job.needs_attention || job.queue_status === "NEEDS_ATTENTION") && job.run_id
+    );
+
+    for (const job of jobs) {
+      try {
+        await fetch(`${apiBaseUrl}/api/apply/resume`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ run_id: job.run_id, note: "Bulk resumed from extension." }),
+        });
+      } catch (error) {
+        console.error("Bulk resume error:", error);
+      }
+    }
+
+    if (jobs.length > 0) {
+      await triggerRunnerNow();
+    }
+    loadMatchedJobs();
+  } catch (error) {
+    console.error("Resume all attention error:", error);
+  }
 };
 
 // ─── Contact Scraping ─────────────────────────────────────────

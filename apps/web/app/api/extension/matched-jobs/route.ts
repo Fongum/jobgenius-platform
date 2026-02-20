@@ -2,12 +2,100 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
 
+type JobPostRow = {
+  id: string;
+  title: string;
+  company: string | null;
+  location: string | null;
+  url: string;
+  work_type: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  seniority_level: string | null;
+  is_active: boolean | null;
+  created_at: string;
+};
+
+type MatchRow = {
+  score: number | null;
+  confidence: string | null;
+  recommendation: string | null;
+  job_posts: JobPostRow | JobPostRow[] | null;
+};
+
+type QueueRow = {
+  id: string;
+  job_post_id: string;
+  status: string;
+  last_error: string | null;
+  updated_at: string | null;
+};
+
+type RunRow = {
+  id: string;
+  job_post_id: string | null;
+  status: string;
+  current_step: string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  needs_attention_reason: string | null;
+  updated_at: string | null;
+};
+
+type MatchScoreRow = {
+  job_post_id: string;
+  score: number | null;
+  confidence: string | null;
+  recommendation: string | null;
+};
+
+type JobCard = {
+  id: string;
+  title: string;
+  company: string | null;
+  location: string | null;
+  url: string;
+  work_type: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  seniority_level: string | null;
+  created_at: string;
+  score: number | null;
+  confidence: string | null;
+  recommendation: string | null;
+};
+
+function resolveSingle<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function toEpoch(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function putIfNewer<T extends { updated_at: string | null }>(
+  map: Map<string, T>,
+  key: string,
+  row: T
+) {
+  const existing = map.get(key);
+  if (!existing || toEpoch(row.updated_at) >= toEpoch(existing.updated_at)) {
+    map.set(key, row);
+  }
+}
+
 /**
  * GET /api/extension/matched-jobs
  *
  * Returns matched jobs for the active job seeker in the extension session.
- * Joins job_match_scores → job_posts, and LEFT JOINs application_queue
- * to show queue status.
+ * Includes jobs in NEEDS_ATTENTION so extension can resume/handoff workflows.
  */
 export async function GET(request: Request) {
   try {
@@ -35,7 +123,7 @@ export async function GET(request: Request) {
 
     const threshold = seeker?.match_threshold ?? 50;
 
-    // Get matched jobs above threshold, only active jobs
+    // Base list: matched jobs above threshold
     const { data: matches, error: matchError } = await supabaseAdmin
       .from("job_match_scores")
       .select(`
@@ -69,81 +157,183 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get queue status for these jobs
-    const jobIds = (matches || [])
-      .map((m) => {
-        const jp = m.job_posts as unknown as { id: string } | null;
-        return jp?.id;
-      })
-      .filter(Boolean) as string[];
+    const matchRows = (matches ?? []) as MatchRow[];
+    const jobCards = new Map<string, JobCard>();
 
-    let queueMap: Record<string, string> = {};
-    if (jobIds.length > 0) {
-      const { data: queueItems } = await supabaseAdmin
+    for (const matchRow of matchRows) {
+      const jobPost = resolveSingle(matchRow.job_posts);
+      if (!jobPost?.id) {
+        continue;
+      }
+
+      jobCards.set(jobPost.id, {
+        id: jobPost.id,
+        title: jobPost.title,
+        company: jobPost.company,
+        location: jobPost.location,
+        url: jobPost.url,
+        work_type: jobPost.work_type,
+        salary_min: jobPost.salary_min,
+        salary_max: jobPost.salary_max,
+        seniority_level: jobPost.seniority_level,
+        created_at: jobPost.created_at,
+        score: matchRow.score,
+        confidence: matchRow.confidence,
+        recommendation: matchRow.recommendation,
+      });
+    }
+
+    // Always include historical NEEDS_ATTENTION runs, even if score fell below threshold.
+    const { data: attentionRunRows, error: attentionError } = await supabaseAdmin
+      .from("application_runs")
+      .select(
+        "id, job_post_id, status, current_step, last_error, last_error_code, needs_attention_reason, updated_at"
+      )
+      .eq("job_seeker_id", session.active_job_seeker_id)
+      .eq("status", "NEEDS_ATTENTION");
+
+    if (attentionError) {
+      console.error("Error loading needs-attention runs:", attentionError);
+      return NextResponse.json(
+        { error: "Failed to load needs-attention runs." },
+        { status: 500 }
+      );
+    }
+
+    const attentionRuns = ((attentionRunRows ?? []) as RunRow[]).filter(
+      (row) => !!row.job_post_id
+    );
+    const attentionByJobId = new Map<string, RunRow>();
+    for (const run of attentionRuns) {
+      if (!run.job_post_id) {
+        continue;
+      }
+      putIfNewer(attentionByJobId, run.job_post_id, run);
+    }
+
+    const missingAttentionJobIds = Array.from(attentionByJobId.keys()).filter(
+      (jobId) => !jobCards.has(jobId)
+    );
+
+    if (missingAttentionJobIds.length > 0) {
+      const [{ data: attentionPosts }, { data: attentionScores }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("job_posts")
+            .select(
+              "id, title, company, location, url, work_type, salary_min, salary_max, seniority_level, created_at"
+            )
+            .in("id", missingAttentionJobIds),
+          supabaseAdmin
+            .from("job_match_scores")
+            .select("job_post_id, score, confidence, recommendation")
+            .eq("job_seeker_id", session.active_job_seeker_id)
+            .in("job_post_id", missingAttentionJobIds),
+        ]);
+
+      const scoreByJobId = new Map(
+        ((attentionScores ?? []) as MatchScoreRow[]).map((row) => [
+          row.job_post_id,
+          row,
+        ])
+      );
+
+      for (const post of (attentionPosts ?? []) as JobPostRow[]) {
+        const score = scoreByJobId.get(post.id);
+        jobCards.set(post.id, {
+          id: post.id,
+          title: post.title,
+          company: post.company,
+          location: post.location,
+          url: post.url,
+          work_type: post.work_type,
+          salary_min: post.salary_min,
+          salary_max: post.salary_max,
+          seniority_level: post.seniority_level,
+          created_at: post.created_at,
+          score: score?.score ?? null,
+          confidence: score?.confidence ?? null,
+          recommendation: score?.recommendation ?? null,
+        });
+      }
+    }
+
+    const allJobIds = Array.from(jobCards.keys());
+    if (allJobIds.length === 0) {
+      return NextResponse.json({
+        jobs: [],
+        threshold,
+        total: 0,
+        needs_attention_total: 0,
+      });
+    }
+
+    const [{ data: queueRows }, { data: runRows }] = await Promise.all([
+      supabaseAdmin
         .from("application_queue")
-        .select("job_post_id, status")
+        .select("id, job_post_id, status, last_error, updated_at")
         .eq("job_seeker_id", session.active_job_seeker_id)
-        .in("job_post_id", jobIds);
-
-      if (queueItems) {
-        queueMap = Object.fromEntries(
-          queueItems.map((q) => [q.job_post_id, q.status])
-        );
-      }
-    }
-
-    // Also check application_runs for applied status
-    let runMap: Record<string, string> = {};
-    if (jobIds.length > 0) {
-      const { data: runs } = await supabaseAdmin
+        .in("job_post_id", allJobIds),
+      supabaseAdmin
         .from("application_runs")
-        .select("job_post_id, status")
+        .select(
+          "id, job_post_id, status, current_step, last_error, last_error_code, needs_attention_reason, updated_at"
+        )
         .eq("job_seeker_id", session.active_job_seeker_id)
-        .in("job_post_id", jobIds);
+        .in("job_post_id", allJobIds),
+    ]);
 
-      if (runs) {
-        runMap = Object.fromEntries(
-          runs.map((r) => [r.job_post_id, r.status])
-        );
-      }
+    const queueByJobId = new Map<string, QueueRow>();
+    for (const row of (queueRows ?? []) as QueueRow[]) {
+      putIfNewer(queueByJobId, row.job_post_id, row);
     }
 
-    const jobs = (matches || []).map((m) => {
-      const jp = m.job_posts as unknown as {
-        id: string;
-        title: string;
-        company: string | null;
-        location: string | null;
-        url: string;
-        work_type: string | null;
-        salary_min: number | null;
-        salary_max: number | null;
-        seniority_level: string | null;
-        created_at: string;
-      };
+    const runByJobId = new Map<string, RunRow>();
+    for (const row of (runRows ?? []) as RunRow[]) {
+      if (!row.job_post_id) {
+        continue;
+      }
+      putIfNewer(runByJobId, row.job_post_id, row);
+    }
 
-      return {
-        id: jp.id,
-        title: jp.title,
-        company: jp.company,
-        location: jp.location,
-        url: jp.url,
-        work_type: jp.work_type,
-        salary_min: jp.salary_min,
-        salary_max: jp.salary_max,
-        seniority_level: jp.seniority_level,
-        score: m.score,
-        confidence: m.confidence,
-        recommendation: m.recommendation,
-        queue_status: queueMap[jp.id] || runMap[jp.id] || null,
-        created_at: jp.created_at,
-      };
-    });
+    const jobs = Array.from(jobCards.values())
+      .map((job) => {
+        const queue = queueByJobId.get(job.id);
+        const run = runByJobId.get(job.id) ?? attentionByJobId.get(job.id) ?? null;
+        const queueStatus = queue?.status ?? run?.status ?? null;
+        const needsAttention = queueStatus === "NEEDS_ATTENTION";
+
+        return {
+          ...job,
+          queue_status: queueStatus,
+          queue_id: queue?.id ?? null,
+          run_id: run?.id ?? null,
+          run_status: run?.status ?? null,
+          current_step: run?.current_step ?? null,
+          last_error: run?.last_error ?? queue?.last_error ?? null,
+          last_error_code: run?.last_error_code ?? null,
+          needs_attention_reason: run?.needs_attention_reason ?? null,
+          needs_attention: needsAttention,
+          updated_at: run?.updated_at ?? queue?.updated_at ?? null,
+        };
+      })
+      .sort((a, b) => {
+        if (a.needs_attention !== b.needs_attention) {
+          return a.needs_attention ? -1 : 1;
+        }
+        const scoreA = Number.isFinite(a.score ?? NaN) ? (a.score as number) : -1;
+        const scoreB = Number.isFinite(b.score ?? NaN) ? (b.score as number) : -1;
+        if (scoreA !== scoreB) {
+          return scoreB - scoreA;
+        }
+        return toEpoch(b.created_at) - toEpoch(a.created_at);
+      });
 
     return NextResponse.json({
       jobs,
       threshold,
       total: jobs.length,
+      needs_attention_total: jobs.filter((job) => job.needs_attention).length,
     });
   } catch (error) {
     console.error("Extension matched-jobs error:", error);
