@@ -8,17 +8,19 @@ const STORAGE_KEYS = {
   dryRun: "dryRun",
 };
 
+const DEFAULT_API_BASE_URL = "https://job-genius.com";
+
 // State
 let authToken = null;
 let amInfo = null;
 let activeSeekerId = null;
 let includeAppliedJobs = false;
+let apiBaseUrl = DEFAULT_API_BASE_URL;
 
 // DOM Elements
 const els = {
   authGate: document.getElementById("authGate"),
   mainApp: document.getElementById("mainApp"),
-  apiBaseUrlAuth: document.getElementById("apiBaseUrlAuth"),
   amCodeInput: document.getElementById("amCodeInput"),
   connectBtn: document.getElementById("connectBtn"),
   authStatus: document.getElementById("authStatus"),
@@ -41,6 +43,7 @@ const els = {
   refreshMatchedBtn: document.getElementById("refreshMatched"),
   matchedJobsList: document.getElementById("matchedJobsList"),
   matchedEmpty: document.getElementById("matchedEmpty"),
+  openJobManagerBtn: document.getElementById("openJobManager"),
   refreshMyJobsBtn: document.getElementById("refreshMyJobs"),
   showAppliedJobsBtn: document.getElementById("showAppliedJobs"),
   myJobsList: document.getElementById("myJobsList"),
@@ -53,7 +56,6 @@ const els = {
   contactsList: document.getElementById("contactsList"),
   contactsEmpty: document.getElementById("contactsEmpty"),
   contactsStatus: document.getElementById("contactsStatus"),
-  apiBaseUrl: document.getElementById("apiBaseUrl"),
   dryRun: document.getElementById("dryRun"),
   toggleRunnerBtn: document.getElementById("toggleRunner"),
   saveSessionStateBtn: document.getElementById("saveSessionState"),
@@ -87,6 +89,12 @@ function setStatus(element, message, type = "info") {
 function normalizeUrl(url) { return (url || "").replace(/\/+$/, ""); }
 function isValidUrl(url) { return /^https?:\/\//i.test(url); }
 
+function setApiBaseUrl(value) {
+  const normalized = normalizeUrl(value || "");
+  apiBaseUrl = isValidUrl(normalized) ? normalized : DEFAULT_API_BASE_URL;
+  return apiBaseUrl;
+}
+
 function detectJobBoard(url) {
   if (!url) return null;
   const lower = url.toLowerCase();
@@ -99,9 +107,7 @@ function detectJobBoard(url) {
 }
 
 function getApiBaseUrl() {
-  const settingsUrl = els.apiBaseUrl?.value?.trim();
-  const authUrl = els.apiBaseUrlAuth?.value?.trim();
-  return normalizeUrl(settingsUrl || authUrl || "");
+  return normalizeUrl(apiBaseUrl || DEFAULT_API_BASE_URL);
 }
 
 function getHeaders() {
@@ -135,13 +141,9 @@ function mapSameSite(value) {
 // ─── Auth Functions ───────────────────────────────────────────
 
 async function connect() {
-  const apiBaseUrl = normalizeUrl(els.apiBaseUrlAuth.value.trim());
+  const apiBaseUrl = getApiBaseUrl();
   const amCode = els.amCodeInput.value.trim().toUpperCase();
 
-  if (!apiBaseUrl || !isValidUrl(apiBaseUrl)) {
-    setStatus(els.authStatus, "Please enter a valid API Base URL.", "error");
-    return;
-  }
   if (!amCode) {
     setStatus(els.authStatus, "Please enter your AM code.", "error");
     return;
@@ -237,9 +239,6 @@ function showConnectedUI() {
     els.amName.textContent = amInfo.name || "Account Manager";
     els.amEmailDisplay.textContent = amInfo.email || "";
   }
-
-  const apiBaseUrl = getApiBaseUrl();
-  if (apiBaseUrl && els.apiBaseUrl) els.apiBaseUrl.value = apiBaseUrl;
 }
 
 function showDisconnectedUI() {
@@ -1542,6 +1541,11 @@ els.saveJobBtn.addEventListener("click", saveCurrentJob);
 els.scrapeVisibleBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeVisibleJobs));
 els.scrapeAllBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeAllJobsWithScroll));
 els.refreshMatchedBtn.addEventListener("click", loadMatchedJobs);
+if (els.openJobManagerBtn) {
+  els.openJobManagerBtn.addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("jobs.html"), active: true });
+  });
+}
 if (els.refreshMyJobsBtn) {
   els.refreshMyJobsBtn.addEventListener("click", loadMyJobs);
 }
@@ -1571,17 +1575,8 @@ els.seekerSelect.addEventListener("change", (e) => {
   }
 });
 
-els.apiBaseUrl.addEventListener("blur", () => {
-  chrome.storage.local.set({ [STORAGE_KEYS.apiBaseUrl]: els.apiBaseUrl.value.trim() });
-});
-
 els.dryRun.addEventListener("change", () => {
   chrome.storage.local.set({ [STORAGE_KEYS.dryRun]: els.dryRun.checked });
-});
-
-els.apiBaseUrlAuth.addEventListener("blur", () => {
-  const val = els.apiBaseUrlAuth.value.trim();
-  if (val) chrome.storage.local.set({ [STORAGE_KEYS.apiBaseUrl]: val });
 });
 
 // ─── Initialize ───────────────────────────────────────────────
@@ -1592,10 +1587,8 @@ async function init() {
   authToken = result[STORAGE_KEYS.authToken] || null;
   amInfo = result[STORAGE_KEYS.amInfo] || null;
   activeSeekerId = result[STORAGE_KEYS.activeSeekerId] || null;
-
-  const apiBaseUrl = result[STORAGE_KEYS.apiBaseUrl] || "";
-  els.apiBaseUrl.value = apiBaseUrl;
-  els.apiBaseUrlAuth.value = apiBaseUrl;
+  setApiBaseUrl(DEFAULT_API_BASE_URL);
+  await chrome.storage.local.set({ [STORAGE_KEYS.apiBaseUrl]: getApiBaseUrl() });
   els.dryRun.checked = result[STORAGE_KEYS.dryRun] || false;
   updateRunnerUI(result[STORAGE_KEYS.runnerEnabled] || false);
 

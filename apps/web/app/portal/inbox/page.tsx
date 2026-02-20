@@ -123,7 +123,7 @@ export default function InboxPage() {
                 setFilter(opt.value);
                 setSelectedEmail(null);
               }}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className={`px-3 py-2 rounded-full text-sm font-medium transition-colors ${
                 filter === opt.value
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -210,7 +210,7 @@ export default function InboxPage() {
 
           {/* Email detail + reply */}
           {selectedEmail && (
-            <div className="bg-white rounded-lg shadow p-6 sticky top-4">
+            <div className="bg-white rounded-lg shadow p-6 lg:sticky lg:top-4">
               <div className="space-y-3">
                 <div>
                   <p className="text-lg font-semibold text-gray-900">

@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobGenius Job Console</title>
+    <style>
+      :root {
+        --bg: #f4f6fb;
+        --card: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --line: #dbe1ea;
+        --brand: #3b5bdb;
+        --brand-soft: #e9eeff;
+        --good: #166534;
+        --good-soft: #dcfce7;
+        --warn: #9a3412;
+        --warn-soft: #fff7ed;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .wrap {
+        max-width: 1300px;
+        margin: 0 auto;
+        padding: 18px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+
+      .title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      .status {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 250px 1fr 180px auto;
+        gap: 10px;
+      }
+
+      select,
+      input[type="search"] {
+        height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 10px;
+        font-size: 14px;
+      }
+
+      .btn {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .btn:hover {
+        background: #f7f9fc;
+      }
+
+      .btn-primary {
+        background: var(--brand);
+        color: #fff;
+        border-color: var(--brand);
+      }
+
+      .btn-primary:hover {
+        background: #2f4bc4;
+      }
+
+      .summary {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        background: #fff;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+        gap: 10px;
+      }
+
+      .job {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 12px;
+      }
+
+      .job h3 {
+        margin: 0 0 4px;
+        font-size: 16px;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 10px;
+      }
+
+      .badge {
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background: #f8fafc;
+      }
+
+      .badge-attention {
+        color: var(--warn);
+        background: var(--warn-soft);
+        border-color: #fed7aa;
+      }
+
+      .badge-good {
+        color: var(--good);
+        background: var(--good-soft);
+        border-color: #bbf7d0;
+      }
+
+      .err {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--warn);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .empty {
+        text-align: center;
+        color: var(--muted);
+        padding: 30px 10px;
+      }
+
+      @media (max-width: 900px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="title">
+          <h1>Job Console</h1>
+          <span class="status" id="connectionStatus">Connecting...</span>
+        </div>
+        <button class="btn" id="openPopup">Open Popup</button>
+      </div>
+
+      <div class="card">
+        <div class="controls">
+          <select id="seekerSelect">
+            <option value="">Select job seeker</option>
+          </select>
+          <input type="search" id="searchInput" placeholder="Search title, company, location, error..." />
+          <select id="statusFilter">
+            <option value="active">Active (default)</option>
+            <option value="needs_attention">Needs Attention</option>
+            <option value="queue_ready">Queued / Ready</option>
+            <option value="all">All</option>
+            <option value="applied">Applied</option>
+          </select>
+          <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="summary" id="summary"></div>
+      </div>
+
+      <div id="jobsGrid" class="grid"></div>
+      <div id="emptyState" class="card empty" style="display:none">No jobs found for the selected filters.</div>
+      <div style="text-align:center;margin:16px 0">
+        <button class="btn" id="loadMoreBtn" style="display:none">Load More</button>
+      </div>
+    </div>
+    <script src="jobs.js"></script>
+  </body>
+</html>

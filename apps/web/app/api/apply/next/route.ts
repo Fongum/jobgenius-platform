@@ -271,6 +271,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const jobSeekerId = searchParams.get("jobseekerId");
+  const preferredRunId = searchParams.get("runId");
 
   if (!jobSeekerId) {
     return Response.json(
@@ -335,15 +336,23 @@ export async function GET(request: Request) {
     });
   }
 
-  const { data: nextRun, error: nextRunError } = await supabaseServer
+  let nextRunQuery = supabaseServer
     .from("application_runs")
-    .select("id, queue_id, job_post_id, ats_type, status, current_step, attempt_count, max_retries, resume_url_used, resume_source")
+    .select(
+      "id, queue_id, job_post_id, ats_type, status, current_step, attempt_count, max_retries, resume_url_used, resume_source"
+    )
     .eq("job_seeker_id", jobSeekerId)
     .in("status", ["READY", "RETRYING"])
     .is("locked_at", null)
-    .order("updated_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (preferredRunId) {
+    nextRunQuery = nextRunQuery.eq("id", preferredRunId);
+  } else {
+    nextRunQuery = nextRunQuery.order("updated_at", { ascending: true });
+  }
+
+  const { data: nextRun, error: nextRunError } = await nextRunQuery.maybeSingle();
 
   if (nextRunError) {
     return Response.json(
@@ -353,6 +362,12 @@ export async function GET(request: Request) {
   }
 
   if (!nextRun) {
+    if (preferredRunId) {
+      return Response.json(
+        { success: false, error: "Requested run is not ready." },
+        { status: 409 }
+      );
+    }
     return Response.json({ success: true, status: "IDLE" });
   }
 

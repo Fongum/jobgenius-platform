@@ -265,13 +265,13 @@ export default async function PortalPage() {
             {interviews.map((interview: Record<string, unknown>) => (
               <div
                 key={interview.id as string}
-                className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
+                className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 p-4 bg-gray-50 rounded-lg"
               >
                 <div>
                   <p className="font-medium text-gray-900">{interview.company_name as string}</p>
                   <p className="text-sm text-gray-600">{interview.role_title as string}</p>
                 </div>
-                <div className="text-right">
+                <div className="sm:text-right">
                   <p className="text-sm font-medium text-gray-900">
                     {new Date(interview.scheduled_at as string).toLocaleDateString()}
                   </p>

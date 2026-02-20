@@ -21,10 +21,14 @@ function setStorage(values) {
   });
 }
 
-async function fetchNextJob(apiBaseUrl, authToken, activeSeekerId) {
-  const endpoint = `${apiBaseUrl}/api/apply/next?jobseekerId=${encodeURIComponent(
-    activeSeekerId
-  )}`;
+async function fetchNextJob(apiBaseUrl, authToken, activeSeekerId, runId = null) {
+  const params = new URLSearchParams({
+    jobseekerId: activeSeekerId,
+  });
+  if (runId) {
+    params.set("runId", runId);
+  }
+  const endpoint = `${apiBaseUrl}/api/apply/next?${params.toString()}`;
 
   const response = await fetch(endpoint, {
     method: "GET",
@@ -50,9 +54,10 @@ async function runJobInTab(
   claimToken,
   activeSeekerId,
   dryRun,
-  profile
+  profile,
+  activeTab = false
 ) {
-  const tab = await chrome.tabs.create({ url: job.url, active: false });
+  const tab = await chrome.tabs.create({ url: job.url, active: Boolean(activeTab) });
 
   await new Promise((resolve) => {
     const listener = (tabId, changeInfo) => {
@@ -140,9 +145,74 @@ async function pollRunner() {
       payload.claim_token ?? null,
       payload.job_seeker_id ?? activeSeekerId,
       dryRun,
-      payload.profile ?? null
+      payload.profile ?? null,
+      false
     );
   }
+}
+
+async function runSpecificRun(runId, activateTab = true) {
+  const {
+    apiBaseUrl,
+    authToken,
+    activeSeekerId,
+    dryRun,
+  } = await getStorage(Object.values(STORAGE_KEYS));
+
+  if (!apiBaseUrl || !authToken || !activeSeekerId) {
+    return { success: false, error: "Extension is not connected." };
+  }
+
+  if (!runId) {
+    return { success: false, error: "Missing run ID." };
+  }
+
+  if (activeRuns.size >= 5) {
+    return { success: false, error: "Runner is at max concurrency." };
+  }
+
+  await setStorage({ [STORAGE_KEYS.runnerEnabled]: true });
+
+  let payload;
+  try {
+    payload = await fetchNextJob(apiBaseUrl, authToken, activeSeekerId, runId);
+  } catch (error) {
+    return {
+      success: false,
+      error: error?.message ?? "Failed to claim run.",
+    };
+  }
+
+  if (!payload?.success) {
+    return { success: false, error: payload?.error ?? "Failed to start run." };
+  }
+
+  if (payload.status === "IDLE") {
+    return {
+      success: false,
+      error: "Run is not ready yet. Try again in a moment.",
+    };
+  }
+
+  if (!payload.run_id || !payload.job?.url) {
+    return { success: false, error: "Runner payload is incomplete." };
+  }
+
+  activeRuns.add(payload.run_id);
+  await runJobInTab(
+    payload.job,
+    payload.run_id,
+    apiBaseUrl,
+    authToken,
+    payload.resume?.url ?? null,
+    payload.claim_token ?? null,
+    payload.job_seeker_id ?? activeSeekerId,
+    dryRun,
+    payload.profile ?? null,
+    Boolean(activateTab)
+  );
+
+  return { success: true, run_id: payload.run_id };
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -169,6 +239,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "RUNNER_RUN_NOW") {
     pollRunner().then(() => sendResponse({ success: true }));
+    return true;
+  }
+
+  if (message?.type === "RUNNER_RUN_FOR_RUN_ID") {
+    runSpecificRun(message.runId, message.activateTab !== false)
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          success: false,
+          error: error?.message ?? "Failed to run selected job.",
+        })
+      );
     return true;
   }
 

@@ -8,7 +8,7 @@ type UserType = "am" | "job_seeker";
 
 export default function SignUpPage() {
   const router = useRouter();
-  const [userType, setUserType] = useState<UserType>("am");
+  const [userType, setUserType] = useState<UserType>("job_seeker");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -121,12 +121,15 @@ export default function SignUpPage() {
               <button
                 type="button"
                 onClick={() => setUserType("job_seeker")}
-                className={`flex flex-col items-center justify-center px-4 py-3 border-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative flex flex-col items-center justify-center px-4 py-3 border-2 rounded-lg text-sm font-medium transition-colors ${
                   userType === "job_seeker"
                     ? "border-blue-600 bg-blue-50 text-blue-700"
                     : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                 }`}
               >
+                <span className="absolute -top-2.5 right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  Most users
+                </span>
                 <svg
                   className="w-6 h-6 mb-1"
                   fill="none"

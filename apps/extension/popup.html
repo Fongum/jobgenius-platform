@@ -370,10 +370,6 @@
             </div>
             <h3>Connect Your Account</h3>
             <p>Enter your AM code from the dashboard to get started.</p>
-            <div class="form-group">
-              <label>API Base URL</label>
-              <input type="url" id="apiBaseUrlAuth" placeholder="https://jobgenius-platform.vercel.app" />
-            </div>
             <div class="am-code-input">
               <input type="text" id="amCodeInput" placeholder="AM CODE" maxlength="8" />
               <button class="btn btn-primary" id="connectBtn">Connect</button>
@@ -451,6 +447,7 @@
           <div class="card">
             <div class="card-title">My Jobs</div>
             <div class="btn-group" style="margin-top:0;margin-bottom:10px">
+              <button class="btn btn-secondary btn-sm" id="openJobManager">Manage</button>
               <button class="btn btn-secondary btn-sm" id="refreshMyJobs">Refresh</button>
               <button class="btn btn-secondary btn-sm" id="showAppliedJobs">Show Applied</button>
             </div>
@@ -502,14 +499,6 @@
             </div>
             <button class="btn btn-success" id="toggleRunner">Start Runner</button>
             <button class="btn btn-secondary" id="saveSessionState" style="margin-top:8px">Save Session State</button>
-          </div>
-
-          <div class="card">
-            <div class="card-title">Connection Settings</div>
-            <div class="form-group">
-              <label>API Base URL</label>
-              <input type="url" id="apiBaseUrl" placeholder="https://jobgenius-platform.vercel.app" />
-            </div>
           </div>
 
           <div id="settingsStatus" class="status"></div>

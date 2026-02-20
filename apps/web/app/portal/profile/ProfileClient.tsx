@@ -244,8 +244,8 @@ function LocationPreferencesEditor({
     <div className="space-y-3">
       {preferences.map((pref, index) => (
         <div key={index} className="border rounded-lg p-4 bg-gray-50">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <select
                 value={pref.work_type}
                 onChange={(e) => updateWorkType(index, e.target.value as "remote" | "hybrid" | "onsite")}
@@ -255,13 +255,13 @@ function LocationPreferencesEditor({
                 <option value="hybrid">Hybrid</option>
                 <option value="onsite">On-site</option>
               </select>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-500 truncate max-w-[180px] sm:max-w-xs">
                 {pref.locations.length > 0 ? pref.locations.join(", ") : "No locations set"}
               </span>
             </div>
             <button
               onClick={() => removeEntry(index)}
-              className="text-red-500 hover:text-red-700 text-sm"
+              className="text-red-500 hover:text-red-700 text-sm min-h-[44px] min-w-[44px] flex items-center justify-end flex-shrink-0"
             >
               Remove
             </button>
@@ -434,7 +434,7 @@ export default function ProfileClient({
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Resume</h3>
         <p className="text-sm text-gray-500 mb-4">Upload your resume to automatically pre-fill your profile. We'll extract your skills, work history, and education.</p>
         <div
-          className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
+          className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
           onClick={() => fileRef.current?.click()}
         >
           <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleUpload} className="hidden" />
@@ -618,7 +618,7 @@ export default function ProfileClient({
           <div key={i} className="border rounded-lg p-4 mb-4">
             <div className="flex justify-between items-start mb-3">
               <span className="text-sm font-medium text-gray-500">Position {i + 1}</span>
-              <button onClick={() => removeWorkEntry(i)} className="text-red-500 hover:text-red-700 text-sm">Remove</button>
+              <button onClick={() => removeWorkEntry(i)} className="text-red-500 hover:text-red-700 text-sm min-h-[44px] min-w-[44px] flex items-center justify-end">Remove</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input type="text" value={entry.title} onChange={(e) => updateWorkEntry(i, "title", e.target.value)} placeholder="Job Title" className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
@@ -645,7 +645,7 @@ export default function ProfileClient({
           <div key={i} className="border rounded-lg p-4 mb-4">
             <div className="flex justify-between items-start mb-3">
               <span className="text-sm font-medium text-gray-500">Education {i + 1}</span>
-              <button onClick={() => removeEducationEntry(i)} className="text-red-500 hover:text-red-700 text-sm">Remove</button>
+              <button onClick={() => removeEducationEntry(i)} className="text-red-500 hover:text-red-700 text-sm min-h-[44px] min-w-[44px] flex items-center justify-end">Remove</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

@@ -100,10 +100,10 @@ export default function ConversationThread({
     conversation.conversation_type === "application_question";
 
   return (
-    <div className="flex flex-col h-[calc(100vh-220px)]">
+    <div className="flex flex-col h-[calc(100dvh-220px)]">
       {/* Header */}
       <div className="bg-white rounded-lg shadow p-4 mb-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <Link
               href="/portal/conversations"
@@ -114,7 +114,7 @@ export default function ConversationThread({
             <h2 className="text-lg font-semibold text-gray-900 mt-1">
               {conversation.subject}
             </h2>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
               <span
                 className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                   isApplicationQuestion
@@ -134,7 +134,7 @@ export default function ConversationThread({
               )}
             </div>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right flex-shrink-0">
             <p className="text-sm text-gray-500">
               With: {conversation.account_managers?.name || "Account Manager"}
             </p>
@@ -166,7 +166,7 @@ export default function ConversationThread({
                 className={`flex ${isMe ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                  className={`max-w-[85%] sm:max-w-[70%] rounded-lg px-4 py-3 ${
                     isMe
                       ? "bg-blue-600 text-white"
                       : "bg-gray-100 text-gray-900"
@@ -241,14 +241,14 @@ export default function ConversationThread({
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="flex-1 min-w-0 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
             <button
               type="submit"
               disabled={sending || !newMessage.trim()}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
             >
-              {sending ? "Sending..." : "Send"}
+              {sending ? "..." : "Send"}
             </button>
           </div>
         </form>
