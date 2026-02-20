@@ -54,7 +54,7 @@ export function generateContractHTML(params: ContractParams): string {
 
   const essentialsFeatures = `
     <ul>
-      <li>Up to 20 job applications on your behalf</li>
+      <li>Unlimited job applications on your behalf</li>
       <li>Up to 20 referrals within our network</li>
       <li>Dedicated Account Manager support</li>
       <li>Resume optimization guidance</li>

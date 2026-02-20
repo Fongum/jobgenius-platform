@@ -9,7 +9,7 @@ interface PlanSelectionStepProps {
 
 const PLAN_FEATURES = {
   essentials: [
-    { label: "Job Applications", value: "Up to 20" },
+    { label: "Job Applications", value: "Unlimited" },
     { label: "Referrals", value: "Up to 20" },
     { label: "Account Manager Support", value: "✓" },
     { label: "Resume Optimization", value: "✓" },

@@ -64,19 +64,16 @@ export default function HomePage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center max-w-4xl">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-50 border border-violet-100 rounded-full text-sm font-medium text-violet-700 mb-8">
             <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-            Your job search team is ready
+            Plans from $500 - Pay over 1 month - 5% after placement
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight">
-            Stop Applying to Jobs.
+            Job search,
             <br />
-            <span className="text-violet-600">Start Getting</span>{" "}
-            <span className="text-orange-500">Hired.</span>
+            <span className="text-violet-600">handled for you.</span>
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            We handle the entire job search &mdash; targeted applications, direct
-            recruiter outreach, and referral network access &mdash; so you can
-            focus on the only thing that matters:{" "}
-            <strong className="text-gray-900">nailing your interviews.</strong>
+            We find roles, match your profile, and apply on your behalf so you can
+            focus on interviews and offer conversations instead of manual applications.
           </p>
 
           {/* Feature pills */}
@@ -85,13 +82,13 @@ export default function HomePage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              Targeted Applications
+              Unlimited Applications
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-full text-sm text-orange-700 font-medium">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              Referral Network Access
+              Referral Outreach
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 border border-violet-100 rounded-full text-sm text-violet-700 font-medium">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,17 +103,17 @@ export default function HomePage() {
               href="/signup"
               className="bg-orange-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-200"
             >
-              Get Your Team Started
+              Start Now
             </Link>
             <a
-              href="#how-it-works"
+              href="#pricing"
               className="bg-white text-gray-700 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-gray-50 transition-colors border border-gray-200"
             >
-              See How It Works
+              See Pricing
             </a>
           </div>
           <p className="mt-4 text-sm text-gray-400">
-            No spam applications. No mass blasting. Real opportunities, managed by real people.
+            No hidden fees. Work starts after first payment confirmation.
           </p>
         </div>
       </section>
@@ -582,11 +579,11 @@ export default function HomePage() {
             Pricing
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">
-            Invest in your career. We&apos;ll deliver the results.
+            Simple pricing. Real execution.
           </h2>
           <p className="text-center text-gray-500 max-w-2xl mx-auto mb-16">
-            Two plans, both include a dedicated account manager, referral network access,
-            and our full AI engine. You only pay a success fee when you land an offer.
+            Choose your plan and how to pay. Both plans support 1 to 3 installments
+            completed within 1 month.
           </p>
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -595,35 +592,32 @@ export default function HomePage() {
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-gray-900">Essentials</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Full job search management
+                  Unlimited applications + guided outreach
                 </p>
               </div>
               <div className="mb-6">
                 <span className="text-4xl font-extrabold text-gray-900">$500</span>
-                <span className="text-gray-500 ml-1">one-time</span>
+                <span className="text-gray-500 ml-1">registration fee</span>
               </div>
               <div className="bg-orange-50 border border-orange-100 rounded-lg px-4 py-2.5 mb-6">
                 <p className="text-sm font-medium text-orange-700">
-                  + 5% of first-year salary upon successful offer
+                  Pay in 1 to 3 installments within 1 month
                 </p>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
-                <PricingItem included text="Dedicated human account manager" />
-                <PricingItem included text="AI-powered job matching & scoring" />
-                <PricingItem included text="Targeted applications on your behalf" />
-                <PricingItem included text="Recruiter outreach & follow-ups" />
-                <PricingItem included text="Full pipeline management & tracking" />
-                <PricingItem included text="Referral network access" />
+                <PricingItem included text="Unlimited job applications" />
+                <PricingItem included text="Up to 20 referral outreaches" />
+                <PricingItem included text="Dedicated account manager support" />
+                <PricingItem included text="Resume optimization guidance" />
                 <PricingItem included text="Portal with real-time updates" />
-                <PricingItem included={false} text="AI interview preparation" />
-                <PricingItem included={false} text="Voice practice with AI scoring" />
-                <PricingItem included={false} text="Skill polishing & coaching" />
+                <PricingItem included={false} text="Priority referral network access" />
+                <PricingItem included={false} text="Interview coaching + AI voice practice" />
               </ul>
               <Link
                 href="/signup"
                 className="block text-center bg-white text-violet-700 px-6 py-3 rounded-xl font-semibold border-2 border-violet-600 hover:bg-violet-50 transition-colors"
               >
-                Get Started
+                Choose Essentials
               </Link>
             </div>
 
@@ -635,42 +629,46 @@ export default function HomePage() {
               <div className="mb-6">
                 <h3 className="text-lg font-bold">Premium</h3>
                 <p className="text-sm text-violet-200 mt-1">
-                  Full access including interview prep
+                  Unlimited applications + priority support
                 </p>
               </div>
               <div className="mb-6">
                 <span className="text-4xl font-extrabold">$1,000</span>
-                <span className="text-violet-200 ml-1">one-time</span>
+                <span className="text-violet-200 ml-1">registration fee</span>
               </div>
               <div className="bg-white/15 border border-white/20 rounded-lg px-4 py-2.5 mb-6">
                 <p className="text-sm font-medium text-orange-300">
-                  + 5% of first-year salary upon successful offer
+                  Pay in 1 to 3 installments within 1 month
                 </p>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
-                <PricingItem included light text="Dedicated human account manager" />
-                <PricingItem included light text="AI-powered job matching & scoring" />
-                <PricingItem included light text="Targeted applications on your behalf" />
-                <PricingItem included light text="Recruiter outreach & follow-ups" />
-                <PricingItem included light text="Full pipeline management & tracking" />
-                <PricingItem included light text="Referral network access" />
+                <PricingItem included light text="Unlimited job applications" />
+                <PricingItem included light text="Unlimited referral outreaches" />
+                <PricingItem included light text="Dedicated account manager support" />
+                <PricingItem included light text="Resume optimization + interview coaching" />
+                <PricingItem included light text="Priority referral network access" />
+                <PricingItem included light text="AI interview prep + voice practice" />
                 <PricingItem included light text="Portal with real-time updates" />
-                <PricingItem included light text="AI interview preparation" />
-                <PricingItem included light text="Voice practice with AI scoring" />
-                <PricingItem included light text="Skill polishing & coaching" />
               </ul>
               <Link
                 href="/signup"
                 className="block text-center bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-colors shadow-lg"
               >
-                Get Started
+                Choose Premium
               </Link>
             </div>
           </div>
 
-          <p className="text-center text-sm text-gray-400 mt-8">
-            The success fee is only charged when you accept an offer. No offer, no fee.
-          </p>
+          <div className="mt-8 space-y-2 text-center text-sm text-gray-500">
+            <p>
+              Success commission for both plans:{" "}
+              <strong className="text-gray-900">5% of first-year base salary after placement.</strong>
+            </p>
+            <p>
+              Commission is due within 60 days of accepted offer. One-time 30-day extension available.
+            </p>
+            <p className="text-gray-400">No hidden fees. No accepted offer, no success commission.</p>
+          </div>
         </div>
       </section>
 
