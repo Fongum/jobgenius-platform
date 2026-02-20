@@ -280,6 +280,21 @@
       .contact-card .role { font-size: 10px; color: var(--gray-500); }
       .contact-card .company { font-size: 10px; color: var(--indigo-500); }
 
+      .ref-group { margin-bottom: 10px; }
+      .ref-group:last-child { margin-bottom: 0; }
+      .ref-group-title { font-size: 11px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+      .ref-item {
+        background: var(--gray-50);
+        border: 1px solid var(--gray-200);
+        border-radius: 6px;
+        padding: 8px;
+        margin-bottom: 6px;
+      }
+      .ref-item:last-child { margin-bottom: 0; }
+      .ref-item-name { font-size: 11px; font-weight: 600; color: var(--gray-900); }
+      .ref-item-meta { font-size: 10px; color: var(--gray-600); margin-top: 2px; }
+      .ref-item-email { font-size: 10px; color: var(--indigo-600); margin-top: 2px; word-break: break-all; }
+
       .page-info {
         background: var(--indigo-50); border: 1px solid var(--indigo-100);
         border-radius: 8px; padding: 10px; margin-bottom: 10px;
@@ -388,6 +403,7 @@
         <div class="tabs">
           <button class="tab active" data-tab="jobs">Jobs</button>
           <button class="tab" data-tab="matched">Matched</button>
+          <button class="tab" data-tab="myjobs">My Jobs</button>
           <button class="tab" data-tab="contacts">Contacts</button>
           <button class="tab" data-tab="settings">Settings</button>
         </div>
@@ -427,6 +443,31 @@
                 <div>Select a job seeker to see matched jobs</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- My Jobs Panel -->
+        <div class="panel" id="panel-myjobs">
+          <div class="card">
+            <div class="card-title">My Jobs</div>
+            <div class="btn-group" style="margin-top:0;margin-bottom:10px">
+              <button class="btn btn-secondary btn-sm" id="refreshMyJobs">Refresh</button>
+              <button class="btn btn-secondary btn-sm" id="showAppliedJobs">Show Applied</button>
+            </div>
+            <div id="myJobsList" class="job-list">
+              <div class="empty-state" id="myJobsEmpty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>
+                </svg>
+                <div>No jobs in queue yet. Queue jobs from the Matched tab.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card hidden" id="referrerPanel">
+            <div class="card-title" id="referrerTitle">Find Referrers</div>
+            <div id="referrerStatus" style="font-size:11px;color:#6b7280;margin-bottom:8px"></div>
+            <div id="referrerGroups"></div>
           </div>
         </div>
 

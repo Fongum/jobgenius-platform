@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
 let authToken = null;
 let amInfo = null;
 let activeSeekerId = null;
+let includeAppliedJobs = false;
 
 // DOM Elements
 const els = {
@@ -40,6 +41,14 @@ const els = {
   refreshMatchedBtn: document.getElementById("refreshMatched"),
   matchedJobsList: document.getElementById("matchedJobsList"),
   matchedEmpty: document.getElementById("matchedEmpty"),
+  refreshMyJobsBtn: document.getElementById("refreshMyJobs"),
+  showAppliedJobsBtn: document.getElementById("showAppliedJobs"),
+  myJobsList: document.getElementById("myJobsList"),
+  myJobsEmpty: document.getElementById("myJobsEmpty"),
+  referrerPanel: document.getElementById("referrerPanel"),
+  referrerTitle: document.getElementById("referrerTitle"),
+  referrerStatus: document.getElementById("referrerStatus"),
+  referrerGroups: document.getElementById("referrerGroups"),
   scrapeContactsBtn: document.getElementById("scrapeContacts"),
   contactsList: document.getElementById("contactsList"),
   contactsEmpty: document.getElementById("contactsEmpty"),
@@ -100,6 +109,13 @@ function getHeaders() {
     "Content-Type": "application/json",
     Authorization: `Bearer ${authToken}`,
     "x-runner": "extension",
+  };
+}
+
+function getManualHeaders() {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${authToken}`,
   };
 }
 
@@ -431,6 +447,191 @@ async function loadMatchedJobs() {
   }
 }
 
+function formatRunStatus(status) {
+  return String(status || "UNKNOWN")
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getStatusStyle(status) {
+  const normalized = String(status || "").toUpperCase();
+  if (normalized === "NEEDS_ATTENTION") {
+    return "background:#fff7ed;color:#9a3412";
+  }
+  if (normalized === "APPLIED" || normalized === "COMPLETED") {
+    return "background:#dcfce7;color:#166534";
+  }
+  if (normalized === "RUNNING") {
+    return "background:#dbeafe;color:#1e40af";
+  }
+  if (normalized === "READY" || normalized === "RETRYING" || normalized === "QUEUED") {
+    return "background:#ede9fe;color:#4338ca";
+  }
+  if (normalized === "FAILED" || normalized === "CANCELLED") {
+    return "background:#fee2e2;color:#991b1b";
+  }
+  return "background:#f3f4f6;color:#4b5563";
+}
+
+function renderReferrerGroup(label, rows) {
+  if (!rows || rows.length === 0) {
+    return `
+      <div class="ref-group">
+        <div class="ref-group-title">${label}</div>
+        <div class="ref-item">
+          <div class="ref-item-meta">No contacts found yet.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const items = rows
+    .map((row) => {
+      const name = row.full_name || row.role || "Contact";
+      const role = row.role || "Referral contact";
+      const email = row.email ? `<div class="ref-item-email">${sanitizeText(row.email)}</div>` : "";
+      const source = row.source ? `<div class="ref-item-meta">Source: ${sanitizeText(row.source)}</div>` : "";
+      return `
+        <div class="ref-item">
+          <div class="ref-item-name">${sanitizeText(name)}</div>
+          <div class="ref-item-meta">${sanitizeText(role)}</div>
+          ${email}
+          ${source}
+        </div>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="ref-group">
+      <div class="ref-group-title">${label}</div>
+      ${items}
+    </div>
+  `;
+}
+
+async function loadMyJobs() {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken || !activeSeekerId) {
+    if (els.myJobsEmpty) {
+      els.myJobsEmpty.style.display = "block";
+    }
+    if (els.myJobsList) {
+      els.myJobsList.innerHTML = `
+        <div class="empty-state" id="myJobsEmpty">
+          <div>Select a job seeker to view queued/running jobs.</div>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  if (els.referrerPanel) {
+    els.referrerPanel.classList.add("hidden");
+  }
+
+  if (els.showAppliedJobsBtn) {
+    els.showAppliedJobsBtn.textContent = includeAppliedJobs
+      ? "Hide Applied"
+      : "Show Applied";
+  }
+
+  if (els.myJobsList) {
+    els.myJobsList.innerHTML =
+      '<div style="text-align:center;padding:10px;font-size:11px;color:#6b7280">Loading jobs...</div>';
+  }
+
+  try {
+    const query = includeAppliedJobs ? "?include_applied=true" : "";
+    const response = await fetch(`${apiBaseUrl}/api/extension/my-jobs${query}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    if (!response.ok) {
+      if (els.myJobsList) {
+        els.myJobsList.innerHTML =
+          '<div class="empty-state"><div>Failed to load jobs.</div></div>';
+      }
+      return;
+    }
+
+    const data = await response.json();
+    const items = data.items || [];
+
+    if (items.length === 0) {
+      if (els.myJobsList) {
+        els.myJobsList.innerHTML = `
+          <div class="empty-state">
+            <div>No jobs found in your pipeline.</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:4px">Queue jobs from Matched, then run/apply from here.</div>
+          </div>
+        `;
+      }
+      return;
+    }
+
+    const html = items
+      .map((item) => {
+        const status = item.run_status || item.queue_status || "UNKNOWN";
+        const statusStyle = getStatusStyle(status);
+        const score = Number.isFinite(Number(item.score))
+          ? `${Math.round(Number(item.score))}%`
+          : "--";
+        const canResume =
+          status === "NEEDS_ATTENTION" && !!item.run_id;
+        const canApply =
+          ["QUEUED", "READY", "RETRYING", "RUNNING"].includes(status);
+        const canMarkApplied =
+          !!item.run_id && !["APPLIED", "COMPLETED"].includes(status);
+
+        const reasonHtml = item.needs_attention_reason
+          ? `<div style="font-size:9px;color:#9a3412;margin-top:4px">Reason: ${sanitizeText(formatAttentionReason(item.needs_attention_reason))}</div>`
+          : "";
+        const errorHtml = item.last_error
+          ? `<div style="font-size:9px;color:#92400e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${sanitizeText(item.last_error)}">${sanitizeText(item.last_error)}</div>`
+          : "";
+
+        const encodedUrl = encodeURIComponent(item.job?.url || "");
+        const encodedCompany = encodeURIComponent(item.job?.company || "");
+        const encodedTitle = encodeURIComponent(item.job?.title || "");
+
+        return `
+          <div class="job-card ${item.needs_attention ? "score-medium" : "score-low"}">
+            <div class="title" title="${sanitizeText(item.job?.title || "Untitled")}">
+              <a href="${sanitizeText(item.job?.url || "#")}" target="_blank" style="color:inherit;text-decoration:none">${sanitizeText(item.job?.title || "Untitled")}</a>
+            </div>
+            <div class="meta">${sanitizeText(item.job?.company || "Unknown")} ${item.job?.location ? " - " + sanitizeText(item.job.location) : ""}</div>
+            <div style="display:flex;gap:4px;align-items:center;margin:4px 0 2px">
+              <span class="queue-badge" style="${statusStyle}">${sanitizeText(formatRunStatus(status))}</span>
+              <span class="score-badge low">${score}</span>
+            </div>
+            ${reasonHtml}
+            ${errorHtml}
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">
+              <button class="btn btn-secondary btn-sm" onclick="openJobLink('${encodedUrl}')" style="width:auto;padding:3px 8px;font-size:9px">Open</button>
+              ${canApply ? `<button class="btn btn-apply btn-sm" onclick="applyJob('${item.job?.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button>` : ""}
+              ${canResume ? `<button class="btn btn-secondary btn-sm" onclick="resumeJob('${item.run_id}', '${encodedUrl}')" style="width:auto;padding:3px 8px;font-size:9px">Resume</button>` : ""}
+              ${canMarkApplied ? `<button class="btn btn-secondary btn-sm" onclick="markJobApplied('${item.run_id}')" style="width:auto;padding:3px 8px;font-size:9px">Mark Applied</button>` : ""}
+              <button class="btn btn-secondary btn-sm" onclick="findReferrers('${item.job?.id}', '${encodedCompany}', '${encodedTitle}')" style="width:auto;padding:3px 8px;font-size:9px">Find Referrers</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    if (els.myJobsList) {
+      els.myJobsList.innerHTML = html;
+    }
+  } catch (error) {
+    if (els.myJobsList) {
+      els.myJobsList.innerHTML =
+        '<div class="empty-state"><div>Error loading My Jobs.</div></div>';
+    }
+    console.error("My jobs load error:", error);
+  }
+}
+
 window.queueJob = async function (jobPostId) {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !authToken) return;
@@ -441,7 +642,9 @@ window.queueJob = async function (jobPostId) {
       headers: getHeaders(),
       body: JSON.stringify({ job_post_id: jobPostId }),
     });
-    if (response.ok) loadMatchedJobs();
+    if (response.ok) {
+      await Promise.all([loadMatchedJobs(), loadMyJobs()]);
+    }
   } catch (error) { console.error("Queue error:", error); }
 };
 
@@ -470,7 +673,7 @@ window.queueAllJobs = async function () {
       } catch (e) { console.error("Queue error:", e); }
     }
 
-    loadMatchedJobs();
+    await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) { console.error("Queue all error:", error); }
 };
 
@@ -487,7 +690,7 @@ window.applyJob = async function (jobPostId) {
     });
 
     await triggerRunnerNow();
-    loadMatchedJobs();
+    await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) { console.error("Apply error:", error); }
 };
 
@@ -519,7 +722,7 @@ window.applyAllJobs = async function () {
     }
 
     await triggerRunnerNow();
-    loadMatchedJobs();
+    await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) { console.error("Apply all error:", error); }
 };
 
@@ -547,7 +750,7 @@ window.resumeJob = async function (runId, encodedJobUrl) {
     }
 
     await triggerRunnerNow();
-    loadMatchedJobs();
+    await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) {
     console.error("Resume error:", error);
   }
@@ -582,13 +785,111 @@ window.resumeAllAttention = async function () {
     if (jobs.length > 0) {
       await triggerRunnerNow();
     }
-    loadMatchedJobs();
+    await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) {
     console.error("Resume all attention error:", error);
   }
 };
 
 // ─── Contact Scraping ─────────────────────────────────────────
+
+window.openJobLink = function (encodedJobUrl) {
+  const jobUrl = encodedJobUrl ? decodeURIComponent(encodedJobUrl) : "";
+  if (!jobUrl || !/^https?:\/\//i.test(jobUrl)) {
+    return;
+  }
+  chrome.tabs.create({ url: jobUrl, active: true }).catch((error) => {
+    console.error("Open job link error:", error);
+  });
+};
+
+window.markJobApplied = async function (runId) {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken || !runId) return;
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/apply/complete`, {
+      method: "POST",
+      headers: getManualHeaders(),
+      body: JSON.stringify({
+        run_id: runId,
+        note: "Marked applied manually from extension.",
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      console.error("Mark applied error:", data.error || response.status);
+      return;
+    }
+
+    await Promise.all([loadMyJobs(), loadMatchedJobs()]);
+  } catch (error) {
+    console.error("Mark applied error:", error);
+  }
+};
+
+window.findReferrers = async function (jobPostId, encodedCompany, encodedTitle) {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || !authToken) return;
+
+  const company = encodedCompany ? decodeURIComponent(encodedCompany) : "";
+  const title = encodedTitle ? decodeURIComponent(encodedTitle) : "";
+
+  if (els.referrerPanel) {
+    els.referrerPanel.classList.remove("hidden");
+  }
+  if (els.referrerTitle) {
+    els.referrerTitle.textContent = `Referrers${company ? ` - ${company}` : ""}`;
+  }
+  if (els.referrerStatus) {
+    els.referrerStatus.textContent = "Searching contacts...";
+  }
+  if (els.referrerGroups) {
+    els.referrerGroups.innerHTML = "";
+  }
+
+  try {
+    const params = new URLSearchParams();
+    if (jobPostId) params.set("job_post_id", jobPostId);
+    if (company) params.set("company", company);
+
+    const response = await fetch(
+      `${apiBaseUrl}/api/extension/referrers?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${authToken}` } }
+    );
+
+    if (!response.ok) {
+      if (els.referrerStatus) {
+        els.referrerStatus.textContent = "Failed to load referrers.";
+      }
+      return;
+    }
+
+    const data = await response.json();
+    const groups = data.groups || {};
+    const totals = data.totals || { all: 0 };
+
+    if (els.referrerStatus) {
+      els.referrerStatus.textContent = totals.all
+        ? `${totals.all} contacts found${title ? ` for ${title}` : ""}.`
+        : "No contacts found yet. Showing smart suggestions.";
+    }
+
+    if (els.referrerGroups) {
+      els.referrerGroups.innerHTML = [
+        renderReferrerGroup("Recruiters / HR", groups.hr || []),
+        renderReferrerGroup("Management Team", groups.management || []),
+        renderReferrerGroup("Peers", groups.peers || []),
+      ].join("");
+    }
+  } catch (error) {
+    if (els.referrerStatus) {
+      els.referrerStatus.textContent = "Error loading referrers.";
+    }
+    console.error("Find referrers error:", error);
+  }
+};
 
 async function loadContacts() {
   const apiBaseUrl = getApiBaseUrl();
@@ -1228,6 +1529,7 @@ els.tabs.forEach((tab) => {
     tab.classList.add("active");
     document.getElementById(`panel-${targetId}`).classList.add("active");
     if (targetId === "matched") loadMatchedJobs();
+    if (targetId === "myjobs") loadMyJobs();
     if (targetId === "contacts") loadContacts();
   });
 });
@@ -1240,6 +1542,15 @@ els.saveJobBtn.addEventListener("click", saveCurrentJob);
 els.scrapeVisibleBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeVisibleJobs));
 els.scrapeAllBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeAllJobsWithScroll));
 els.refreshMatchedBtn.addEventListener("click", loadMatchedJobs);
+if (els.refreshMyJobsBtn) {
+  els.refreshMyJobsBtn.addEventListener("click", loadMyJobs);
+}
+if (els.showAppliedJobsBtn) {
+  els.showAppliedJobsBtn.addEventListener("click", () => {
+    includeAppliedJobs = !includeAppliedJobs;
+    loadMyJobs();
+  });
+}
 els.scrapeContactsBtn.addEventListener("click", scrapePageContacts);
 els.toggleRunnerBtn.addEventListener("click", toggleRunner);
 els.saveSessionStateBtn.addEventListener("click", saveSessionState);
@@ -1247,8 +1558,16 @@ els.saveSessionStateBtn.addEventListener("click", saveSessionState);
 els.seekerSelect.addEventListener("change", (e) => {
   if (e.target.value) {
     setActiveSeeker(e.target.value);
-    // Auto-refresh matched jobs when seeker changes
-    setTimeout(() => loadMatchedJobs(), 500);
+    includeAppliedJobs = false;
+    if (els.referrerPanel) {
+      els.referrerPanel.classList.add("hidden");
+    }
+    // Auto-refresh lists when seeker changes
+    setTimeout(() => {
+      loadMatchedJobs();
+      loadMyJobs();
+      loadContacts();
+    }, 500);
   }
 });
 
