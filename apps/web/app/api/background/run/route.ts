@@ -50,6 +50,18 @@ type JobPostRow = {
   parsed_at: string | null;
 };
 
+type StaleApplicationRunRow = {
+  id: string;
+  queue_id: string | null;
+  job_seeker_id: string;
+  ats_type: string | null;
+  current_step: string;
+  status: string;
+  attempt_count: number | null;
+  max_retries: number | null;
+  locked_at: string | null;
+};
+
 const RETRY_BASE_MS = 60 * 1000;
 const RETRY_MAX_MS = 30 * 60 * 1000;
 const IS_PROD =
@@ -78,6 +90,10 @@ const AUTO_OUTREACH_ENABLED = resolveFlag("AUTO_OUTREACH_ENABLED", IS_PROD);
 const AUTO_OUTREACH_CONTACT_LIMIT = Math.max(
   Number(process.env.AUTO_OUTREACH_CONTACT_LIMIT ?? 1),
   1
+);
+const AUTO_APPLY_STALE_RUN_MINUTES = Math.max(
+  Number(process.env.AUTO_APPLY_STALE_RUN_MINUTES ?? 60),
+  5
 );
 
 function normalizeList(value?: string | null) {
@@ -211,6 +227,186 @@ async function flagQueueAttention(
     status: "OPEN",
     reason,
   });
+}
+
+async function recoverStaleApplicationRuns(nowIso: string) {
+  const staleBeforeIso = new Date(
+    Date.now() - AUTO_APPLY_STALE_RUN_MINUTES * 60 * 1000
+  ).toISOString();
+
+  const { data: staleRows, error: staleError } = await supabaseServer
+    .from("application_runs")
+    .select(
+      "id, queue_id, job_seeker_id, ats_type, current_step, status, attempt_count, max_retries, locked_at"
+    )
+    .eq("status", "RUNNING")
+    .not("locked_at", "is", null)
+    .lte("locked_at", staleBeforeIso)
+    .order("locked_at", { ascending: true })
+    .limit(100);
+
+  if (staleError) {
+    console.error("Failed to load stale application runs:", staleError);
+    return { recovered: 0, escalated: 0 };
+  }
+
+  const staleRuns = (staleRows ?? []) as StaleApplicationRunRow[];
+  if (staleRuns.length === 0) {
+    return { recovered: 0, escalated: 0 };
+  }
+
+  let recovered = 0;
+  let escalated = 0;
+  const reason = "RUN_STALE_TIMEOUT";
+
+  for (const run of staleRuns) {
+    const staleSince = run.locked_at ?? nowIso;
+    const message = `Recovered stale RUNNING lock older than ${AUTO_APPLY_STALE_RUN_MINUTES} minutes.`;
+    const nextAttempt = (run.attempt_count ?? 0) + 1;
+    const maxRetries = run.max_retries ?? 2;
+    const exhaustedRetries = nextAttempt > maxRetries;
+
+    if (exhaustedRetries) {
+      const { error: runUpdateError } = await supabaseServer
+        .from("application_runs")
+        .update({
+          status: "NEEDS_ATTENTION",
+          needs_attention_reason: reason,
+          attempt_count: nextAttempt,
+          step_attempts: 0,
+          last_error: message,
+          last_error_code: reason,
+          locked_at: null,
+          locked_by: null,
+          claim_token: null,
+          updated_at: nowIso,
+        })
+        .eq("id", run.id)
+        .eq("status", "RUNNING");
+
+      if (runUpdateError) {
+        console.error("Failed to escalate stale run:", run.id, runUpdateError);
+        continue;
+      }
+
+      if (run.queue_id) {
+        await supabaseServer
+          .from("application_queue")
+          .update({
+            status: "NEEDS_ATTENTION",
+            category: "needs_attention",
+            last_error: message,
+            updated_at: nowIso,
+          })
+          .eq("id", run.queue_id);
+
+        const { data: existingAttention } = await supabaseServer
+          .from("attention_items")
+          .select("id")
+          .eq("queue_id", run.queue_id)
+          .eq("status", "OPEN")
+          .maybeSingle();
+
+        if (!existingAttention) {
+          await supabaseServer.from("attention_items").insert({
+            queue_id: run.queue_id,
+            status: "OPEN",
+            reason,
+          });
+        }
+      }
+
+      await supabaseServer.from("application_step_events").insert({
+        run_id: run.id,
+        step: run.current_step,
+        event_type: "NEEDS_ATTENTION",
+        message: `${message} Max retries exceeded.`,
+        meta: {
+          reason,
+          stale_locked_at: staleSince,
+          stale_timeout_minutes: AUTO_APPLY_STALE_RUN_MINUTES,
+        },
+      });
+
+      await supabaseServer.from("apply_run_events").insert({
+        run_id: run.id,
+        level: "WARN",
+        event_type: "NEEDS_ATTENTION",
+        actor: "SYSTEM",
+        payload: {
+          reason,
+          step: run.current_step,
+          message: `${message} Max retries exceeded.`,
+          stale_locked_at: staleSince,
+          stale_timeout_minutes: AUTO_APPLY_STALE_RUN_MINUTES,
+        },
+      });
+
+      escalated++;
+      continue;
+    }
+
+    const { error: retryError } = await supabaseServer
+      .from("application_runs")
+      .update({
+        status: "RETRYING",
+        attempt_count: nextAttempt,
+        step_attempts: 0,
+        last_error: message,
+        last_error_code: reason,
+        locked_at: null,
+        locked_by: null,
+        claim_token: null,
+        updated_at: nowIso,
+      })
+      .eq("id", run.id)
+      .eq("status", "RUNNING");
+
+    if (retryError) {
+      console.error("Failed to retry stale run:", run.id, retryError);
+      continue;
+    }
+
+    if (run.queue_id) {
+      await supabaseServer
+        .from("application_queue")
+        .update({
+          status: "READY",
+          category: "in_progress",
+          last_error: message,
+          updated_at: nowIso,
+        })
+        .eq("id", run.queue_id);
+    }
+
+    await supabaseServer.from("application_step_events").insert({
+      run_id: run.id,
+      step: run.current_step,
+      event_type: "RETRY",
+      message,
+      meta: {
+        reason,
+        stale_locked_at: staleSince,
+        stale_timeout_minutes: AUTO_APPLY_STALE_RUN_MINUTES,
+      },
+    });
+
+    await supabaseServer.from("apply_run_events").insert({
+      run_id: run.id,
+      level: "INFO",
+      event_type: "RETRY",
+      actor: "SYSTEM",
+      payload: {
+        note: message,
+        stale_locked_at: staleSince,
+        stale_timeout_minutes: AUTO_APPLY_STALE_RUN_MINUTES,
+      },
+    });
+
+    recovered++;
+  }
+
+  return { recovered, escalated };
 }
 
 async function ensureParsedJobPost(jobPost: JobPostRow) {
@@ -1183,6 +1379,7 @@ async function runJobs(request: Request) {
       ? Math.min(limitParam, 20)
       : 5;
   const nowIso = new Date().toISOString();
+  const staleRunRecovery = await recoverStaleApplicationRuns(nowIso);
   const workerId = `background:${process.env.VERCEL_REGION ?? "local"}:${randomUUID()}`;
 
   const { data: queuedJobs, error } = await supabaseServer
@@ -1271,7 +1468,12 @@ async function runJobs(request: Request) {
     }
   }
 
-  return Response.json({ success: true, processed: results.length, results });
+  return Response.json({
+    success: true,
+    processed: results.length,
+    results,
+    stale_runs: staleRunRecovery,
+  });
 }
 
 export async function POST(request: Request) {

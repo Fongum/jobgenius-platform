@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 /**
  * POST /api/extension/queue-job
@@ -86,15 +87,18 @@ export async function POST(request: Request) {
     }
 
     // Insert into application_queue
-    const { error: insertError } = await supabaseAdmin
+    const nowIso = new Date().toISOString();
+    const { data: queuedItem, error: insertError } = await supabaseAdmin
       .from("application_queue")
       .insert({
         job_post_id,
         job_seeker_id,
         status: "QUEUED",
         category: "matched",
-        updated_at: new Date().toISOString(),
-      });
+        updated_at: nowIso,
+      })
+      .select("id, job_seeker_id, job_post_id")
+      .single();
 
     if (insertError) {
       console.error("Error queueing job:", insertError);
@@ -102,6 +106,16 @@ export async function POST(request: Request) {
         { error: "Failed to queue application." },
         { status: 500 }
       );
+    }
+
+    if (queuedItem?.id) {
+      enqueueBackgroundJob("AUTO_START_RUN", {
+        queue_id: queuedItem.id,
+        job_seeker_id: queuedItem.job_seeker_id,
+        job_post_id: queuedItem.job_post_id,
+      }).catch((error) => {
+        console.error("Extension queue AUTO_START_RUN enqueue failed:", error);
+      });
     }
 
     return NextResponse.json({ success: true });
