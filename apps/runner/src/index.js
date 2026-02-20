@@ -6,6 +6,7 @@ import { runPlan } from "./engine.js";
 import { linkedinAdapter } from "./adapters/linkedin_easy_apply.js";
 import { greenhouseAdapter } from "./adapters/greenhouse.js";
 import { workdayAdapter } from "./adapters/workday.js";
+import { start as startDiscoveryAgent } from "./discovery/agent.js";
 import { logLine } from "./logger.js";
 import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
 
@@ -31,6 +32,9 @@ const CIRCUIT_COOLDOWN_MS = Number(process.env.RUNNER_CIRCUIT_COOLDOWN_MS ?? 30 
 const CAPTCHA_THRESHOLD = Number(process.env.RUNNER_CAPTCHA_THRESHOLD ?? 3);
 const OTP_SMS_THRESHOLD = Number(process.env.RUNNER_OTP_SMS_THRESHOLD ?? 3);
 const REQUIRED_FIELDS_THRESHOLD = Number(process.env.RUNNER_REQUIRED_FIELDS_THRESHOLD ?? 5);
+const DISCOVERY_AGENT_ENABLED = ["1", "true", "yes", "on"].includes(
+  String(process.env.DISCOVERY_AGENT_ENABLED ?? "").toLowerCase()
+);
 const STATE_DIR =
   process.env.STORAGE_STATE_PATH ??
   path.join(process.cwd(), ".state");
@@ -719,6 +723,23 @@ async function start() {
     step: "BOOT",
     msg: `Runner started (interval=${POLL_INTERVAL_MS}ms, concurrency=${CONCURRENCY}, dryRun=${RUNNER_DRY_RUN}).`,
   });
+  if (DISCOVERY_AGENT_ENABLED) {
+    if (!OPS_API_KEY) {
+      logLine({
+        level: "WARN",
+        step: "DISCOVERY",
+        msg: "DISCOVERY_AGENT_ENABLED=true but OPS_API_KEY is missing. Discovery agent not started.",
+      });
+    } else {
+      startDiscoveryAgent().catch((error) => {
+        logLine({
+          level: "ERROR",
+          step: "DISCOVERY",
+          msg: error?.message ?? "Discovery agent failed to start.",
+        });
+      });
+    }
+  }
   await pollOnce();
   setInterval(() => {
     pollOnce().catch((error) => {

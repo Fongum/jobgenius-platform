@@ -2,6 +2,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { parseJobPost } from "@/lib/matching";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { normalizeJobUrl } from "@/lib/job-url";
 
 type DiscoveredJob = {
   external_id: string | null;
@@ -59,8 +60,10 @@ export async function POST(request: Request) {
   const insertedJobIds: string[] = [];
 
   for (const job of payload.jobs) {
-    // Skip jobs without URL or title
-    if (!job.url || !job.title) {
+    const normalizedUrl = job.url ? normalizeJobUrl(job.url) : "";
+
+    // Skip jobs without a valid URL or title
+    if (!normalizedUrl || !job.title) {
       errors++;
       continue;
     }
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
       let existingQuery = supabaseServer
         .from("job_posts")
         .select("id")
-        .eq("url", job.url);
+        .eq("url", normalizedUrl);
 
       const { data: existingByUrl } = await existingQuery.maybeSingle();
 
@@ -94,6 +97,8 @@ export async function POST(request: Request) {
           .select("id")
           .eq("external_id", job.external_id)
           .eq("source_name", job.source_name)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         if (existingByExtId) {
@@ -124,7 +129,7 @@ export async function POST(request: Request) {
       const { data: insertedPost, error: insertError } = await supabaseServer
         .from("job_posts")
         .insert({
-          url: job.url,
+          url: normalizedUrl,
           title: job.title,
           company: job.company,
           location: job.location,

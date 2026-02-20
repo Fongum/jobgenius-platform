@@ -23,6 +23,11 @@ Long-running Playwright worker that polls the JobGenius API for runs and execute
 - `RUNNER_METRICS_INTERVAL_MS` (default 60000)
 - `RUNNER_DRY_RUN` (default false)
 - `OPS_API_KEY` (optional, enables heartbeats)
+- `DISCOVERY_AGENT_ENABLED` (default false; set true to auto-run discovery polling in this runner process)
+- `DISCOVERY_POLL_INTERVAL_MS` (default 300000)
+- `DISCOVERY_MAX_CONCURRENT` (default 2)
+- `DISCOVERY_MAX_PAGES` (default 5)
+- `DISCOVERY_MAX_JOBS` (default 50)
 
 ## Local run
 ```bash

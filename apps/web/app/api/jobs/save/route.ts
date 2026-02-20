@@ -3,6 +3,7 @@ import { verifyExtensionSession } from "@/lib/extension-auth";
 import { authenticateRequest } from "@/lib/auth";
 import { parseJobPost } from "@/lib/matching";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { normalizeJobUrl } from "@/lib/job-url";
 
 type SaveJobPayload = {
   title?: string;
@@ -40,6 +41,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const normalizedUrl = normalizeJobUrl(payload.url);
+  if (!normalizedUrl) {
+    return Response.json(
+      { success: false, error: "Invalid URL." },
+      { status: 400 }
+    );
+  }
+
   // Try to extract AM ID from Bearer token (extension auth) or session auth
   let scrapedByAmId: string | null = null;
   let sourceType = "manual";
@@ -60,7 +69,7 @@ export async function POST(request: Request) {
   const { data: existingPost, error: existingError } = await supabaseServer
     .from("job_posts")
     .select("id")
-    .eq("url", payload.url)
+    .eq("url", normalizedUrl)
     .maybeSingle();
 
   if (existingError) {
@@ -89,7 +98,7 @@ export async function POST(request: Request) {
       .from("job_posts")
       .insert({
         title: payload.title,
-        url: payload.url,
+        url: normalizedUrl,
         source: payload.source ?? "extension",
         company: payload.company ?? null,
         location: payload.location ?? null,
@@ -134,7 +143,7 @@ export async function POST(request: Request) {
   const { error: savedJobsError } = await supabaseServer.from("saved_jobs").upsert(
     {
       title: payload.title,
-      url: payload.url,
+      url: normalizedUrl,
       source: payload.source ?? "extension",
       raw_html: payload.raw_html ?? null,
       raw_text: payload.raw_text ?? null,
