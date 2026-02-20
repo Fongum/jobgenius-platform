@@ -10,7 +10,7 @@ interface MatchCardProps {
 }
 
 type EmailDraft = { subject: string; body: string };
-type View = "idle" | "compose-email" | "compose-text" | "sending";
+type View = "idle" | "compose-email" | "compose-text";
 
 function stripHtml(html: string) {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -33,6 +33,7 @@ export default function MatchCard({ match, onStatusUpdate, setMsg }: MatchCardPr
   const [draft, setDraft] = useState<EmailDraft | null>(null);
   const [textDraft, setTextDraft] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const contact = match.network_contacts;
   const job = match.job_posts;
@@ -87,7 +88,7 @@ export default function MatchCard({ match, onStatusUpdate, setMsg }: MatchCardPr
   // ── Send email ───────────────────────────────────────────────────────────
   const handleSendEmail = async () => {
     if (!draft || !contact?.email) return;
-    setView("sending");
+    setSendingEmail(true);
     try {
       const res = await fetch("/api/am/network/send-email", {
         method: "POST",
@@ -109,6 +110,8 @@ export default function MatchCard({ match, onStatusUpdate, setMsg }: MatchCardPr
         text: err instanceof Error ? err.message : "Failed to send email.",
       });
       setView("compose-email");
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -223,10 +226,10 @@ export default function MatchCard({ match, onStatusUpdate, setMsg }: MatchCardPr
             </button>
             <button
               onClick={handleSendEmail}
-              disabled={!contact?.email || view === "sending"}
+              disabled={!contact?.email || sendingEmail}
               className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
             >
-              {view === "sending" ? "Sending…" : `Send to ${contact?.email ?? "—"}`}
+              {sendingEmail ? "Sending…" : `Send to ${contact?.email ?? "—"}`}
             </button>
           </div>
         </div>
@@ -263,7 +266,7 @@ export default function MatchCard({ match, onStatusUpdate, setMsg }: MatchCardPr
       )}
 
       {/* ── Action bar ───────────────────────────────────────────── */}
-      {(view === "idle" || view === "sending") && (
+      {(view === "idle") && (
         <div className="border-t border-gray-100 px-5 py-3 flex flex-wrap gap-2 bg-gray-50">
           <button
             onClick={handleGenerateEmail}
@@ -290,3 +293,4 @@ export default function MatchCard({ match, onStatusUpdate, setMsg }: MatchCardPr
     </div>
   );
 }
+

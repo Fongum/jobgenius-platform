@@ -359,15 +359,15 @@ export default function ContactDetailClient({
                     <p className="text-sm text-gray-800 font-medium">
                       {ACTIVITY_LABELS[item.activity_type] ?? item.activity_type}
                     </p>
-                    {item.activity_type === "email_sent" && item.details.to_email && (
+                    {item.activity_type === "email_sent" && Boolean(item.details.to_email) && (
                       <p className="text-xs text-gray-500">To: {String(item.details.to_email)}</p>
                     )}
-                    {item.activity_type === "status_changed" && item.details.new_status && (
+                    {item.activity_type === "status_changed" && Boolean(item.details.new_status) && (
                       <p className="text-xs text-gray-500">
                         New status: {String(item.details.new_status).replace(/_/g, " ")}
                       </p>
                     )}
-                    {item.activity_type === "match_created" && item.details.matches_created && (
+                    {item.activity_type === "match_created" && Boolean(item.details.matches_created) && (
                       <p className="text-xs text-gray-500">
                         {String(item.details.matches_created)} new match
                         {Number(item.details.matches_created) !== 1 ? "es" : ""}

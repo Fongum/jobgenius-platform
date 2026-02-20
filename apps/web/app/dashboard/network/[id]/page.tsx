@@ -42,11 +42,16 @@ export default async function ContactDetailPage({
   // Attach a pending_match_count for type compatibility with ContactRow
   const pendingCount = (matchData ?? []).filter((m) => m.status === "pending").length;
   const contactWithCount = { ...contact, pending_match_count: pendingCount };
+  const normalizedMatches = (matchData ?? []).map((m) => ({
+    ...m,
+    job_posts: Array.isArray(m.job_posts) ? (m.job_posts[0] ?? null) : (m.job_posts ?? null),
+    job_seekers: Array.isArray(m.job_seekers) ? (m.job_seekers[0] ?? null) : (m.job_seekers ?? null),
+  }));
 
   return (
     <ContactDetailClient
       contact={contactWithCount as Parameters<typeof ContactDetailClient>[0]["contact"]}
-      matches={(matchData ?? []) as Parameters<typeof ContactDetailClient>[0]["matches"]}
+      matches={normalizedMatches as Parameters<typeof ContactDetailClient>[0]["matches"]}
       activity={(activityData ?? []) as Parameters<typeof ContactDetailClient>[0]["activity"]}
     />
   );

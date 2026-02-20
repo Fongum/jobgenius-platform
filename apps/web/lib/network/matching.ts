@@ -89,7 +89,7 @@ export async function findMatchesForContact(contactId: string) {
     .in("job_seeker_id", seekerIds);
   if (!scores || scores.length === 0) return;
 
-  const postIds = [...new Set(scores.map((s) => s.job_post_id))];
+  const postIds = Array.from(new Set(scores.map((s) => s.job_post_id)));
 
   const { data: posts } = await supabaseAdmin
     .from("job_posts")
