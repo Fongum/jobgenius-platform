@@ -1,5 +1,8 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { buildApplyAutomationHints } from "@/lib/apply-learning";
 import { supabaseServer } from "@/lib/supabase/server";
+
+const PLAN_VERSION = 2;
 
 type GeneratePayload = {
   run_id?: string;
@@ -10,14 +13,23 @@ function buildPlan(args: {
   jobSeekerId: string;
   ats: string | null;
   targetUrl: string | null;
+  automation: {
+    max_auto_advance_steps: number;
+    max_no_progress_rounds: number;
+    button_hints: string[];
+    blockers: { error_code: string; count: number }[];
+    generated_at: string;
+    url_host: string | null;
+  };
 }) {
   return {
-    version: 1,
+    version: PLAN_VERSION,
     metadata: {
       ats: args.ats,
       targetUrl: args.targetUrl,
       runId: args.runId,
       jobSeekerId: args.jobSeekerId,
+      automation: args.automation,
       createdAt: new Date().toISOString(),
     },
     steps: [
@@ -28,6 +40,11 @@ function buildPlan(args: {
       { name: "FILL_KNOWN" },
       { name: "CHECK_REQUIRED" },
       { name: "TRY_SUBMIT" },
+      {
+        name: "AUTO_ADVANCE",
+        max_iterations: args.automation.max_auto_advance_steps,
+        max_no_progress_rounds: args.automation.max_no_progress_rounds,
+      },
       { name: "CONFIRM" },
     ],
   };
@@ -109,7 +126,7 @@ export async function POST(request: Request) {
     .eq("run_id", run.id)
     .maybeSingle();
 
-  if (existing) {
+  if (existing && Number(existing.version ?? 1) >= PLAN_VERSION) {
     return Response.json({ success: true, plan: existing.plan, version: existing.version });
   }
 
@@ -119,18 +136,29 @@ export async function POST(request: Request) {
     .eq("id", run.job_post_id)
     .maybeSingle();
 
+  const automation = await buildApplyAutomationHints({
+    atsType: run.ats_type,
+    jobUrl: jobPost?.url ?? null,
+  });
+
   const plan = buildPlan({
     runId: run.id,
     jobSeekerId: run.job_seeker_id,
     ats: run.ats_type,
     targetUrl: jobPost?.url ?? null,
+    automation,
   });
 
-  const { error: insertError } = await supabaseServer.from("apply_plans").insert({
-    run_id: run.id,
-    plan,
-    version: plan.version,
-  });
+  const { error: insertError } = await supabaseServer
+    .from("apply_plans")
+    .upsert(
+      {
+        run_id: run.id,
+        plan,
+        version: plan.version,
+      },
+      { onConflict: "run_id" }
+    );
 
   if (insertError) {
     return Response.json(

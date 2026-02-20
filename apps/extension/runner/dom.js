@@ -3,11 +3,55 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function normalizeButtonTexts(texts) {
+    return (texts ?? [])
+      .map((text) => (text ?? "").toString().trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  function getButtonLabel(button) {
+    return (
+      button.textContent ||
+      button.getAttribute("value") ||
+      button.getAttribute("aria-label") ||
+      button.getAttribute("title") ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+  }
+
+  function isHidden(button) {
+    const style = window.getComputedStyle(button);
+    if (!style) return false;
+    return (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.opacity === "0"
+    );
+  }
+
+  function isDisabled(button) {
+    if (button.hasAttribute("disabled")) return true;
+    const ariaDisabled = (button.getAttribute("aria-disabled") ?? "").toLowerCase();
+    return ariaDisabled === "true";
+  }
+
   function findButtonByText(texts) {
-    const buttons = Array.from(document.querySelectorAll("button"));
+    const targets = normalizeButtonTexts(texts);
+    if (targets.length === 0) return null;
+
+    const buttons = Array.from(
+      document.querySelectorAll(
+        "button, input[type='submit'], input[type='button'], [role='button']"
+      )
+    );
+
     return buttons.find((button) => {
-      const label = button.textContent?.toLowerCase() ?? "";
-      return texts.some((text) => label.includes(text));
+      if (isDisabled(button) || isHidden(button)) return false;
+      const label = getButtonLabel(button);
+      if (!label) return false;
+      return targets.some((text) => label.includes(text));
     });
   }
 
@@ -202,6 +246,29 @@
     return extractRequiredFields().length > 0;
   }
 
+  function captureFlowFingerprint() {
+    const headerText =
+      document.querySelector("h1, h2, [role='heading']")?.textContent?.trim() ?? "";
+    const requiredCount = extractRequiredFields().length;
+    const buttonSnapshot = Array.from(
+      document.querySelectorAll(
+        "button, input[type='submit'], input[type='button'], [role='button']"
+      )
+    )
+      .slice(0, 4)
+      .map((button) => getButtonLabel(button))
+      .filter(Boolean)
+      .join("|");
+
+    return [
+      window.location.pathname,
+      document.title ?? "",
+      headerText.slice(0, 120),
+      String(requiredCount),
+      buttonSnapshot.slice(0, 240),
+    ].join("::");
+  }
+
   window.JobGeniusDom = {
     sleep,
     findButtonByText,
@@ -212,5 +279,6 @@
     uploadResume,
     extractRequiredFields,
     requiredFieldsMissing,
+    captureFlowFingerprint,
   };
 })();

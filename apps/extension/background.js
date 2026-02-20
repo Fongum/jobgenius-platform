@@ -83,6 +83,7 @@ async function runJobInTab(
     claimToken,
     apiBaseUrl,
     authToken,
+    jobSeekerId: activeSeekerId,
     activeSeekerId,
     job,
     resumeUrl,

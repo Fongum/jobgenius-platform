@@ -1,6 +1,14 @@
 (() => {
   const dom = window.JobGeniusDom;
 
+  function toBoundedInt(value, fallback, min = 1, max = 15) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+    return Math.min(max, Math.max(min, Math.round(parsed)));
+  }
+
   async function postJson(url, payload, authToken) {
     const response = await fetch(url, {
       method: "POST",
@@ -69,6 +77,10 @@
   }
 
   async function waitForEmailOtp(ctx, timeoutMs = 60000) {
+    if (!ctx.jobSeekerId) {
+      return null;
+    }
+
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
       try {
@@ -169,8 +181,151 @@
     return true;
   }
 
+  async function emitLearningSignal(ctx, payload) {
+    try {
+      await logEvent(ctx, {
+        run_id: ctx.runId,
+        event_type: "LEARNING_SIGNAL",
+        step: ctx.currentStep,
+        message: "Captured automation signal.",
+        ...payload,
+      });
+    } catch (error) {
+      console.warn("Learning signal failed:", error);
+    }
+  }
+
+  function getAutomationConfig(ctx, step) {
+    const maxIterations = toBoundedInt(
+      step?.max_iterations ?? ctx?.automation?.maxAutoAdvanceSteps,
+      7,
+      1,
+      20
+    );
+    const maxNoProgressRounds = toBoundedInt(
+      step?.max_no_progress_rounds ?? ctx?.automation?.maxNoProgressRounds,
+      2,
+      1,
+      5
+    );
+    return { maxIterations, maxNoProgressRounds };
+  }
+
+  async function runAutoAdvance(ctx, step, adapter) {
+    const { maxIterations, maxNoProgressRounds } = getAutomationConfig(ctx, step);
+    let noProgressRounds = 0;
+
+    for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
+      if (adapter.confirm ? adapter.confirm(ctx) : false) {
+        return { status: "APPLIED" };
+      }
+
+      if (dom.hasCaptcha()) {
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: "CAPTCHA",
+          meta: { attempt },
+        };
+      }
+
+      const otpReady = await ensureOtp(ctx);
+      if (!otpReady) {
+        return { status: "STOPPED" };
+      }
+
+      if (adapter.fillKnownFields) {
+        const fillResult = await adapter.fillKnownFields(ctx);
+        if (fillResult && fillResult.ok === false) {
+          return {
+            status: "NEEDS_ATTENTION",
+            reason: fillResult.reason ?? "FILL_FAILED",
+            meta: { attempt },
+          };
+        }
+      } else {
+        dom.fillTextInputs(ctx.defaultEmail, ctx.profile);
+      }
+
+      const missingFields = adapter.extractRequiredFields
+        ? adapter.extractRequiredFields()
+        : dom.extractRequiredFields();
+
+      if (missingFields.length > 0) {
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: "REQUIRED_FIELDS",
+          meta: { attempt, missing_fields: missingFields },
+        };
+      }
+
+      if (ctx.dryRun) {
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: "DRY_RUN_CONFIRM_SUBMIT",
+          meta: { attempt },
+        };
+      }
+
+      const beforeFingerprint =
+        dom.captureFlowFingerprint?.() ?? window.location.href;
+
+      const submitResult = adapter.submit
+        ? await adapter.submit(ctx)
+        : { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
+
+      if (submitResult && submitResult.ok === false) {
+        if (submitResult.reason === "SUBMIT_BUTTON_MISSING") {
+          break;
+        }
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: submitResult.reason ?? "SUBMIT_BUTTON_MISSING",
+          meta: { attempt },
+        };
+      }
+
+      await dom.sleep(1300);
+      const afterFingerprint =
+        dom.captureFlowFingerprint?.() ?? window.location.href;
+      const progressed = beforeFingerprint !== afterFingerprint;
+
+      await emitLearningSignal(ctx, {
+        meta: {
+          ats: ctx.atsType,
+          attempt,
+          progressed,
+          no_progress_rounds: noProgressRounds,
+          automation_mode: "extension_autofill",
+        },
+      });
+
+      if (!progressed) {
+        noProgressRounds += 1;
+        if (noProgressRounds >= maxNoProgressRounds) {
+          return {
+            status: "NEEDS_ATTENTION",
+            reason: "NO_PROGRESS",
+            meta: {
+              attempt,
+              no_progress_rounds: noProgressRounds,
+            },
+          };
+        }
+      } else {
+        noProgressRounds = 0;
+      }
+    }
+
+    if (adapter.confirm ? adapter.confirm(ctx) : false) {
+      return { status: "APPLIED" };
+    }
+
+    return { status: "REVIEW_REQUIRED" };
+  }
+
   async function runPlan(ctx, plan, adapter) {
     ctx.currentStep = "INIT";
+    ctx.buttonHints = Array.isArray(ctx.buttonHints) ? ctx.buttonHints : [];
     await logEvent(ctx, {
       run_id: ctx.runId,
       event_type: "RUNNER_STARTED",
@@ -286,6 +441,31 @@
             return;
           }
         }
+        continue;
+      }
+
+      if (step.name === "AUTO_ADVANCE") {
+        const advanceResult = await runAutoAdvance(ctx, step, adapter);
+
+        if (advanceResult.status === "STOPPED") {
+          return;
+        }
+
+        if (advanceResult.status === "APPLIED") {
+          await completeRun(ctx, "Application submitted by autofill agent.");
+          chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
+          return;
+        }
+
+        if (advanceResult.status === "NEEDS_ATTENTION") {
+          await pauseRun(ctx, advanceResult.reason ?? "REQUIRES_REVIEW", {
+            step: step.name,
+            ats: ctx.atsType,
+            ...(advanceResult.meta ?? {}),
+          });
+          return;
+        }
+
         continue;
       }
 

@@ -11,14 +11,49 @@ const AUTH_ROUTES = ["/login", "/signup"];
 // Cookie name for access token
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const USER_TYPE_COOKIE = "jg_user_type";
+const CORS_API_PREFIXES = ["/api/extension", "/api/apply", "/api/otp"];
+const CORS_ALLOW_HEADERS = [
+  "Authorization",
+  "Content-Type",
+  "x-runner",
+  "x-runner-id",
+  "x-claim-token",
+  "x-ops-key",
+];
+const CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
+function needsCors(pathname: string) {
+  return CORS_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function applyCors(response: NextResponse, request: NextRequest) {
+  const origin = request.headers.get("origin");
+  response.headers.set("Access-Control-Allow-Origin", origin ?? "*");
+  response.headers.set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS.join(", "));
+  response.headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS.join(", "));
+  response.headers.set("Access-Control-Max-Age", "86400");
+  response.headers.set("Vary", "Origin");
+  return response;
+}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/api")) {
+    if (needsCors(pathname) && request.method.toUpperCase() === "OPTIONS") {
+      return applyCors(new NextResponse(null, { status: 204 }), request);
+    }
+
     const blocked = guardApiRequest(request);
     if (blocked) {
+      if (needsCors(pathname)) {
+        return applyCors(blocked, request);
+      }
       return blocked;
+    }
+
+    if (needsCors(pathname)) {
+      return applyCors(NextResponse.next(), request);
     }
     return NextResponse.next();
   }

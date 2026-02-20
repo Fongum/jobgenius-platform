@@ -1,6 +1,13 @@
 (() => {
   const dom = window.JobGeniusDom;
   const registry = window.JobGeniusAdapterRegistry;
+  const DEFAULT_SUBMIT_BUTTONS = [
+    "next",
+    "continue",
+    "review",
+    "submit application",
+    "submit",
+  ];
 
   registry.registerAdapter("LINKEDIN", {
     detect() {
@@ -31,11 +38,10 @@
       return dom.extractRequiredFields();
     },
     async submit(ctx) {
+      const hints = Array.isArray(ctx?.buttonHints) ? ctx.buttonHints : [];
       const nextButton = dom.findButtonByText([
-        "next",
-        "review",
-        "submit application",
-        "submit",
+        ...hints,
+        ...DEFAULT_SUBMIT_BUTTONS,
       ]);
       if (!nextButton) {
         return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
@@ -58,16 +64,42 @@
       const applyResult = await this.clickApplyEntry(ctx);
       if (!applyResult.ok) return { status: "NEEDS_ATTENTION", reason: applyResult.reason };
 
-      if (dom.hasCaptcha()) return { status: "NEEDS_ATTENTION", reason: "CAPTCHA" };
+      const maxSteps = Number(ctx?.automation?.maxAutoAdvanceSteps ?? 8);
+      let noProgressRounds = 0;
 
-      const fillResult = await this.fillKnownFields(ctx);
-      if (!fillResult.ok) return { status: "NEEDS_ATTENTION", reason: fillResult.reason };
+      for (let step = 0; step < maxSteps; step += 1) {
+        if (this.confirm()) return { status: "APPLIED" };
+        if (dom.hasCaptcha()) return { status: "NEEDS_ATTENTION", reason: "CAPTCHA" };
 
-      const missing = this.extractRequiredFields();
-      if (missing.length > 0) return { status: "NEEDS_ATTENTION", reason: "REQUIRED_FIELDS", missing_fields: missing };
+        const fillResult = await this.fillKnownFields(ctx);
+        if (!fillResult.ok) return { status: "NEEDS_ATTENTION", reason: fillResult.reason };
 
-      const submitResult = await this.submit(ctx);
-      if (!submitResult.ok) return { status: "NEEDS_ATTENTION", reason: submitResult.reason };
+        const missing = this.extractRequiredFields();
+        if (missing.length > 0) {
+          return {
+            status: "NEEDS_ATTENTION",
+            reason: "REQUIRED_FIELDS",
+            missing_fields: missing,
+          };
+        }
+
+        const before = dom.captureFlowFingerprint?.() ?? window.location.href;
+        const submitResult = await this.submit(ctx);
+        if (!submitResult.ok) {
+          return { status: "NEEDS_ATTENTION", reason: submitResult.reason };
+        }
+
+        await dom.sleep(1200);
+        const after = dom.captureFlowFingerprint?.() ?? window.location.href;
+        if (after === before) {
+          noProgressRounds += 1;
+          if (noProgressRounds >= 2) {
+            break;
+          }
+        } else {
+          noProgressRounds = 0;
+        }
+      }
 
       if (this.confirm()) return { status: "APPLIED" };
       return { status: "NEEDS_ATTENTION", reason: "REQUIRES_REVIEW" };

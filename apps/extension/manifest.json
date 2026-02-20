@@ -17,6 +17,8 @@
   ],
   "host_permissions": [
     "https://*.vercel.app/*",
+    "https://job-genius.com/*",
+    "https://www.job-genius.com/*",
     "http://localhost:3000/*",
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",

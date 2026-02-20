@@ -4,6 +4,15 @@ import {
   findButtonByText,
 } from "./base.js";
 
+const DEFAULT_SUBMIT_BUTTONS = [
+  "next",
+  "continue",
+  "save and continue",
+  "review",
+  "submit application",
+  "submit",
+];
+
 export const workdayAdapter = {
   name: "WORKDAY",
   async detect(page) {
@@ -30,7 +39,11 @@ export const workdayAdapter = {
     return extractRequiredFields(page);
   },
   async submit(page, ctx) {
-    const nextButton = await findButtonByText(page, ["next", "review", "submit"]);
+    const hints = Array.isArray(ctx?.buttonHints) ? ctx.buttonHints : [];
+    const nextButton = await findButtonByText(page, [
+      ...hints,
+      ...DEFAULT_SUBMIT_BUTTONS,
+    ]);
     if (!nextButton) return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
     if (ctx.dryRun) return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };
     await nextButton.click();

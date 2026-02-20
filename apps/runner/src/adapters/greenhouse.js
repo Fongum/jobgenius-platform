@@ -4,6 +4,14 @@ import {
   findButtonByText,
 } from "./base.js";
 
+const DEFAULT_SUBMIT_BUTTONS = [
+  "next",
+  "continue",
+  "review",
+  "submit application",
+  "submit",
+];
+
 export const greenhouseAdapter = {
   name: "GREENHOUSE",
   async detect(page) {
@@ -25,9 +33,10 @@ export const greenhouseAdapter = {
     return extractRequiredFields(page);
   },
   async submit(page, ctx) {
+    const hints = Array.isArray(ctx?.buttonHints) ? ctx.buttonHints : [];
     const submitButton = await findButtonByText(page, [
-      "submit application",
-      "submit",
+      ...hints,
+      ...DEFAULT_SUBMIT_BUTTONS,
     ]);
     if (!submitButton) return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
     if (ctx.dryRun) return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };

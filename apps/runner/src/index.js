@@ -35,6 +35,7 @@ const REQUIRED_FIELDS_THRESHOLD = Number(process.env.RUNNER_REQUIRED_FIELDS_THRE
 const DISCOVERY_AGENT_ENABLED = ["1", "true", "yes", "on"].includes(
   String(process.env.DISCOVERY_AGENT_ENABLED ?? "").toLowerCase()
 );
+const MIN_PLAN_VERSION = Number(process.env.RUNNER_MIN_PLAN_VERSION ?? 2);
 const STATE_DIR =
   process.env.STORAGE_STATE_PATH ??
   path.join(process.cwd(), ".state");
@@ -532,7 +533,7 @@ async function executeRun(run) {
       }
     }, WATCHDOG_CHECK_MS);
 
-    const planResponse = await fetchPlan(
+    let planResponse = await fetchPlan(
       API_BASE_URL,
       run.run_id,
       RUNNER_AUTH_TOKEN,
@@ -540,8 +541,22 @@ async function executeRun(run) {
       RUNNER_ID
     );
 
-    if (!planResponse) {
+    const planVersion = Number(
+      planResponse?.version ?? planResponse?.plan?.version ?? 1
+    );
+    const hasAutoAdvance = Boolean(
+      planResponse?.plan?.steps?.some((step) => step?.name === "AUTO_ADVANCE")
+    );
+
+    if (!planResponse || planVersion < MIN_PLAN_VERSION || !hasAutoAdvance) {
       await generatePlan(
+        API_BASE_URL,
+        run.run_id,
+        RUNNER_AUTH_TOKEN,
+        run.claim_token,
+        RUNNER_ID
+      );
+      planResponse = await fetchPlan(
         API_BASE_URL,
         run.run_id,
         RUNNER_AUTH_TOKEN,
@@ -550,13 +565,7 @@ async function executeRun(run) {
       );
     }
 
-    const plan = planResponse?.plan ?? (await fetchPlan(
-      API_BASE_URL,
-      run.run_id,
-      RUNNER_AUTH_TOKEN,
-      run.claim_token,
-      RUNNER_ID
-    ))?.plan;
+    const plan = planResponse?.plan;
 
     if (!plan) {
       logLine({

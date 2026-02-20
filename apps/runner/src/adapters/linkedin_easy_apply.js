@@ -4,6 +4,14 @@ import {
   findButtonByText,
 } from "./base.js";
 
+const DEFAULT_SUBMIT_BUTTONS = [
+  "next",
+  "continue",
+  "review",
+  "submit application",
+  "submit",
+];
+
 export const linkedinAdapter = {
   name: "LINKEDIN",
   async detect(page) {
@@ -26,11 +34,10 @@ export const linkedinAdapter = {
     return extractRequiredFields(page);
   },
   async submit(page, ctx) {
+    const hints = Array.isArray(ctx?.buttonHints) ? ctx.buttonHints : [];
     const nextButton = await findButtonByText(page, [
-      "next",
-      "review",
-      "submit application",
-      "submit",
+      ...hints,
+      ...DEFAULT_SUBMIT_BUTTONS,
     ]);
     if (!nextButton) return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
     if (ctx.dryRun) return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };

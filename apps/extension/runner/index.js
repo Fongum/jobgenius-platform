@@ -2,6 +2,7 @@
   const dom = window.JobGeniusDom;
   const registry = window.JobGeniusAdapterRegistry;
   const engine = window.JobGeniusEngine;
+  const MIN_PLAN_VERSION = 2;
 
   function detectAtsType() {
     const host = window.location.hostname.toLowerCase();
@@ -32,7 +33,15 @@
     }
 
     const data = await response.json();
-    return data?.plan ?? null;
+    const plan = data?.plan ?? null;
+    const version = Number(data?.version ?? plan?.version ?? 1);
+    const hasAutoAdvance = Boolean(
+      plan?.steps?.some((step) => step?.name === "AUTO_ADVANCE")
+    );
+    if (!plan || version < MIN_PLAN_VERSION || !hasAutoAdvance) {
+      return null;
+    }
+    return { plan, version };
   }
 
   async function generatePlan(ctx) {
@@ -96,6 +105,7 @@
       claimToken: message.claimToken,
       apiBaseUrl: message.apiBaseUrl,
       authToken: message.authToken,
+      jobSeekerId: message.jobSeekerId ?? message.activeSeekerId ?? null,
       activeSeekerId: message.activeSeekerId,
       resumeUrl: message.resumeUrl,
       profile: message.profile ?? null,
@@ -116,10 +126,12 @@
 
     let plan = null;
     try {
-      plan = await fetchPlan(ctx);
+      const fetched = await fetchPlan(ctx);
+      plan = fetched?.plan ?? null;
       if (!plan) {
         await generatePlan(ctx);
-        plan = await fetchPlan(ctx);
+        const regenerated = await fetchPlan(ctx);
+        plan = regenerated?.plan ?? null;
       }
     } catch (error) {
       console.warn("Plan fetch failed, falling back:", error);
@@ -129,6 +141,16 @@
       await runFallback(ctx, adapter);
       return;
     }
+
+    const automation = plan.metadata?.automation ?? {};
+    ctx.automation = {
+      maxAutoAdvanceSteps: Number(automation.max_auto_advance_steps ?? 7),
+      maxNoProgressRounds: Number(automation.max_no_progress_rounds ?? 2),
+      buttonHints: Array.isArray(automation.button_hints)
+        ? automation.button_hints
+        : [],
+    };
+    ctx.buttonHints = ctx.automation.buttonHints;
 
     await engine.runPlan(ctx, plan, adapter);
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });

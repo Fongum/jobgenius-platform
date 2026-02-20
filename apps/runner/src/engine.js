@@ -9,6 +9,350 @@ import {
   fetchVerificationCode,
 } from "./api.js";
 
+function toBoundedInt(value, fallback, min = 1, max = 20) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+async function capturePageFingerprint(page) {
+  return page.evaluate(() => {
+    const heading =
+      document.querySelector("h1, h2, [role='heading']")?.textContent?.trim() ?? "";
+    const requiredCount = document.querySelectorAll(
+      "input[required], textarea[required], select[required], input[aria-required='true'], textarea[aria-required='true'], select[aria-required='true']"
+    ).length;
+    const buttons = Array.from(
+      document.querySelectorAll(
+        "button, input[type='submit'], input[type='button'], [role='button']"
+      )
+    )
+      .slice(0, 4)
+      .map((el) =>
+        (
+          el.textContent ||
+          el.getAttribute("value") ||
+          el.getAttribute("aria-label") ||
+          el.getAttribute("title") ||
+          ""
+        )
+          .trim()
+          .toLowerCase()
+      )
+      .filter(Boolean)
+      .join("|");
+
+    return [
+      window.location.pathname,
+      document.title ?? "",
+      heading.slice(0, 120),
+      String(requiredCount),
+      buttons.slice(0, 240),
+    ].join("::");
+  });
+}
+
+async function emitLearningSignal({
+  apiBaseUrl,
+  authToken,
+  claimToken,
+  runnerId,
+  ctx,
+  page,
+  stepName,
+  payload,
+}) {
+  try {
+    await sendEvent(
+      apiBaseUrl,
+      {
+        run_id: ctx.runId,
+        event_type: "LEARNING_SIGNAL",
+        step: stepName,
+        message: "Captured automation signal.",
+        last_seen_url: page.url(),
+        ...payload,
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      runId: ctx.runId,
+      step: stepName,
+      msg: `Learning signal failed: ${error?.message ?? "unknown error"}`,
+    });
+  }
+}
+
+async function ensureOtpReady({
+  apiBaseUrl,
+  authToken,
+  claimToken,
+  runnerId,
+  ctx,
+  page,
+  stepName,
+  onProgress,
+}) {
+  if (await hasSmsOtp(page)) {
+    await pauseRun(
+      apiBaseUrl,
+      {
+        run_id: ctx.runId,
+        reason: "OTP_SMS",
+        message: "SMS verification required.",
+        last_seen_url: page.url(),
+        step: stepName,
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
+    onProgress?.({
+      type: "PAUSED",
+      reason: "OTP_SMS",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: stepName,
+    });
+    return false;
+  }
+
+  if (!(await hasEmailOtp(page))) {
+    return true;
+  }
+
+  const code = await fetchVerificationCode(
+    apiBaseUrl,
+    ctx.jobSeekerId,
+    authToken,
+    runnerId
+  );
+
+  if (!code) {
+    await pauseRun(
+      apiBaseUrl,
+      {
+        run_id: ctx.runId,
+        reason: "OTP_EMAIL",
+        message: "Email verification required and no code was found.",
+        last_seen_url: page.url(),
+        step: stepName,
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
+    onProgress?.({
+      type: "PAUSED",
+      reason: "OTP_EMAIL",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: stepName,
+    });
+    return false;
+  }
+
+  const otpInput = await page.$(
+    'input[type="text"][name*="code"], input[type="text"][name*="otp"], input[type="text"][name*="verif"], input[type="number"][name*="code"], input[autocomplete="one-time-code"]'
+  );
+
+  if (!otpInput) {
+    await pauseRun(
+      apiBaseUrl,
+      {
+        run_id: ctx.runId,
+        reason: "OTP_EMAIL",
+        message: "Verification input not found.",
+        last_seen_url: page.url(),
+        step: stepName,
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
+    onProgress?.({
+      type: "PAUSED",
+      reason: "OTP_EMAIL",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: stepName,
+    });
+    return false;
+  }
+
+  await otpInput.fill(code);
+  const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
+  if (submitBtn) {
+    await submitBtn.click();
+    await page.waitForTimeout(3000);
+  }
+
+  logLine({
+    level: "INFO",
+    runId: ctx.runId,
+    step: stepName,
+    msg: "Verification code entered.",
+  });
+
+  return true;
+}
+
+function getAutomationConfig(ctx, step) {
+  const maxIterations = toBoundedInt(
+    step?.max_iterations ?? ctx?.automation?.maxAutoAdvanceSteps,
+    7,
+    1,
+    20
+  );
+  const maxNoProgressRounds = toBoundedInt(
+    step?.max_no_progress_rounds ?? ctx?.automation?.maxNoProgressRounds,
+    2,
+    1,
+    5
+  );
+  return { maxIterations, maxNoProgressRounds };
+}
+
+async function runAutoAdvance({
+  apiBaseUrl,
+  authToken,
+  claimToken,
+  runnerId,
+  page,
+  adapter,
+  ctx,
+  step,
+  onProgress,
+}) {
+  const { maxIterations, maxNoProgressRounds } = getAutomationConfig(ctx, step);
+  let noProgressRounds = 0;
+
+  for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
+    if (adapter.confirm && (await adapter.confirm(page, ctx))) {
+      return { status: "APPLIED" };
+    }
+
+    if (await hasCaptcha(page)) {
+      return {
+        status: "NEEDS_ATTENTION",
+        reason: "CAPTCHA",
+        meta: { attempt },
+      };
+    }
+
+    const otpReady = await ensureOtpReady({
+      apiBaseUrl,
+      authToken,
+      claimToken,
+      runnerId,
+      ctx,
+      page,
+      stepName: step.name,
+      onProgress,
+    });
+    if (!otpReady) {
+      return { status: "STOPPED" };
+    }
+
+    const fillResult = await adapter.fillKnownFields(page, ctx);
+    if (fillResult?.ok === false) {
+      return {
+        status: "NEEDS_ATTENTION",
+        reason: fillResult.reason ?? "FILL_FAILED",
+        meta: { attempt },
+      };
+    }
+
+    const missingFields = adapter.extractRequiredFields
+      ? await adapter.extractRequiredFields(page)
+      : await extractRequiredFields(page);
+
+    if (missingFields.length > 0) {
+      return {
+        status: "NEEDS_ATTENTION",
+        reason: "REQUIRED_FIELDS",
+        meta: {
+          attempt,
+          missing_fields: missingFields,
+        },
+      };
+    }
+
+    if (ctx.dryRun) {
+      return {
+        status: "NEEDS_ATTENTION",
+        reason: "DRY_RUN_CONFIRM_SUBMIT",
+        meta: { attempt },
+      };
+    }
+
+    const beforeFingerprint = await capturePageFingerprint(page);
+    const submitResult = await adapter.submit(page, ctx);
+
+    if (submitResult?.ok === false) {
+      if (submitResult.reason === "SUBMIT_BUTTON_MISSING") {
+        break;
+      }
+      return {
+        status: "NEEDS_ATTENTION",
+        reason: submitResult.reason ?? "SUBMIT_BUTTON_MISSING",
+        meta: { attempt },
+      };
+    }
+
+    await page.waitForTimeout(1300);
+    const afterFingerprint = await capturePageFingerprint(page);
+    const progressed = beforeFingerprint !== afterFingerprint;
+
+    await emitLearningSignal({
+      apiBaseUrl,
+      authToken,
+      claimToken,
+      runnerId,
+      ctx,
+      page,
+      stepName: step.name,
+      payload: {
+        meta: {
+          ats: ctx.atsType,
+          attempt,
+          progressed,
+          no_progress_rounds: noProgressRounds,
+          automation_mode: "cloud_autofill",
+        },
+      },
+    });
+
+    if (!progressed) {
+      noProgressRounds += 1;
+      if (noProgressRounds >= maxNoProgressRounds) {
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: "NO_PROGRESS",
+          meta: {
+            attempt,
+            no_progress_rounds: noProgressRounds,
+          },
+        };
+      }
+    } else {
+      noProgressRounds = 0;
+    }
+  }
+
+  if (adapter.confirm && (await adapter.confirm(page, ctx))) {
+    return { status: "APPLIED" };
+  }
+
+  return { status: "REVIEW_REQUIRED" };
+}
+
 export async function runPlan({
   apiBaseUrl,
   authToken,
@@ -25,6 +369,10 @@ export async function runPlan({
   resumePath,
   profile,
 }) {
+  void context;
+
+  const automation = plan?.metadata?.automation ?? {};
+
   const ctx = {
     runId: run.run_id,
     jobSeekerId: run.job_seeker_id,
@@ -34,15 +382,40 @@ export async function runPlan({
     dryRun,
     resumePath: resumePath ?? null,
     profile: profile ?? null,
+    automation: {
+      maxAutoAdvanceSteps: toBoundedInt(
+        automation.max_auto_advance_steps,
+        7,
+        1,
+        20
+      ),
+      maxNoProgressRounds: toBoundedInt(
+        automation.max_no_progress_rounds,
+        2,
+        1,
+        5
+      ),
+      buttonHints: Array.isArray(automation.button_hints)
+        ? automation.button_hints
+        : [],
+    },
   };
 
-  await sendEvent(apiBaseUrl, {
-    run_id: ctx.runId,
-    event_type: "RUNNER_STARTED",
-    message: `Cloud runner started on ${ctx.atsType}.`,
-    step: ctx.currentStep,
-    last_seen_url: page.url(),
-  }, authToken, claimToken, runnerId);
+  ctx.buttonHints = ctx.automation.buttonHints;
+
+  await sendEvent(
+    apiBaseUrl,
+    {
+      run_id: ctx.runId,
+      event_type: "RUNNER_STARTED",
+      message: `Cloud runner started on ${ctx.atsType}.`,
+      step: ctx.currentStep,
+      last_seen_url: page.url(),
+    },
+    authToken,
+    claimToken,
+    runnerId
+  );
   onProgress?.({
     type: "RUNNER_STARTED",
     runId: ctx.runId,
@@ -51,13 +424,19 @@ export async function runPlan({
   });
 
   if (!adapter) {
-    await pauseRun(apiBaseUrl, {
-      run_id: ctx.runId,
-      reason: "UNKNOWN_ATS",
-      message: "Adapter not found.",
-      last_seen_url: page.url(),
-      step: "DETECT_ATS",
-    }, authToken, claimToken, runnerId);
+    await pauseRun(
+      apiBaseUrl,
+      {
+        run_id: ctx.runId,
+        reason: "UNKNOWN_ATS",
+        message: "Adapter not found.",
+        last_seen_url: page.url(),
+        step: "DETECT_ATS",
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
     onProgress?.({
       type: "PAUSED",
       reason: "UNKNOWN_ATS",
@@ -69,112 +448,58 @@ export async function runPlan({
   }
 
   if (await hasCaptcha(page)) {
-    await pauseRun(apiBaseUrl, {
-      run_id: ctx.runId,
-      reason: "CAPTCHA",
-      message: "Captcha detected.",
-      last_seen_url: page.url(),
-      step: "DETECT_ATS",
-    }, authToken, claimToken, runnerId);
-    onProgress?.({
-      type: "PAUSED",
-      reason: "CAPTCHA",
-      runId: ctx.runId,
-      atsType: ctx.atsType,
-      step: "DETECT_ATS",
-    });
-    return;
-  }
-
-  if (await hasSmsOtp(page)) {
-    await pauseRun(apiBaseUrl, {
-      run_id: ctx.runId,
-      reason: "OTP_SMS",
-      message: "SMS verification required.",
-      last_seen_url: page.url(),
-      step: "DETECT_ATS",
-    }, authToken, claimToken, runnerId);
-    onProgress?.({
-      type: "PAUSED",
-      reason: "OTP_SMS",
-      runId: ctx.runId,
-      atsType: ctx.atsType,
-      step: "DETECT_ATS",
-    });
-    return;
-  }
-
-  if (await hasEmailOtp(page)) {
-    // Try to auto-fetch verification code from seeker's Gmail
-    const code = await fetchVerificationCode(
+    await pauseRun(
       apiBaseUrl,
-      ctx.jobSeekerId,
-      authToken,
-      runnerId
-    );
-
-    if (code) {
-      logLine({
-        level: "INFO",
-        runId: ctx.runId,
-        step: "DETECT_ATS",
-        msg: `Auto-fetched verification code from Gmail.`,
-      });
-
-      // Try to fill the OTP input
-      const otpInput = await page.$('input[type="text"][name*="code"], input[type="text"][name*="otp"], input[type="text"][name*="verif"], input[type="number"][name*="code"], input[autocomplete="one-time-code"]');
-      if (otpInput) {
-        await otpInput.fill(code);
-        // Try to submit the OTP form
-        const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
-        if (submitBtn) {
-          await submitBtn.click();
-          await page.waitForTimeout(3000);
-        }
-        logLine({
-          level: "INFO",
-          runId: ctx.runId,
-          step: "DETECT_ATS",
-          msg: `Verification code entered and submitted.`,
-        });
-        // Don't return — continue with the rest of the plan
-      } else {
-        logLine({
-          level: "WARN",
-          runId: ctx.runId,
-          step: "DETECT_ATS",
-          msg: `Got code but couldn't find OTP input field.`,
-        });
-      }
-    } else {
-      // No code found — pause as before
-      await pauseRun(apiBaseUrl, {
+      {
         run_id: ctx.runId,
-        reason: "OTP_EMAIL",
-        message: "Email verification required — no Gmail connection or code not found.",
+        reason: "CAPTCHA",
+        message: "Captcha detected.",
         last_seen_url: page.url(),
         step: "DETECT_ATS",
-      }, authToken, claimToken, runnerId);
-      onProgress?.({
-        type: "PAUSED",
-        reason: "OTP_EMAIL",
-        runId: ctx.runId,
-        atsType: ctx.atsType,
-        step: "DETECT_ATS",
-      });
-      return;
-    }
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
+    onProgress?.({
+      type: "PAUSED",
+      reason: "CAPTCHA",
+      runId: ctx.runId,
+      atsType: ctx.atsType,
+      step: "DETECT_ATS",
+    });
+    return;
+  }
+
+  const otpReady = await ensureOtpReady({
+    apiBaseUrl,
+    authToken,
+    claimToken,
+    runnerId,
+    ctx,
+    page,
+    stepName: "DETECT_ATS",
+    onProgress,
+  });
+  if (!otpReady) {
+    return;
   }
 
   for (const step of plan.steps ?? []) {
     ctx.currentStep = step.name;
-    await sendEvent(apiBaseUrl, {
-      run_id: ctx.runId,
-      event_type: "STEP_STARTED",
-      step: step.name,
-      message: `Starting ${step.name}.`,
-      last_seen_url: page.url(),
-    }, authToken, claimToken, runnerId);
+    await sendEvent(
+      apiBaseUrl,
+      {
+        run_id: ctx.runId,
+        event_type: "STEP_STARTED",
+        step: step.name,
+        message: `Starting ${step.name}.`,
+        last_seen_url: page.url(),
+      },
+      authToken,
+      claimToken,
+      runnerId
+    );
     onProgress?.({
       type: "STEP_STARTED",
       runId: ctx.runId,
@@ -189,13 +514,19 @@ export async function runPlan({
     if (step.name === "DETECT_ATS") {
       const detected = await adapter.detect(page);
       if (!detected) {
-        await pauseRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          reason: "UNKNOWN_ATS",
-          message: "ATS not detected.",
-          last_seen_url: page.url(),
-          step: step.name,
-    }, authToken, claimToken, runnerId);
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: "UNKNOWN_ATS",
+            message: "ATS not detected.",
+            last_seen_url: page.url(),
+            step: step.name,
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "PAUSED",
           reason: "UNKNOWN_ATS",
@@ -211,13 +542,19 @@ export async function runPlan({
     if (step.name === "TRY_APPLY_ENTRY") {
       const result = await adapter.clickApplyEntry(page, ctx);
       if (result?.ok === false) {
-        await pauseRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          reason: result.reason ?? "APPLY_BUTTON_MISSING",
-          message: "Apply entry not found.",
-          last_seen_url: page.url(),
-          step: step.name,
-    }, authToken, claimToken, runnerId);
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: result.reason ?? "APPLY_BUTTON_MISSING",
+            message: "Apply entry not found.",
+            last_seen_url: page.url(),
+            step: step.name,
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "PAUSED",
           reason: result.reason ?? "APPLY_BUTTON_MISSING",
@@ -240,13 +577,19 @@ export async function runPlan({
     if (step.name === "FILL_KNOWN") {
       const result = await adapter.fillKnownFields(page, ctx);
       if (result?.ok === false) {
-        await pauseRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          reason: result.reason ?? "FILL_FAILED",
-          message: "Failed to fill fields.",
-          last_seen_url: page.url(),
-          step: step.name,
-    }, authToken, claimToken, runnerId);
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: result.reason ?? "FILL_FAILED",
+            message: "Failed to fill fields.",
+            last_seen_url: page.url(),
+            step: step.name,
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "PAUSED",
           reason: result.reason ?? "FILL_FAILED",
@@ -260,7 +603,10 @@ export async function runPlan({
         const uploadResult = adapter.uploadResume
           ? await adapter.uploadResume(page, ctx)
           : await uploadResume(page, ctx.resumePath);
-        if (uploadResult?.ok === false && uploadResult.reason !== "NO_INPUT_OR_URL") {
+        if (
+          uploadResult?.ok === false &&
+          uploadResult.reason !== "NO_INPUT_OR_URL"
+        ) {
           logLine({
             level: "WARN",
             runId: ctx.runId,
@@ -277,18 +623,24 @@ export async function runPlan({
         ? await adapter.extractRequiredFields(page)
         : await extractRequiredFields(page);
       if (missingFields.length > 0) {
-        await pauseRun(apiBaseUrl, {
-          run_id: ctx.runId,
-          reason: "REQUIRED_FIELDS",
-          message: "Required fields missing.",
-          last_seen_url: page.url(),
-          step: step.name,
-          meta: {
-            missing_fields: missingFields,
-            ats: ctx.atsType,
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: "REQUIRED_FIELDS",
+            message: "Required fields missing.",
+            last_seen_url: page.url(),
             step: step.name,
+            meta: {
+              missing_fields: missingFields,
+              ats: ctx.atsType,
+              step: step.name,
+            },
           },
-    }, authToken, claimToken, runnerId);
+          authToken,
+          claimToken,
+          runnerId
+        );
         onProgress?.({
           type: "PAUSED",
           reason: "REQUIRED_FIELDS",
@@ -353,8 +705,79 @@ export async function runPlan({
       continue;
     }
 
+    if (step.name === "AUTO_ADVANCE") {
+      const advanceResult = await runAutoAdvance({
+        apiBaseUrl,
+        authToken,
+        claimToken,
+        runnerId,
+        page,
+        adapter,
+        ctx,
+        step,
+        onProgress,
+      });
+
+      if (advanceResult.status === "STOPPED") {
+        return;
+      }
+
+      if (advanceResult.status === "APPLIED") {
+        await completeRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            note: "Application submitted by cloud autofill agent.",
+            last_seen_url: page.url(),
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
+        onProgress?.({
+          type: "COMPLETED",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+        });
+        logLine({ level: "INFO", runId: ctx.runId, step: step.name, msg: "Applied" });
+        return;
+      }
+
+      if (advanceResult.status === "NEEDS_ATTENTION") {
+        await pauseRun(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            reason: advanceResult.reason ?? "REQUIRES_REVIEW",
+            message: "Autofill agent hit a wall.",
+            last_seen_url: page.url(),
+            step: step.name,
+            meta: {
+              ats: ctx.atsType,
+              ...(advanceResult.meta ?? {}),
+            },
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
+        onProgress?.({
+          type: "PAUSED",
+          reason: advanceResult.reason ?? "REQUIRES_REVIEW",
+          runId: ctx.runId,
+          atsType: ctx.atsType,
+          step: step.name,
+          meta: advanceResult.meta ?? undefined,
+        });
+        return;
+      }
+
+      continue;
+    }
+
     if (step.name === "CONFIRM") {
-      const confirmed = await adapter.confirm(page, ctx);
+      const confirmed = adapter.confirm ? await adapter.confirm(page, ctx) : false;
       if (confirmed) {
         await completeRun(
           apiBaseUrl,

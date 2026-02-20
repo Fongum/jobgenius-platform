@@ -173,10 +173,48 @@ export async function hasEmailOtp(page) {
 }
 
 export async function findButtonByText(page, texts) {
-  const buttons = await page.$$("button");
+  const targets = (texts ?? [])
+    .map((text) => (text ?? "").toString().trim().toLowerCase())
+    .filter(Boolean);
+  if (targets.length === 0) {
+    return null;
+  }
+
+  const buttons = await page.$$(
+    "button, input[type='submit'], input[type='button'], [role='button']"
+  );
   for (const button of buttons) {
-    const label = (await button.textContent())?.toLowerCase() ?? "";
-    if (texts.some((text) => label.includes(text))) {
+    const disabled = await button
+      .evaluate((el) => {
+        if (!(el instanceof HTMLElement)) {
+          return false;
+        }
+        if (el.hasAttribute("disabled")) {
+          return true;
+        }
+        return (el.getAttribute("aria-disabled") ?? "").toLowerCase() === "true";
+      })
+      .catch(() => false);
+
+    if (disabled) {
+      continue;
+    }
+
+    const label = (
+      (await button.textContent()) ??
+      (await button.getAttribute("value")) ??
+      (await button.getAttribute("aria-label")) ??
+      (await button.getAttribute("title")) ??
+      ""
+    )
+      .toLowerCase()
+      .trim();
+
+    if (!label) {
+      continue;
+    }
+
+    if (targets.some((text) => label.includes(text))) {
       return button;
     }
   }
