@@ -58,15 +58,48 @@ export default async function PipelinePage() {
     .order("created_at", { ascending: false });
 
   // Fetch application runs
-  const { data: runs } = await supabaseAdmin
+  const { data: runRows } = await supabaseAdmin
     .from("application_runs")
     .select(`
-      id, status, current_step, last_error, ats_type, needs_attention_reason, created_at, updated_at, job_seeker_id, job_post_id, queue_id,
-      job_posts (id, title, company, location, url),
-      job_seekers (id, full_name)
+      id, status, current_step, last_error, ats_type, needs_attention_reason, created_at, updated_at, job_seeker_id, job_post_id, queue_id
     `)
     .in("job_seeker_id", seekerIds)
     .order("updated_at", { ascending: false });
+
+  const runJobPostIds = Array.from(
+    new Set((runRows ?? []).map((run) => run.job_post_id).filter(Boolean))
+  );
+  const runJobPostMap = new Map<
+    string,
+    { id: string; title: string; company: string | null; location: string | null; url: string }
+  >();
+  if (runJobPostIds.length > 0) {
+    const { data: runJobPosts } = await supabaseAdmin
+      .from("job_posts")
+      .select("id, title, company, location, url")
+      .in("id", runJobPostIds);
+    for (const post of runJobPosts ?? []) {
+      runJobPostMap.set(post.id, {
+        id: post.id,
+        title: post.title,
+        company: post.company ?? null,
+        location: post.location ?? null,
+        url: post.url,
+      });
+    }
+  }
+
+  const seekerMap = new Map(
+    (seekers ?? []).map((seeker) => [
+      seeker.id,
+      { id: seeker.id, full_name: seeker.full_name ?? null },
+    ])
+  );
+  const runs = (runRows ?? []).map((run) => ({
+    ...run,
+    job_posts: run.job_post_id ? runJobPostMap.get(run.job_post_id) ?? null : null,
+    job_seekers: seekerMap.get(run.job_seeker_id) ?? null,
+  }));
 
   // Fetch outreach contacts
   const { data: outreachContacts } = await supabaseAdmin
@@ -97,7 +130,7 @@ export default async function PipelinePage() {
       matchScores={(matchScores || []) as unknown as Parameters<typeof PipelineClient>[0]["matchScores"]}
       routingDecisions={(routingDecisions || []) as Parameters<typeof PipelineClient>[0]["routingDecisions"]}
       queueItems={(queueItems || []) as unknown as Parameters<typeof PipelineClient>[0]["queueItems"]}
-      runs={(runs || []) as unknown as Parameters<typeof PipelineClient>[0]["runs"]}
+      runs={runs as unknown as Parameters<typeof PipelineClient>[0]["runs"]}
       outreachContacts={(outreachContacts || []) as Parameters<typeof PipelineClient>[0]["outreachContacts"]}
       outreachDrafts={(outreachDrafts || []) as unknown as Parameters<typeof PipelineClient>[0]["outreachDrafts"]}
       tailoredResumes={(tailoredResumes || []) as Parameters<typeof PipelineClient>[0]["tailoredResumes"]}

@@ -32,15 +32,16 @@ export default async function DashboardPage() {
     scheduled_at: string;
     interview_type: string | null;
     job_seekers: { full_name: string } | null;
-    job_posts: { title: string; company: string } | null;
+    job_posts: { title: string; company: string | null } | null;
   };
   type AttentionRow = {
     id: string;
     status: string;
     needs_attention_reason: string | null;
     job_seeker_id: string;
-    job_seekers: { full_name: string } | null;
-    job_posts: { title: string; company: string } | null;
+    job_post_id: string;
+    job_seekers: { full_name: string | null } | null;
+    job_posts: { title: string; company: string | null } | null;
   };
   type TopOppRow = {
     id: string;
@@ -116,14 +117,53 @@ export default async function DashboardPage() {
     const { data: attentionData } = await supabaseAdmin
       .from("application_runs")
       .select(`
-        id, status, needs_attention_reason, job_seeker_id,
-        job_seekers!inner(full_name),
-        job_posts!inner(title, company)
+        id, status, needs_attention_reason, job_seeker_id, job_post_id
       `)
       .in("job_seeker_id", seekerIds)
       .eq("status", "NEEDS_ATTENTION")
       .limit(10);
-    attentionItems = (attentionData ?? []) as unknown as AttentionRow[];
+    const attentionRows = (attentionData ?? []) as Array<{
+      id: string;
+      status: string;
+      needs_attention_reason: string | null;
+      job_seeker_id: string;
+      job_post_id: string;
+    }>;
+
+    const attentionSeekerIds = Array.from(
+      new Set(attentionRows.map((row) => row.job_seeker_id).filter(Boolean))
+    );
+    const attentionJobPostIds = Array.from(
+      new Set(attentionRows.map((row) => row.job_post_id).filter(Boolean))
+    );
+
+    const seekerLookup = new Map<string, { full_name: string | null }>();
+    if (attentionSeekerIds.length > 0) {
+      const { data: attentionSeekers } = await supabaseAdmin
+        .from("job_seekers")
+        .select("id, full_name")
+        .in("id", attentionSeekerIds);
+      for (const seeker of attentionSeekers ?? []) {
+        seekerLookup.set(seeker.id, { full_name: seeker.full_name ?? null });
+      }
+    }
+
+    const jobLookup = new Map<string, { title: string; company: string | null }>();
+    if (attentionJobPostIds.length > 0) {
+      const { data: attentionJobs } = await supabaseAdmin
+        .from("job_posts")
+        .select("id, title, company")
+        .in("id", attentionJobPostIds);
+      for (const job of attentionJobs ?? []) {
+        jobLookup.set(job.id, { title: job.title, company: job.company ?? null });
+      }
+    }
+
+    attentionItems = attentionRows.map((row) => ({
+      ...row,
+      job_seekers: seekerLookup.get(row.job_seeker_id) ?? null,
+      job_posts: jobLookup.get(row.job_post_id) ?? null,
+    }));
 
     // Top opportunities
     const { data: topMatches } = await supabaseAdmin

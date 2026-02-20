@@ -83,7 +83,13 @@ export default async function AttentionPage({ searchParams }: PageProps) {
     .eq("account_manager_id", user.id);
 
   if (assignmentsError) {
-    throw new Error("Failed to load job seeker assignments.");
+    console.error("Attention assignments query failed:", assignmentsError);
+    return (
+      <main>
+        <h1>Needs Attention</h1>
+        <p>Unable to load assigned job seekers right now.</p>
+      </main>
+    );
   }
 
   const seekerIds = (assignments ?? []).map(
@@ -102,7 +108,7 @@ export default async function AttentionPage({ searchParams }: PageProps) {
   let query = supabaseServer
     .from("application_runs")
     .select(
-      "id, job_seeker_id, job_post_id, queue_id, ats_type, status, current_step, last_error, last_error_code, needs_attention_reason, last_seen_url, updated_at, job_posts (title, company, location), job_seekers (full_name, email)"
+      "id, job_seeker_id, job_post_id, queue_id, ats_type, status, current_step, last_error, last_error_code, needs_attention_reason, last_seen_url, updated_at"
     )
     .in("job_seeker_id", seekerIds)
     .eq("status", "NEEDS_ATTENTION");
@@ -120,10 +126,74 @@ export default async function AttentionPage({ searchParams }: PageProps) {
   });
 
   if (runError) {
-    throw new Error("Failed to load attention runs.");
+    console.error("Attention runs query failed:", runError);
+    return (
+      <main>
+        <h1>Needs Attention</h1>
+        <p>Unable to load attention runs right now.</p>
+      </main>
+    );
   }
 
-  const rows = (runRows ?? []) as RunRow[];
+  const rowsWithoutRelations = (runRows ?? []) as Array<{
+    id: string;
+    job_seeker_id: string;
+    job_post_id: string;
+    queue_id: string | null;
+    ats_type: string;
+    status: string;
+    current_step: string;
+    last_error: string | null;
+    last_error_code: string | null;
+    needs_attention_reason: string | null;
+    last_seen_url: string | null;
+    updated_at: string;
+  }>;
+
+  const jobSeekerLookup = new Map<string, { full_name: string | null; email: string | null }>();
+  if (rowsWithoutRelations.length > 0) {
+    const uniqueSeekerIds = Array.from(
+      new Set(rowsWithoutRelations.map((row) => row.job_seeker_id).filter(Boolean))
+    );
+    if (uniqueSeekerIds.length > 0) {
+      const { data: seekers } = await supabaseServer
+        .from("job_seekers")
+        .select("id, full_name, email")
+        .in("id", uniqueSeekerIds);
+      for (const seeker of seekers ?? []) {
+        jobSeekerLookup.set(seeker.id, {
+          full_name: seeker.full_name ?? null,
+          email: seeker.email ?? null,
+        });
+      }
+    }
+  }
+
+  const jobPostLookup = new Map<string, { title: string; company: string | null; location: string | null }>();
+  if (rowsWithoutRelations.length > 0) {
+    const uniqueJobPostIds = Array.from(
+      new Set(rowsWithoutRelations.map((row) => row.job_post_id).filter(Boolean))
+    );
+    if (uniqueJobPostIds.length > 0) {
+      const { data: posts } = await supabaseServer
+        .from("job_posts")
+        .select("id, title, company, location")
+        .in("id", uniqueJobPostIds);
+      for (const post of posts ?? []) {
+        jobPostLookup.set(post.id, {
+          title: post.title,
+          company: post.company ?? null,
+          location: post.location ?? null,
+        });
+      }
+    }
+  }
+
+  const rows: RunRow[] = rowsWithoutRelations.map((row) => ({
+    ...row,
+    job_posts: jobPostLookup.get(row.job_post_id) ?? null,
+    job_seekers: jobSeekerLookup.get(row.job_seeker_id) ?? null,
+  }));
 
   const runIds = rows.map((row) => row.id);
   const payloadByRun: Record<string, Record<string, unknown>> = {};
