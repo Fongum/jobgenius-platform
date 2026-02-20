@@ -7,7 +7,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const body = await request.json();
+  let body: {
+    count?: number;
+    installments?: { amount: number; proposedDate: string }[];
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
   const { count, installments } = body as {
     count: number;
     installments: { amount: number; proposedDate: string }[];
@@ -62,25 +71,46 @@ export async function POST(request: Request) {
     }
   }
 
-  // Create registration_payment record
-  const { data: regPayment, error: regError } = await supabaseAdmin
+  const paymentPayload = {
+    job_seeker_id: auth.user.id,
+    contract_id: contract.id,
+    total_amount: contract.registration_fee,
+    amount_paid: 0,
+    status: "pending" as const,
+    payment_deadline: maxDate.toISOString(),
+    work_started: false,
+  };
+
+  const { data: existingPayment, error: existingPaymentError } = await supabaseAdmin
     .from("registration_payments")
-    .upsert(
-      {
-        job_seeker_id: auth.user.id,
-        contract_id: contract.id,
-        total_amount: contract.registration_fee,
-        amount_paid: 0,
-        status: "pending",
-        payment_deadline: maxDate.toISOString(),
-        work_started: false,
-      },
-      { onConflict: "job_seeker_id" }
-    )
-    .select()
-    .single();
+    .select("id")
+    .eq("job_seeker_id", auth.user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingPaymentError) {
+    console.error("Billing payment lookup failed:", existingPaymentError);
+    return NextResponse.json({ error: "Failed to create payment record." }, { status: 500 });
+  }
+
+  const paymentMutation = existingPayment
+    ? supabaseAdmin
+        .from("registration_payments")
+        .update(paymentPayload)
+        .eq("id", existingPayment.id)
+        .select()
+        .single()
+    : supabaseAdmin
+        .from("registration_payments")
+        .insert(paymentPayload)
+        .select()
+        .single();
+
+  const { data: regPayment, error: regError } = await paymentMutation;
 
   if (regError || !regPayment) {
+    console.error("Billing payment save failed:", regError);
     return NextResponse.json({ error: "Failed to create payment record." }, { status: 500 });
   }
 
