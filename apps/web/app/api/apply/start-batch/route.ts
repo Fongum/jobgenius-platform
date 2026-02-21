@@ -1,6 +1,6 @@
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { getActorFromHeaders } from "@/lib/actor";
-import { getAccountManagerFromRequest } from "@/lib/am-access";
+import { getAccountManagerFromRequest, isRunnerAccountManager } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type StartBatchPayload = {
@@ -9,6 +9,10 @@ type StartBatchPayload = {
 };
 
 const MAX_CONCURRENCY = 5;
+
+function isAdminRole(role: string | null | undefined) {
+  return role === "admin" || role === "superadmin";
+}
 
 export async function POST(request: Request) {
   let payload: StartBatchPayload;
@@ -38,40 +42,54 @@ export async function POST(request: Request) {
   }
 
   const amId = amResult.accountManager.id;
+  const isRunner = await isRunnerAccountManager(amId);
+  const { data: amRecord } = await supabaseServer
+    .from("account_managers")
+    .select("role")
+    .eq("id", amId)
+    .maybeSingle();
+  const canAccessAll = isRunner || isAdminRole(amRecord?.role);
 
-  const { data: assignments, error: assignmentsError } = await supabaseServer
-    .from("job_seeker_assignments")
-    .select("job_seeker_id")
-    .eq("account_manager_id", amId);
+  let assignedIds: string[] = [];
+  if (!canAccessAll) {
+    const { data: assignments, error: assignmentsError } = await supabaseServer
+      .from("job_seeker_assignments")
+      .select("job_seeker_id")
+      .eq("account_manager_id", amId);
 
-  if (assignmentsError) {
-    return Response.json(
-      { success: false, error: "Failed to load job seeker assignments." },
-      { status: 500 }
-    );
-  }
+    if (assignmentsError) {
+      return Response.json(
+        { success: false, error: "Failed to load job seeker assignments." },
+        { status: 500 }
+      );
+    }
 
-  const assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
+    assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
 
-  if (assignedIds.length === 0) {
-    return Response.json({
-      success: true,
-      started: 0,
-      blocked: 0,
-      failed: 0,
-      errors: [],
-    });
+    if (assignedIds.length === 0) {
+      return Response.json({
+        success: true,
+        started: 0,
+        blocked: 0,
+        failed: 0,
+        errors: [],
+      });
+    }
   }
 
   // Fetch queue items
   let queueItems: { id: string; job_seeker_id: string; job_post_id: string; status: string }[] = [];
 
   if (payload.all_ready) {
-    const { data, error } = await supabaseServer
+    let queueQuery = supabaseServer
       .from("application_queue")
       .select("id, job_seeker_id, job_post_id, status")
-      .in("job_seeker_id", assignedIds)
       .eq("status", "QUEUED");
+    if (!canAccessAll) {
+      queueQuery = queueQuery.in("job_seeker_id", assignedIds);
+    }
+
+    const { data, error } = await queueQuery;
 
     if (error) {
       return Response.json(
@@ -92,7 +110,9 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-    queueItems = (data ?? []).filter((q) => assignedIds.includes(q.job_seeker_id));
+    queueItems = canAccessAll
+      ? data ?? []
+      : (data ?? []).filter((q) => assignedIds.includes(q.job_seeker_id));
   }
 
   if (queueItems.length === 0) {
@@ -105,13 +125,15 @@ export async function POST(request: Request) {
     });
   }
 
-  // Check current running count across assigned seekers
-  const { data: runningCountRows, error: runningCountError } =
-    await supabaseServer
-      .from("application_runs")
-      .select("id")
-      .in("job_seeker_id", assignedIds)
-      .in("status", ["RUNNING", "RETRYING"]);
+  // Check current running count across reachable seekers
+  let runningQuery = supabaseServer
+    .from("application_runs")
+    .select("id")
+    .in("status", ["RUNNING", "RETRYING"]);
+  if (!canAccessAll) {
+    runningQuery = runningQuery.in("job_seeker_id", assignedIds);
+  }
+  const { data: runningCountRows, error: runningCountError } = await runningQuery;
 
   if (runningCountError) {
     return Response.json(

@@ -12,16 +12,63 @@ const DEFAULT_SUBMIT_BUTTONS = [
   "submit",
 ];
 
+async function isLinkedInAuthGate(page) {
+  const url = page.url().toLowerCase();
+  if (
+    url.includes("/login") ||
+    url.includes("/checkpoint") ||
+    url.includes("/uas/login")
+  ) {
+    return true;
+  }
+
+  return page
+    .evaluate(() => {
+      const text = document.body?.innerText?.toLowerCase() ?? "";
+      return text.includes("sign in") && text.includes("linkedin");
+    })
+    .catch(() => false);
+}
+
 export const linkedinAdapter = {
   name: "LINKEDIN",
   async detect(page) {
-    return Boolean(await page.$("button[aria-label*='Easy Apply']"));
+    const host = new URL(page.url()).hostname.toLowerCase();
+    if (!host.includes("linkedin.com")) {
+      return false;
+    }
+
+    const hasEasyApplyButton = Boolean(
+      (await page.$("button[aria-label*='Easy Apply']")) ||
+        (await page.$("[data-easy-apply-button]"))
+    );
+    if (hasEasyApplyButton) {
+      return true;
+    }
+
+    const url = page.url().toLowerCase();
+    if (url.includes("/jobs/view/")) {
+      return true;
+    }
+
+    const text = (await page.textContent("body"))?.toLowerCase() ?? "";
+    return text.includes("easy apply");
   },
   async clickApplyEntry(page) {
+    if (await isLinkedInAuthGate(page)) {
+      return { ok: false, reason: "REAUTH_REQUIRED" };
+    }
+
     const applyButton =
       (await page.$("button[aria-label*='Easy Apply']")) ||
+      (await page.$("[data-easy-apply-button]")) ||
       (await findButtonByText(page, ["easy apply"]));
-    if (!applyButton) return { ok: false, reason: "APPLY_BUTTON_MISSING" };
+    if (!applyButton) {
+      if (await isLinkedInAuthGate(page)) {
+        return { ok: false, reason: "REAUTH_REQUIRED" };
+      }
+      return { ok: false, reason: "APPLY_BUTTON_MISSING" };
+    }
     await applyButton.click();
     await page.waitForTimeout(1500);
     return { ok: true };

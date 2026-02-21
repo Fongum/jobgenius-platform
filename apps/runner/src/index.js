@@ -451,34 +451,14 @@ async function executeRun(run) {
     const resumeUrl = run.resume?.url ?? null;
     resumePath = await downloadResume(resumeUrl, run.job_seeker_id);
 
-    // If a resume URL was provided but download failed, pause the run
+    // Resume URLs can expire; continue and let field checks determine if manual action is needed.
     if (resumeUrl && !resumePath) {
       logLine({
-        level: "ERROR",
+        level: "WARN",
         runId: run.run_id,
         step: "RESUME",
-        msg: "Resume URL provided but download failed. Pausing run.",
+        msg: "Resume URL download failed. Continuing without resume upload.",
       });
-      await pauseRun(
-        API_BASE_URL,
-        {
-          run_id: run.run_id,
-          reason: "RESUME_DOWNLOAD_FAILED",
-          message: "Resume download failed — URL may be expired. Re-upload the resume.",
-          step: "RESUME",
-        },
-        RUNNER_AUTH_TOKEN,
-        run.claim_token,
-        RUNNER_ID
-      );
-      onProgress?.({
-        type: "PAUSED",
-        reason: "RESUME_DOWNLOAD_FAILED",
-        runId: run.run_id,
-        atsType: run.ats_type,
-        step: "RESUME",
-      });
-      return;
     }
 
     browser = await chromium.launch({ headless: true });
