@@ -25,6 +25,17 @@ export default async function AdminPage() {
     .from("job_seeker_assignments")
     .select("id", { count: "exact", head: true });
 
+  const { count: discoveryPolicyCount } = await supabaseAdmin
+    .from("discovery_search_policies")
+    .select("id", { count: "exact", head: true });
+
+  const { count: activeGeneratedSearchCount } = await supabaseAdmin
+    .from("job_discovery_searches")
+    .select("id", { count: "exact", head: true })
+    .not("policy_id", "is", null)
+    .is("job_seeker_id", null)
+    .eq("enabled", true);
+
   const { count: unassignedCount } = await supabaseAdmin
     .from("job_seekers")
     .select("id", { count: "exact", head: true })
@@ -72,7 +83,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Link
           href="/dashboard/admin/accounts"
           className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
@@ -105,6 +116,15 @@ export default async function AdminPage() {
           <div className="text-sm font-medium text-gray-500">Unassigned</div>
           <div className="mt-1 text-3xl font-bold text-orange-600">{unassigned}</div>
         </Link>
+
+        <Link
+          href="/dashboard/admin/discovery"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Discovery Rules</div>
+          <div className="mt-1 text-3xl font-bold text-indigo-600">{discoveryPolicyCount ?? 0}</div>
+          <div className="text-xs text-gray-400 mt-1">{activeGeneratedSearchCount ?? 0} active searches</div>
+        </Link>
       </div>
 
       {/* Quick Actions */}
@@ -128,6 +148,12 @@ export default async function AdminPage() {
             className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
           >
             View All Job Seekers
+          </Link>
+          <Link
+            href="/dashboard/admin/discovery"
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Manage Discovery Rules
           </Link>
         </div>
       </div>

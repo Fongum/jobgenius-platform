@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { syncValidatedDiscoverySearches } from "@/lib/discovery/policies";
 
 const DEFAULT_RUN_FREQUENCY_HOURS = 24;
 const DEFAULT_PENDING_LIMIT = 25;
@@ -40,7 +41,7 @@ type JobSourceRow = {
 
 type DiscoverySearchRow = {
   id: string;
-  job_seeker_id: string;
+  job_seeker_id: string | null;
   source_id: string;
   search_name: string;
   search_url: string;
@@ -84,6 +85,14 @@ export async function GET(request: Request) {
       { success: false, error: "Unauthorized" },
       { status: 401 }
     );
+  }
+
+  // Keep discovery search generation independent from apply workflow outcomes.
+  // If syncing fails, continue with existing searches to avoid hard downtime.
+  try {
+    await syncValidatedDiscoverySearches();
+  } catch (error) {
+    console.error("Discovery policy auto-sync failed in pending route:", error);
   }
 
   // Pull enabled searches ordered by oldest run first.
