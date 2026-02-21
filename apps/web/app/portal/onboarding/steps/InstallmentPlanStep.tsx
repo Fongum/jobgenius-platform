@@ -112,14 +112,14 @@ export default function InstallmentPlanStep({
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Payment Schedule</h2>
-        <p className="text-gray-500 mt-1 text-sm">
-          Your registration fee is <strong>{formatCurrency(totalFee)}</strong>. Choose how you&apos;d like to pay — all installments must be completed within 1 month of today ({maxDate.toLocaleDateString("en-US")}).
+        <p className="text-gray-600 mt-1 text-sm">
+          Your registration fee is <strong>{formatCurrency(totalFee)}</strong>. Choose how you&apos;d like to pay - all installments must be completed within 1 month of today ({maxDate.toLocaleDateString("en-US")}).
         </p>
       </div>
 
       {/* Installment count selector */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-semibold text-gray-800 mb-2">
           Number of installments
         </label>
         <div className="flex gap-3">
@@ -131,7 +131,7 @@ export default function InstallmentPlanStep({
               className={`flex-1 py-3 rounded-lg border-2 text-sm font-semibold transition-all ${
                 count === n
                   ? "border-blue-600 bg-blue-50 text-blue-700"
-                  : "border-gray-200 text-gray-600 hover:border-blue-300"
+                  : "border-gray-400 text-gray-800 hover:border-blue-400"
               }`}
             >
               {n} {n === 1 ? "Payment" : "Payments"}
@@ -149,24 +149,24 @@ export default function InstallmentPlanStep({
 
           return (
             <div key={i} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <p className="text-sm font-medium text-gray-700 mb-3">
+              <p className="text-sm font-semibold text-gray-800 mb-3">
                 Installment {i + 1}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Amount ($)</label>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">Amount ($)</label>
                   <input
                     type="number"
                     min="1"
                     step="0.01"
                     value={inst.amount}
                     onChange={(e) => updateInstallment(i, "amount", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Proposed Date</label>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">Proposed Date</label>
                   <input
                     type="date"
                     value={inst.proposedDate}
@@ -174,7 +174,7 @@ export default function InstallmentPlanStep({
                     max={formatDateInput(maxDate)}
                     onChange={(e) => updateInstallment(i, "proposedDate", e.target.value)}
                     className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      dateInvalid ? "border-red-400 bg-red-50" : "border-gray-300"
+                      dateInvalid ? "border-red-400 bg-red-50 text-gray-900" : "border-gray-400 bg-white text-gray-900"
                     }`}
                   />
                   {dateInvalid && (
@@ -197,7 +197,7 @@ export default function InstallmentPlanStep({
             Must equal {formatCurrency(totalFee)} (diff: {formatCurrency(Math.abs(totalEntered - totalFee))})
           </span>
         )}
-        {totalMatch && <span className="text-xs font-medium">✓ Amounts match</span>}
+        {totalMatch && <span className="text-xs font-medium">OK: Amounts match</span>}
       </div>
 
       {error && (
@@ -211,7 +211,7 @@ export default function InstallmentPlanStep({
           type="button"
           onClick={onBack}
           disabled={saving}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium text-gray-800 bg-white border border-gray-400 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
           Back
         </button>
@@ -221,9 +221,10 @@ export default function InstallmentPlanStep({
           disabled={!canSubmit || saving}
           className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {saving ? "Saving…" : "Confirm Payment Plan"}
+          {saving ? "Saving..." : "Confirm Payment Plan"}
         </button>
       </div>
     </div>
   );
 }
+

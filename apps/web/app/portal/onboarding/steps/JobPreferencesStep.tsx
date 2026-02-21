@@ -94,7 +94,7 @@ export default function JobPreferencesStep({
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-1">Job Preferences</h2>
-      <p className="text-sm text-gray-500 mb-6">Help us find the right roles for you.</p>
+      <p className="text-sm text-gray-600 mb-6">Help us find the right roles for you.</p>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
         <p className="text-sm text-blue-800">
@@ -105,11 +105,11 @@ export default function JobPreferencesStep({
       <div className="space-y-5">
         {/* Seniority */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Level</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-1">Seniority Level</label>
           <select
             value={profile.seniority || ""}
             onChange={(e) => update("seniority", e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">Select...</option>
             {SENIORITY_OPTIONS.map((opt) => (
@@ -120,7 +120,7 @@ export default function JobPreferencesStep({
 
         {/* Target Titles */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Target Job Titles</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-1">Target Job Titles</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -128,9 +128,9 @@ export default function JobPreferencesStep({
               onChange={(e) => setTitleInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTitle())}
               placeholder="Add a target title..."
-              className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <button onClick={addTitle} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Add</button>
+            <button onClick={addTitle} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200">Add</button>
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             {(profile.target_titles || []).map((t) => (
@@ -143,7 +143,7 @@ export default function JobPreferencesStep({
 
         {/* Skills */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Skills</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-1">Skills</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -151,9 +151,9 @@ export default function JobPreferencesStep({
               onChange={(e) => setSkillInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
               placeholder="Add a skill..."
-              className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <button onClick={addSkill} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Add</button>
+            <button onClick={addSkill} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200">Add</button>
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             {(profile.skills || []).map((s) => (
@@ -166,7 +166,7 @@ export default function JobPreferencesStep({
 
         {/* Industries */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Industries</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2">Preferred Industries</label>
           <MultiCheckbox
             options={INDUSTRY_OPTIONS}
             selected={profile.preferred_industries || []}
@@ -176,7 +176,7 @@ export default function JobPreferencesStep({
 
         {/* Employment Types */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type (select all that apply)</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2">Employment Type (select all that apply)</label>
           <MultiCheckbox
             options={EMPLOYMENT_TYPE_OPTIONS}
             selected={profile.employment_type_preferences || []}
@@ -186,7 +186,7 @@ export default function JobPreferencesStep({
       </div>
 
       <div className="flex justify-between mt-8">
-        <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+        <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200">
           Back
         </button>
         <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">

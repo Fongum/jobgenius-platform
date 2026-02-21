@@ -68,7 +68,7 @@ export default function SalaryAvailabilityStep({
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-1">Salary & Availability</h2>
-      <p className="text-sm text-gray-500 mb-6">Let us know your compensation expectations and availability.</p>
+      <p className="text-sm text-gray-600 mb-6">Let us know your compensation expectations and availability.</p>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
         <p className="text-sm text-blue-800">
@@ -80,23 +80,23 @@ export default function SalaryAvailabilityStep({
         {/* Salary Range */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Salary (USD)</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-1">Minimum Salary (USD)</label>
             <input
               type="number"
               value={profile.salary_min ?? ""}
               onChange={(e) => update("salary_min", e.target.value ? parseInt(e.target.value) : undefined)}
               placeholder="e.g. 80000"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Salary (USD)</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-1">Maximum Salary (USD)</label>
             <input
               type="number"
               value={profile.salary_max ?? ""}
               onChange={(e) => update("salary_max", e.target.value ? parseInt(e.target.value) : undefined)}
               placeholder="e.g. 120000"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
@@ -104,11 +104,11 @@ export default function SalaryAvailabilityStep({
         {/* Availability */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">When can you start?</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-1">When can you start?</label>
             <select
               value={profile.start_date || ""}
               onChange={(e) => update("start_date", e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Select...</option>
               {START_DATE_OPTIONS.map((opt) => (
@@ -117,11 +117,11 @@ export default function SalaryAvailabilityStep({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notice Period</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-1">Notice Period</label>
             <select
               value={profile.notice_period || ""}
               onChange={(e) => update("notice_period", e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Select...</option>
               {NOTICE_PERIOD_OPTIONS.map((opt) => (
@@ -148,11 +148,11 @@ export default function SalaryAvailabilityStep({
               />
             )}
             <div className="pt-3">
-              <label className="block text-sm text-gray-700 mb-1">Citizenship / Visa Status</label>
+              <label className="block text-sm font-semibold text-gray-800 mb-1">Citizenship / Visa Status</label>
               <select
                 value={profile.citizenship_status || ""}
                 onChange={(e) => update("citizenship_status", e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select...</option>
                 {CITIZENSHIP_OPTIONS.map((opt) => (
@@ -165,7 +165,7 @@ export default function SalaryAvailabilityStep({
       </div>
 
       <div className="flex justify-between mt-8">
-        <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+        <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200">
           Back
         </button>
         <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
