@@ -21,6 +21,21 @@ function normalizeSourceName(sourceName: string) {
   return sourceName.trim().toLowerCase();
 }
 
+function isMissingPoliciesTable(error: { code?: string } | null | undefined) {
+  return error?.code === "42P01";
+}
+
+function missingPoliciesTableResponse() {
+  return Response.json(
+    {
+      success: false,
+      error:
+        "Discovery policies table is missing. Run DB migration 050_superadmin_discovery_policies.sql and retry.",
+    },
+    { status: 500 }
+  );
+}
+
 function collectSourceNames(payload: CreatePolicyPayload) {
   const fromArray = Array.isArray(payload.source_names)
     ? payload.source_names
@@ -54,6 +69,9 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false });
 
   if (policiesError) {
+    if (isMissingPoliciesTable(policiesError)) {
+      return missingPoliciesTableResponse();
+    }
     return Response.json(
       { success: false, error: "Failed to load discovery policies." },
       { status: 500 }
@@ -186,6 +204,9 @@ export async function POST(request: Request) {
     .in("source_name", sourceNames);
 
   if (existingError) {
+    if (isMissingPoliciesTable(existingError)) {
+      return missingPoliciesTableResponse();
+    }
     return Response.json(
       { success: false, error: "Failed to validate existing discovery policies." },
       { status: 500 }
@@ -236,6 +257,9 @@ export async function POST(request: Request) {
       .single();
 
     if (insertError) {
+      if (isMissingPoliciesTable(insertError)) {
+        return missingPoliciesTableResponse();
+      }
       if (insertError.code === "23505") {
         skippedSources.push(sourceName);
         continue;

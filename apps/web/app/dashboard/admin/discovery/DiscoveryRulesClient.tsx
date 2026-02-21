@@ -97,6 +97,33 @@ export default function DiscoveryRulesClient({
     )
   );
 
+  function toggleCreateSource(sourceName: string) {
+    setCreateForm((prev) => {
+      const hasSource = prev.source_names.includes(sourceName);
+      const nextSources = hasSource
+        ? prev.source_names.filter((name) => name !== sourceName)
+        : [...prev.source_names, sourceName];
+      return {
+        ...prev,
+        source_names: nextSources,
+      };
+    });
+  }
+
+  function selectAllCreateSources() {
+    setCreateForm((prev) => ({
+      ...prev,
+      source_names: enabledSources.map((source) => source.name),
+    }));
+  }
+
+  function clearCreateSources() {
+    setCreateForm((prev) => ({
+      ...prev,
+      source_names: [],
+    }));
+  }
+
   async function runSync() {
     setSyncing(true);
     setMessage(null);
@@ -290,32 +317,49 @@ export default function DiscoveryRulesClient({
           <h2 className="font-semibold text-gray-900">Create Policy</h2>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div className="md:col-span-1">
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Sources (multi-select)
-              </label>
-              <select
-                disabled={!hasSources}
-                multiple
-                size={Math.min(7, Math.max(3, enabledSources.length))}
-                value={createForm.source_names}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    source_names: Array.from(event.target.selectedOptions).map(
-                      (option) => option.value
-                    ),
-                  }))
-                }
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-              >
-                {enabledSources.map((source) => (
-                  <option key={source.name} value={source.name}>
-                    {sourceLabel(source)}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-medium text-gray-600">
+                  Sources
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllCreateSources}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearCreateSources}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="border rounded-lg p-2 max-h-44 overflow-auto space-y-2 bg-white">
+                {enabledSources.length === 0 ? (
+                  <p className="text-xs text-gray-500">No enabled sources.</p>
+                ) : (
+                  enabledSources.map((source) => (
+                    <label
+                      key={source.name}
+                      className="flex items-center gap-2 text-sm text-gray-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={createForm.source_names.includes(source.name)}
+                        onChange={() => toggleCreateSource(source.name)}
+                      />
+                      {sourceLabel(source)}
+                    </label>
+                  ))
+                )}
+              </div>
               <p className="mt-1 text-xs text-gray-500">
-                Hold Ctrl (Windows) or Cmd (Mac) to select multiple.
+                {createForm.source_names.length} source
+                {createForm.source_names.length === 1 ? "" : "s"} selected.
               </p>
             </div>
             <div className="md:col-span-2">
