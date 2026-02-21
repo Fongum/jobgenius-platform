@@ -35,6 +35,14 @@ type PolicyDraft = {
   enabled: boolean;
 };
 
+type CreatePolicyDraft = {
+  source_names: string[];
+  job_title: string;
+  location: string;
+  run_frequency_hours: number;
+  enabled: boolean;
+};
+
 function sourceLabel(source: Source) {
   if (!source.source_type) return source.name;
   return `${source.name} (${source.source_type})`;
@@ -66,8 +74,8 @@ export default function DiscoveryRulesClient({
   );
   const hasSources = sources.length > 0;
 
-  const [createForm, setCreateForm] = useState<PolicyDraft>({
-    source_name: enabledSources[0]?.name ?? sources[0]?.name ?? "linkedin",
+  const [createForm, setCreateForm] = useState<CreatePolicyDraft>({
+    source_names: enabledSources[0]?.name ? [enabledSources[0].name] : [],
     job_title: "",
     location: "",
     run_frequency_hours: 24,
@@ -117,10 +125,14 @@ export default function DiscoveryRulesClient({
 
   async function createPolicy() {
     if (!isSuperAdmin) return;
-    if (!createForm.source_name || !createForm.job_title.trim() || !createForm.location.trim()) {
+    if (
+      createForm.source_names.length === 0 ||
+      !createForm.job_title.trim() ||
+      !createForm.location.trim()
+    ) {
       setMessage({
         type: "error",
-        text: "Source, job title, and location are required.",
+        text: "At least one source, job title, and location are required.",
       });
       return;
     }
@@ -138,9 +150,15 @@ export default function DiscoveryRulesClient({
         setMessage({ type: "error", text: data.error || "Failed to create policy." });
         return;
       }
+      const createdCount = Number(data.created_count ?? data.policies?.length ?? 0);
+      const skippedCount = Array.isArray(data.skipped_sources) ? data.skipped_sources.length : 0;
+      const successText =
+        createdCount > 0
+          ? `Created ${createdCount} policy${createdCount === 1 ? "" : "ies"}${skippedCount > 0 ? `, skipped ${skippedCount} duplicate source${skippedCount === 1 ? "" : "s"}` : ""}.`
+          : "No new policies created.";
       setMessage({
         type: data.warning ? "warning" : "success",
-        text: data.warning || "Discovery policy created.",
+        text: data.warning || successText,
       });
       setCreateForm((prev) => ({
         ...prev,
@@ -272,12 +290,21 @@ export default function DiscoveryRulesClient({
           <h2 className="font-semibold text-gray-900">Create Policy</h2>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div className="md:col-span-1">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Source</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Sources (multi-select)
+              </label>
               <select
                 disabled={!hasSources}
-                value={createForm.source_name}
+                multiple
+                size={Math.min(7, Math.max(3, enabledSources.length))}
+                value={createForm.source_names}
                 onChange={(event) =>
-                  setCreateForm((prev) => ({ ...prev, source_name: event.target.value }))
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    source_names: Array.from(event.target.selectedOptions).map(
+                      (option) => option.value
+                    ),
+                  }))
                 }
                 className="w-full px-3 py-2 border rounded-lg text-sm"
               >
@@ -287,6 +314,9 @@ export default function DiscoveryRulesClient({
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Hold Ctrl (Windows) or Cmd (Mac) to select multiple.
+              </p>
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Job Title</label>

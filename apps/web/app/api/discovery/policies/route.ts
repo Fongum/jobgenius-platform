@@ -10,6 +10,7 @@ import {
 
 type CreatePolicyPayload = {
   source_name?: string;
+  source_names?: string[];
   job_title?: string;
   location?: string;
   run_frequency_hours?: number;
@@ -18,6 +19,20 @@ type CreatePolicyPayload = {
 
 function normalizeSourceName(sourceName: string) {
   return sourceName.trim().toLowerCase();
+}
+
+function collectSourceNames(payload: CreatePolicyPayload) {
+  const fromArray = Array.isArray(payload.source_names)
+    ? payload.source_names
+        .map((value) => normalizeSourceName(String(value ?? "")))
+        .filter(Boolean)
+    : [];
+
+  const fromSingle = payload.source_name
+    ? [normalizeSourceName(payload.source_name)]
+    : [];
+
+  return Array.from(new Set([...fromArray, ...fromSingle]));
 }
 
 /**
@@ -96,7 +111,8 @@ export async function GET(request: Request) {
 /**
  * POST /api/discovery/policies
  *
- * Superadmin only: create a validated discovery policy.
+ * Superadmin only: create validated discovery policies.
+ * Supports one or many sources in a single request.
  */
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -121,15 +137,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const sourceName = normalizeSourceName(payload.source_name ?? "");
+  const sourceNames = collectSourceNames(payload);
   const jobTitle = normalizePolicyTitle(payload.job_title ?? "");
   const location = normalizePolicyLocation(payload.location ?? "");
 
-  if (!sourceName || !jobTitle || !location) {
+  if (sourceNames.length === 0 || !jobTitle || !location) {
     return Response.json(
       {
         success: false,
-        error: "source_name, job_title, and location are required.",
+        error: "source_name/source_names, job_title, and location are required.",
       },
       { status: 400 }
     );
@@ -137,49 +153,115 @@ export async function POST(request: Request) {
 
   const runFrequencyHours = normalizePolicyRunFrequency(payload.run_frequency_hours);
 
-  const { data: source } = await supabaseAdmin
+  const { data: sourceRows, error: sourceError } = await supabaseAdmin
     .from("job_sources")
     .select("name")
-    .eq("name", sourceName)
-    .maybeSingle();
+    .in("name", sourceNames);
 
-  if (!source) {
+  if (sourceError) {
     return Response.json(
-      { success: false, error: `Unknown source: ${sourceName}` },
+      { success: false, error: "Failed to validate discovery sources." },
+      { status: 500 }
+    );
+  }
+
+  const existingSources = new Set((sourceRows ?? []).map((row) => row.name));
+  const unknownSources = sourceNames.filter((name) => !existingSources.has(name));
+
+  if (unknownSources.length > 0) {
+    return Response.json(
+      {
+        success: false,
+        error: `Unknown source(s): ${unknownSources.join(", ")}`,
+      },
       { status: 400 }
     );
   }
 
-  const { data: policy, error: insertError } = await supabaseAdmin
+  const { data: existingPolicies, error: existingError } = await supabaseAdmin
     .from("discovery_search_policies")
-    .insert({
-      source_name: sourceName,
-      job_title: jobTitle,
-      location,
-      run_frequency_hours: runFrequencyHours,
-      enabled: payload.enabled ?? true,
-      created_by_am_id: auth.user.id,
-      updated_by_am_id: auth.user.id,
-      updated_at: new Date().toISOString(),
-    })
     .select(
       "id, source_name, job_title, location, run_frequency_hours, enabled, created_at, updated_at"
     )
-    .single();
+    .in("source_name", sourceNames);
 
-  if (insertError) {
-    if (insertError.code === "23505") {
+  if (existingError) {
+    return Response.json(
+      { success: false, error: "Failed to validate existing discovery policies." },
+      { status: 500 }
+    );
+  }
+
+  const targetKey = `${jobTitle.toLowerCase()}|${location.toLowerCase()}`;
+  const existingBySource = new Set(
+    (existingPolicies ?? [])
+      .filter((policy) => `${policy.job_title.toLowerCase()}|${policy.location.toLowerCase()}` === targetKey)
+      .map((policy) => policy.source_name)
+  );
+
+  const nowIso = new Date().toISOString();
+  const createdPolicies: Array<{
+    id: string;
+    source_name: string;
+    job_title: string;
+    location: string;
+    run_frequency_hours: number;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  }> = [];
+  const skippedSources: string[] = [];
+
+  for (const sourceName of sourceNames) {
+    if (existingBySource.has(sourceName)) {
+      skippedSources.push(sourceName);
+      continue;
+    }
+
+    const { data: insertedPolicy, error: insertError } = await supabaseAdmin
+      .from("discovery_search_policies")
+      .insert({
+        source_name: sourceName,
+        job_title: jobTitle,
+        location,
+        run_frequency_hours: runFrequencyHours,
+        enabled: payload.enabled ?? true,
+        created_by_am_id: auth.user.id,
+        updated_by_am_id: auth.user.id,
+        updated_at: nowIso,
+      })
+      .select(
+        "id, source_name, job_title, location, run_frequency_hours, enabled, created_at, updated_at"
+      )
+      .single();
+
+    if (insertError) {
+      if (insertError.code === "23505") {
+        skippedSources.push(sourceName);
+        continue;
+      }
       return Response.json(
         {
           success: false,
-          error: "This title/location policy already exists for the source.",
+          error: "Failed to create discovery policies.",
         },
-        { status: 409 }
+        { status: 500 }
       );
     }
+
+    createdPolicies.push(insertedPolicy);
+  }
+
+  if (createdPolicies.length === 0) {
     return Response.json(
-      { success: false, error: "Failed to create discovery policy." },
-      { status: 500 }
+      {
+        success: true,
+        policies: [],
+        created_count: 0,
+        skipped_sources: skippedSources,
+        warning: "No new policies created. Matching policies already exist for selected source(s).",
+      },
+      { status: 200 }
     );
   }
 
@@ -187,16 +269,20 @@ export async function POST(request: Request) {
     const sync = await syncValidatedDiscoverySearches();
     return Response.json({
       success: true,
-      policy,
+      policies: createdPolicies,
+      created_count: createdPolicies.length,
+      skipped_sources: skippedSources,
       sync,
     });
   } catch (syncError) {
     console.error("Discovery policy sync failed after create:", syncError);
     return Response.json({
       success: true,
-      policy,
+      policies: createdPolicies,
+      created_count: createdPolicies.length,
+      skipped_sources: skippedSources,
       sync: null,
-      warning: "Policy created, but search sync failed. Runner will retry sync.",
+      warning: "Policies created, but search sync failed. Runner will retry sync.",
     });
   }
 }
