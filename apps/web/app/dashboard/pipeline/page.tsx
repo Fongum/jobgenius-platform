@@ -2,6 +2,37 @@ import { notFound } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
 import PipelineClient from "./PipelineClient";
 
+async function loadPipelineSeekers(seekerIds: string[]) {
+  const primary = await supabaseAdmin
+    .from("job_seekers")
+    .select("id, full_name, email, match_threshold, resume_text, resume_template_id")
+    .in("id", seekerIds);
+
+  if (!primary.error) {
+    return primary.data ?? [];
+  }
+
+  // Backward-compatible fallback for environments that have not added optional resume columns yet.
+  const fallback = await supabaseAdmin
+    .from("job_seekers")
+    .select("id, full_name, email, match_threshold")
+    .in("id", seekerIds);
+
+  if (fallback.error) {
+    console.error("Failed to load pipeline seekers:", {
+      primary: primary.error.message,
+      fallback: fallback.error.message,
+    });
+    return [];
+  }
+
+  return (fallback.data ?? []).map((seeker) => ({
+    ...seeker,
+    resume_text: null,
+    resume_template_id: null,
+  }));
+}
+
 export default async function PipelinePage() {
   const user = await getCurrentUser();
   if (!user || user.userType !== "am") return notFound();
@@ -23,11 +54,8 @@ export default async function PipelinePage() {
     );
   }
 
-  // Fetch seeker profiles
-  const { data: seekers } = await supabaseAdmin
-    .from("job_seekers")
-    .select("id, full_name, email, match_threshold, resume_text, resume_template_id")
-    .in("id", seekerIds);
+  // Fetch seeker profiles (with compatibility fallback for optional columns).
+  const seekers = await loadPipelineSeekers(seekerIds);
 
   // Fetch match scores across all seekers
   const { data: matchScores } = await supabaseAdmin

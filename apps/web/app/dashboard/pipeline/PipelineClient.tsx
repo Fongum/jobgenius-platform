@@ -386,6 +386,13 @@ function DiscoverTab({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState<Set<string>>(new Set());
   const [runningMatching, setRunningMatching] = useState(false);
+  const fallbackSeekerIds = useMemo(() => {
+    const ids = new Set<string>();
+    matchScores.forEach((m) => {
+      if (m.job_seeker_id) ids.add(m.job_seeker_id);
+    });
+    return Array.from(ids);
+  }, [matchScores]);
 
   const scoredJobsCount = useMemo(() => {
     const jobIds = new Set<string>();
@@ -480,7 +487,9 @@ function DiscoverTab({
 
   const runMatching = async () => {
     const targetSeekerIds =
-      selectedSeeker === "all" ? seekers.map((s) => s.id) : [selectedSeeker];
+      selectedSeeker === "all"
+        ? (seekers.length > 0 ? seekers.map((s) => s.id) : fallbackSeekerIds)
+        : [selectedSeeker];
 
     if (targetSeekerIds.length === 0) {
       setMsg({ type: "error", text: "No seekers available to run matching." });
