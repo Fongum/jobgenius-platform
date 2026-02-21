@@ -1,4 +1,4 @@
-type AtsType = "LINKEDIN" | "GREENHOUSE" | "WORKDAY";
+type AtsType = "LINKEDIN" | "GREENHOUSE" | "WORKDAY" | "GENERIC";
 
 const STEP_SETS: Record<AtsType, string[]> = {
   LINKEDIN: [
@@ -26,6 +26,14 @@ const STEP_SETS: Record<AtsType, string[]> = {
     "SUBMIT",
     "CONFIRMATION",
   ],
+  GENERIC: [
+    "OPEN_JOB",
+    "TRY_APPLY_ENTRY",
+    "FILL_FORM",
+    "UPLOAD_RESUME",
+    "SUBMIT",
+    "CONFIRMATION",
+  ],
 };
 
 function hasValue(value: string | null | undefined) {
@@ -35,20 +43,38 @@ function hasValue(value: string | null | undefined) {
 export function detectAtsType(source?: string | null, url?: string | null): AtsType {
   const sourceValue = (source ?? "").toLowerCase();
   const urlValue = (url ?? "").toLowerCase();
+  const combined = `${sourceValue} ${urlValue}`;
 
-  if (sourceValue.includes("greenhouse") || urlValue.includes("greenhouse")) {
+  if (combined.includes("greenhouse")) {
     return "GREENHOUSE";
   }
 
-  if (sourceValue.includes("workday") || urlValue.includes("workday")) {
+  if (combined.includes("workday") || combined.includes("myworkdayjobs")) {
     return "WORKDAY";
   }
 
-  if (sourceValue.includes("linkedin") || urlValue.includes("linkedin")) {
+  if (combined.includes("linkedin")) {
     return "LINKEDIN";
   }
 
-  return "LINKEDIN";
+  if (
+    combined.includes("lever.co") ||
+    combined.includes("ashby") ||
+    combined.includes("jobvite") ||
+    combined.includes("smartrecruiters") ||
+    combined.includes("icims") ||
+    combined.includes("workable") ||
+    combined.includes("recruitee") ||
+    combined.includes("bamboohr") ||
+    combined.includes("successfactors") ||
+    combined.includes("taleo") ||
+    combined.includes("oraclecloud") ||
+    combined.includes("personio")
+  ) {
+    return "GENERIC";
+  }
+
+  return "GENERIC";
 }
 
 export function getStepsForAts(atsType: AtsType) {

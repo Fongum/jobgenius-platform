@@ -36,6 +36,16 @@ const BASE_BUTTON_HINTS: Record<string, string[]> = {
     "submit application",
     "submit",
   ],
+  GENERIC: [
+    "next",
+    "continue",
+    "save and continue",
+    "proceed",
+    "review",
+    "submit application",
+    "submit",
+    "apply",
+  ],
   UNKNOWN: ["next", "continue", "review", "submit", "apply"],
 };
 

@@ -362,6 +362,7 @@ export async function runPlan({
   claimToken,
   plan,
   adapter,
+  fallbackAdapter,
   page,
   context,
   dryRun,
@@ -402,6 +403,16 @@ export async function runPlan({
   };
 
   ctx.buttonHints = ctx.automation.buttonHints;
+  let activeAdapter = adapter ?? null;
+  const genericFallback =
+    fallbackAdapter && fallbackAdapter.name !== activeAdapter?.name
+      ? fallbackAdapter
+      : null;
+
+  if (!activeAdapter && genericFallback) {
+    activeAdapter = genericFallback;
+    ctx.atsType = genericFallback.name;
+  }
 
   await sendEvent(
     apiBaseUrl,
@@ -423,7 +434,7 @@ export async function runPlan({
     step: ctx.currentStep,
   });
 
-  if (!adapter) {
+  if (!activeAdapter) {
     await pauseRun(
       apiBaseUrl,
       {
@@ -512,8 +523,26 @@ export async function runPlan({
     }
 
     if (step.name === "DETECT_ATS") {
-      const detected = await adapter.detect(page);
+      const detected = await activeAdapter.detect(page);
       if (!detected) {
+        if (genericFallback) {
+          activeAdapter = genericFallback;
+          ctx.atsType = genericFallback.name;
+          await sendEvent(
+            apiBaseUrl,
+            {
+              run_id: ctx.runId,
+              event_type: "INFO",
+              step: step.name,
+              message: `Falling back to ${genericFallback.name} adapter.`,
+              last_seen_url: page.url(),
+            },
+            authToken,
+            claimToken,
+            runnerId
+          );
+          continue;
+        }
         await pauseRun(
           apiBaseUrl,
           {
@@ -540,7 +569,7 @@ export async function runPlan({
     }
 
     if (step.name === "TRY_APPLY_ENTRY") {
-      const result = await adapter.clickApplyEntry(page, ctx);
+      const result = await activeAdapter.clickApplyEntry(page, ctx);
       if (result?.ok === false) {
         await pauseRun(
           apiBaseUrl,
@@ -568,14 +597,14 @@ export async function runPlan({
     }
 
     if (step.name === "EXTRACT_FIELDS") {
-      ctx.missingFields = adapter.extractRequiredFields
-        ? await adapter.extractRequiredFields(page)
+      ctx.missingFields = activeAdapter.extractRequiredFields
+        ? await activeAdapter.extractRequiredFields(page)
         : await extractRequiredFields(page);
       continue;
     }
 
     if (step.name === "FILL_KNOWN") {
-      const result = await adapter.fillKnownFields(page, ctx);
+      const result = await activeAdapter.fillKnownFields(page, ctx);
       if (result?.ok === false) {
         await pauseRun(
           apiBaseUrl,
@@ -600,8 +629,8 @@ export async function runPlan({
         return;
       }
       if (ctx.resumePath) {
-        const uploadResult = adapter.uploadResume
-          ? await adapter.uploadResume(page, ctx)
+        const uploadResult = activeAdapter.uploadResume
+          ? await activeAdapter.uploadResume(page, ctx)
           : await uploadResume(page, ctx.resumePath);
         if (
           uploadResult?.ok === false &&
@@ -619,8 +648,8 @@ export async function runPlan({
     }
 
     if (step.name === "CHECK_REQUIRED") {
-      const missingFields = adapter.extractRequiredFields
-        ? await adapter.extractRequiredFields(page)
+      const missingFields = activeAdapter.extractRequiredFields
+        ? await activeAdapter.extractRequiredFields(page)
         : await extractRequiredFields(page);
       if (missingFields.length > 0) {
         await pauseRun(
@@ -678,7 +707,7 @@ export async function runPlan({
         });
         return;
       }
-      const result = await adapter.submit(page, ctx);
+      const result = await activeAdapter.submit(page, ctx);
       if (result?.ok === false) {
         await pauseRun(
           apiBaseUrl,
@@ -712,7 +741,7 @@ export async function runPlan({
         claimToken,
         runnerId,
         page,
-        adapter,
+        adapter: activeAdapter,
         ctx,
         step,
         onProgress,
@@ -777,7 +806,9 @@ export async function runPlan({
     }
 
     if (step.name === "CONFIRM") {
-      const confirmed = adapter.confirm ? await adapter.confirm(page, ctx) : false;
+      const confirmed = activeAdapter.confirm
+        ? await activeAdapter.confirm(page, ctx)
+        : false;
       if (confirmed) {
         await completeRun(
           apiBaseUrl,

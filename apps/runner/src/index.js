@@ -6,6 +6,7 @@ import { runPlan } from "./engine.js";
 import { linkedinAdapter } from "./adapters/linkedin_easy_apply.js";
 import { greenhouseAdapter } from "./adapters/greenhouse.js";
 import { workdayAdapter } from "./adapters/workday.js";
+import { genericAdapter } from "./adapters/generic.js";
 import { start as startDiscoveryAgent } from "./discovery/agent.js";
 import { logLine } from "./logger.js";
 import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
@@ -61,7 +62,7 @@ if (!STATE_KEY && process.env.NODE_ENV === "production") {
   });
 }
 
-const adapters = [linkedinAdapter, greenhouseAdapter, workdayAdapter];
+const adapters = [linkedinAdapter, greenhouseAdapter, workdayAdapter, genericAdapter];
 const activeRuns = new Set();
 const jobSeekerHistory = new Map();
 const jobSeekerAuthFailures = new Map();
@@ -139,7 +140,12 @@ async function fetchStorageState(storageStateUrl) {
 }
 
 function getAdapter(atsType) {
-  return adapters.find((adapter) => adapter.name === atsType) ?? null;
+  const normalized = String(atsType ?? "").trim().toUpperCase();
+  return (
+    adapters.find((adapter) => adapter.name === normalized) ??
+    adapters.find((adapter) => adapter.name === "GENERIC") ??
+    null
+  );
 }
 
 function storageStatePath(jobSeekerId) {
@@ -579,6 +585,7 @@ async function executeRun(run) {
       claimToken: run.claim_token,
       plan,
       adapter,
+      fallbackAdapter: getAdapter("GENERIC"),
       page,
       context,
       dryRun: RUNNER_DRY_RUN,
