@@ -110,6 +110,7 @@ interface TailoredResume {
 interface PipelineClientProps {
   seekers: SeekerSummary[];
   matchScores: MatchScore[];
+  availableJobsCount: number;
   routingDecisions: RoutingDecision[];
   queueItems: QueueItem[];
   runs: RunItem[];
@@ -133,6 +134,7 @@ type TabId = (typeof TABS)[number]["id"];
 export default function PipelineClient({
   seekers,
   matchScores,
+  availableJobsCount,
   routingDecisions,
   queueItems,
   runs,
@@ -249,6 +251,7 @@ export default function PipelineClient({
 
         {/* Stats */}
         <div className="flex flex-wrap gap-4 mt-4">
+          <StatBox label="Available in Job Bank" value={availableJobsCount} color="blue" />
           <StatBox label="Matched Jobs" value={filteredMatches.length} />
           <StatBox label="In Queue" value={queuedCount} color="blue" />
           <StatBox label="Running" value={runningCount} color="blue" />
@@ -299,6 +302,7 @@ export default function PipelineClient({
           {activeTab === "discover" && (
             <DiscoverTab
               matchScores={matchScores}
+              availableJobsCount={availableJobsCount}
               seekers={seekers}
               seekerMap={seekerMap}
               routingMap={routingMap}
@@ -355,6 +359,7 @@ export default function PipelineClient({
 
 function DiscoverTab({
   matchScores,
+  availableJobsCount,
   seekers,
   seekerMap,
   routingMap,
@@ -364,6 +369,7 @@ function DiscoverTab({
   setMsg,
 }: {
   matchScores: MatchScore[];
+  availableJobsCount: number;
   seekers: SeekerSummary[];
   seekerMap: Map<string, SeekerSummary>;
   routingMap: Map<string, RoutingDecision>;
@@ -372,12 +378,24 @@ function DiscoverTab({
   selectedSeeker: string;
   setMsg: (m: { type: "success" | "error"; text: string } | null) => void;
 }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [recFilter, setRecFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"score" | "company">("score");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState<Set<string>>(new Set());
+  const [runningMatching, setRunningMatching] = useState(false);
+
+  const scoredJobsCount = useMemo(() => {
+    const jobIds = new Set<string>();
+    matchScores.forEach((m) => {
+      if (!m.job_posts?.id) return;
+      if (selectedSeeker !== "all" && m.job_seeker_id !== selectedSeeker) return;
+      jobIds.add(m.job_posts.id);
+    });
+    return jobIds.size;
+  }, [matchScores, selectedSeeker]);
 
   const filtered = useMemo(() => {
     return matchScores
@@ -460,6 +478,46 @@ function DiscoverTab({
     setSelected(new Set());
   };
 
+  const runMatching = async () => {
+    const targetSeekerIds =
+      selectedSeeker === "all" ? seekers.map((s) => s.id) : [selectedSeeker];
+
+    if (targetSeekerIds.length === 0) {
+      setMsg({ type: "error", text: "No seekers available to run matching." });
+      return;
+    }
+
+    setRunningMatching(true);
+    try {
+      const res = await fetch("/api/match/run-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_ids: targetSeekerIds,
+          only_unscored: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        setMsg({
+          type: "error",
+          text: data.error || "Failed to run matching.",
+        });
+        return;
+      }
+
+      setMsg({
+        type: "success",
+        text: `Matching completed. ${data.jobs_scored ?? 0} score pairs updated.`,
+      });
+      router.refresh();
+    } catch {
+      setMsg({ type: "error", text: "Network error while running matching." });
+    } finally {
+      setRunningMatching(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -509,6 +567,13 @@ function DiscoverTab({
             <option value="company">Company (A-Z)</option>
           </select>
         </div>
+        <button
+          onClick={runMatching}
+          disabled={runningMatching}
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {runningMatching ? "Running..." : "Run Matching Now"}
+        </button>
         {selected.size > 0 && (
           <button
             onClick={queueAllSelected}
@@ -517,6 +582,13 @@ function DiscoverTab({
             Queue Selected ({selected.size})
           </button>
         )}
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <p className="text-sm text-gray-700">
+          Job Bank: <span className="font-semibold">{availableJobsCount}</span> active jobs.
+          {" "}Scored for this view: <span className="font-semibold">{scoredJobsCount}</span>.
+        </p>
       </div>
 
       <p className="text-sm text-gray-500">{filtered.length} matches</p>
@@ -620,7 +692,14 @@ function DiscoverTab({
           );
         })}
         {filtered.length === 0 && (
-          <p className="text-gray-500 text-sm py-8 text-center">No matching jobs found.</p>
+          <div className="text-center py-8 space-y-2">
+            <p className="text-gray-500 text-sm">No matching jobs found.</p>
+            {availableJobsCount > 0 && (
+              <p className="text-xs text-gray-400">
+                Jobs exist in the Job Bank. Run matching now to score newly discovered jobs for these seekers.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

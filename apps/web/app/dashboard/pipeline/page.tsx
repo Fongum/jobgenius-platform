@@ -40,6 +40,11 @@ export default async function PipelinePage() {
     .order("score", { ascending: false })
     .limit(500);
 
+  const { count: availableJobsCount } = await supabaseAdmin
+    .from("job_posts")
+    .select("id", { count: "exact", head: true })
+    .eq("is_active", true);
+
   // Fetch routing decisions
   const { data: routingDecisions } = await supabaseAdmin
     .from("job_routing_decisions")
@@ -128,6 +133,7 @@ export default async function PipelinePage() {
     <PipelineClient
       seekers={(seekers || []) as Parameters<typeof PipelineClient>[0]["seekers"]}
       matchScores={(matchScores || []) as unknown as Parameters<typeof PipelineClient>[0]["matchScores"]}
+      availableJobsCount={availableJobsCount ?? 0}
       routingDecisions={(routingDecisions || []) as Parameters<typeof PipelineClient>[0]["routingDecisions"]}
       queueItems={(queueItems || []) as unknown as Parameters<typeof PipelineClient>[0]["queueItems"]}
       runs={runs as unknown as Parameters<typeof PipelineClient>[0]["runs"]}
