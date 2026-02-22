@@ -155,6 +155,12 @@ export default async function AdminPage() {
           >
             Manage Discovery Rules
           </Link>
+          <Link
+            href="/dashboard/admin/reports"
+            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Report Prompt Settings
+          </Link>
         </div>
       </div>
 

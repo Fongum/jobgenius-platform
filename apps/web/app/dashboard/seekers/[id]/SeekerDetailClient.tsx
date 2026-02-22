@@ -1,7 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  formatTaskStatusLabel,
+  getTaskAttachmentFromAttachments,
+} from "@/lib/conversations/tasks";
+import {
+  DEFAULT_JOBGENIUS_REPORT_SETTINGS,
+  buildJobGeniusReportMessage,
+  type JobGeniusReport,
+} from "@/lib/jobgenius/report";
 
 interface ScoringWeights {
   skills: number;
@@ -65,6 +74,7 @@ interface SeekerData {
   work_history: WorkHistoryEntry[] | null;
   bio: string | null;
   years_experience: number | null;
+  preferred_locations: string[] | null;
   preferred_industries: string[] | null;
   preferred_company_sizes: string[] | null;
   location_preferences: LocationPreference[] | null;
@@ -194,11 +204,159 @@ interface GmailConnectionInfo {
   connectedAt: string;
 }
 
+interface ProfileAuditChange {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+interface ProfileAuditLog {
+  id: string;
+  actor_account_manager_id: string | null;
+  actor_email: string;
+  actor_role: string;
+  action: string;
+  changed_fields: ProfileAuditChange[] | null;
+  created_at: string;
+}
+
+interface FinancialContract {
+  id: string;
+  plan_type: string | null;
+  registration_fee: number | null;
+  commission_rate: number | null;
+  agreed_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface RegistrationPayment {
+  id: string;
+  total_amount: number | null;
+  amount_paid: number | null;
+  status: string;
+  payment_deadline: string | null;
+  work_started: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface PaymentInstallment {
+  id: string;
+  registration_payment_id: string;
+  installment_number: number;
+  amount: number | null;
+  proposed_date: string | null;
+  status: string;
+  paid_at: string | null;
+  created_at: string;
+}
+
+interface PaymentRequest {
+  id: string;
+  installment_id: string | null;
+  offer_id: string | null;
+  method: string;
+  status: string;
+  details_sent_at: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+interface PaymentScreenshot {
+  id: string;
+  payment_request_id: string | null;
+  installment_id: string | null;
+  offer_id: string | null;
+  file_url: string;
+  uploaded_at: string;
+  acknowledged_at: string | null;
+  note: string | null;
+}
+
+interface FinancialOffer {
+  id: string;
+  company: string;
+  role: string;
+  base_salary: number | null;
+  status: string;
+  commission_status: string;
+  commission_amount: number | null;
+  commission_due_date: string | null;
+  reported_by: string;
+  seeker_confirmed_at: string | null;
+  am_confirmed_at: string | null;
+  created_at: string;
+}
+
+interface CommissionPayment {
+  id: string;
+  offer_id: string;
+  amount: number | null;
+  paid_at: string | null;
+  method: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+interface FinancialEscalation {
+  id: string;
+  reason: string;
+  context_notes: string | null;
+  decision: string | null;
+  decision_at: string | null;
+  decision_notes: string | null;
+  created_at: string;
+}
+
+interface FinancialData {
+  contracts: FinancialContract[];
+  registrationPayments: RegistrationPayment[];
+  installments: PaymentInstallment[];
+  paymentRequests: PaymentRequest[];
+  screenshots: PaymentScreenshot[];
+  offers: FinancialOffer[];
+  commissionPayments: CommissionPayment[];
+  escalations: FinancialEscalation[];
+}
+
+interface SeekerConversation {
+  id: string;
+  subject: string;
+  conversation_type: "general" | "application_question" | "task";
+  status: string;
+  updated_at: string;
+  unread_count: number;
+  open_task_count: number;
+  account_manager: {
+    name: string | null;
+    email: string | null;
+  } | null;
+  last_message: {
+    id: string;
+    content: string;
+    sender_type: string;
+    created_at: string;
+  } | null;
+}
+
+interface SeekerConversationMessage {
+  id: string;
+  sender_type: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  read_at: string | null;
+  attachments?: unknown;
+}
+
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "profile", label: "Profile" },
+  { id: "financial", label: "Financial" },
   { id: "jobs", label: "Jobs" },
   { id: "applications", label: "Applications" },
+  { id: "messages", label: "Messages" },
   { id: "outreach", label: "Outreach" },
   { id: "interviews", label: "Interviews" },
   { id: "prep", label: "Prep" },
@@ -206,6 +364,7 @@ const TABS = [
 ];
 
 export default function SeekerDetailClient({
+  backHref,
   seeker,
   matchedJobs,
   queueItems,
@@ -218,7 +377,10 @@ export default function SeekerDetailClient({
   documents,
   gmailConnection,
   inboundEmails,
+  auditLogs,
+  financial,
 }: {
+  backHref: string;
   seeker: SeekerData;
   matchedJobs: MatchedJob[];
   queueItems: QueueItem[];
@@ -231,6 +393,8 @@ export default function SeekerDetailClient({
   documents: Document[];
   gmailConnection: GmailConnectionInfo | null;
   inboundEmails: InboundEmail[];
+  auditLogs: ProfileAuditLog[];
+  financial: FinancialData;
 }) {
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -245,10 +409,10 @@ export default function SeekerDetailClient({
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div className="flex-1">
             <Link
-              href="/dashboard/seekers"
+              href={backHref}
               className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block"
             >
-              ← Back to Job Seekers
+              {"<-"} Back to Job Seekers
             </Link>
             <h1 className="text-2xl font-bold text-gray-900">
               {seeker.full_name || "Unnamed Seeker"}
@@ -342,7 +506,10 @@ export default function SeekerDetailClient({
             />
           )}
           {activeTab === "profile" && (
-            <ProfileTab seeker={seeker} />
+            <ProfileTab seeker={seeker} auditLogs={auditLogs} />
+          )}
+          {activeTab === "financial" && (
+            <FinancialTab financial={financial} />
           )}
           {activeTab === "jobs" && (
             <JobsTab
@@ -354,6 +521,9 @@ export default function SeekerDetailClient({
           )}
           {activeTab === "applications" && (
             <ApplicationsTab queueItems={queueItems} runs={runs} />
+          )}
+          {activeTab === "messages" && (
+            <MessagesTab seekerId={seeker.id} />
           )}
           {activeTab === "outreach" && (
             <OutreachTab drafts={outreachDrafts} threads={recruiterThreads} />
@@ -501,14 +671,102 @@ function OverviewTab({
   );
 }
 
-function ProfileTab({ seeker }: { seeker: SeekerData }) {
+function ProfileTab({
+  seeker,
+  auditLogs,
+}: {
+  seeker: SeekerData;
+  auditLogs: ProfileAuditLog[];
+}) {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysis, setAnalysis] = useState<{ analysis: string; rating: string } | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisSending, setAnalysisSending] = useState(false);
+  const [analysisSendMessage, setAnalysisSendMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [reportGoal, setReportGoal] = useState(
+    DEFAULT_JOBGENIUS_REPORT_SETTINGS.default_goal
+  );
+  const [reportAdminInput, setReportAdminInput] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+  const [jobGeniusReport, setJobGeniusReport] = useState<JobGeniusReport | null>(null);
+  const [reportGeneratedAt, setReportGeneratedAt] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportSending, setReportSending] = useState(false);
+  const [reportSendMessage, setReportSendMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [reportAttachTask, setReportAttachTask] = useState(false);
+  const [reportTaskTitle, setReportTaskTitle] = useState(
+    "Complete your JobGenius report action steps"
+  );
+  const [reportTaskDescription, setReportTaskDescription] = useState("");
+  const [reportTaskPriority, setReportTaskPriority] = useState<"low" | "medium" | "high">(
+    "medium"
+  );
+  const [reportTaskDueDate, setReportTaskDueDate] = useState("");
+  const [editorSaving, setEditorSaving] = useState(false);
+  const [editorMessage, setEditorMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [editor, setEditor] = useState({
+    full_name: seeker.full_name ?? "",
+    phone: seeker.phone ?? "",
+    location: seeker.location ?? "",
+    linkedin_url: seeker.linkedin_url ?? "",
+    portfolio_url: seeker.portfolio_url ?? "",
+    seniority: seeker.seniority ?? "",
+    work_type: seeker.work_type ?? "",
+    salary_min: seeker.salary_min != null ? String(seeker.salary_min) : "",
+    salary_max: seeker.salary_max != null ? String(seeker.salary_max) : "",
+    years_experience:
+      seeker.years_experience != null ? String(seeker.years_experience) : "",
+    bio: seeker.bio ?? "",
+    target_titles: (seeker.target_titles ?? []).join(", "),
+    skills: (seeker.skills ?? []).join(", "),
+    preferred_industries: (seeker.preferred_industries ?? []).join(", "),
+    preferred_company_sizes: (seeker.preferred_company_sizes ?? []).join(", "),
+    preferred_locations: (seeker.preferred_locations ?? []).join(", "),
+    open_to_relocation:
+      seeker.open_to_relocation == null ? "null" : String(seeker.open_to_relocation),
+    requires_visa_sponsorship:
+      seeker.requires_visa_sponsorship == null
+        ? "null"
+        : String(seeker.requires_visa_sponsorship),
+  });
+
+  const updateEditor = (field: keyof typeof editor, value: string) => {
+    setEditor((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const parseList = (value: string) =>
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const toNullableNumber = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const parseBooleanField = (value: string): boolean | null => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return null;
+  };
 
   const runAnalysis = async () => {
     setAnalysisLoading(true);
     setAnalysisError(null);
+    setAnalysisSendMessage(null);
     try {
       const res = await fetch(`/api/am/seekers/${seeker.id}/profile-analysis`, {
         method: "POST",
@@ -527,10 +785,304 @@ function ProfileTab({ seeker }: { seeker: SeekerData }) {
     }
   };
 
+  const sendAnalysisToSeeker = async () => {
+    if (!analysis) {
+      return;
+    }
+
+    setAnalysisSending(true);
+    setAnalysisSendMessage(null);
+
+    const name = seeker.full_name?.trim() || "there";
+    const messageBody = [
+      `Hi ${name},`,
+      "",
+      "I reviewed your profile and here is your analysis report with suggestions.",
+      `Overall rating: ${analysis.rating}`,
+      "",
+      analysis.analysis,
+      "",
+      "Please review this and reply with any updates or questions so we can improve your results quickly.",
+    ].join("\n");
+
+    try {
+      const response = await fetch(`/api/am/seekers/${seeker.id}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: "Profile Analysis Report & Suggestions",
+          conversation_type: "general",
+          initial_message: {
+            content: messageBody,
+          },
+          notify_seeker: true,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setAnalysisSendMessage({
+          type: "error",
+          text: data.error || "Failed to send analysis to seeker.",
+        });
+        return;
+      }
+
+      setAnalysisSendMessage({
+        type: "success",
+        text: "Analysis report and suggestions sent to seeker successfully.",
+      });
+    } catch {
+      setAnalysisSendMessage({
+        type: "error",
+        text: "Network error while sending analysis report.",
+      });
+    } finally {
+      setAnalysisSending(false);
+    }
+  };
+
+  const generateJobGeniusReport = async () => {
+    setReportLoading(true);
+    setReportError(null);
+    setReportSendMessage(null);
+    try {
+      const response = await fetch(`/api/am/seekers/${seeker.id}/jobgenius-report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goal: reportGoal,
+          admin_input: reportAdminInput,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setReportError(data.error || "Failed to generate JobGenius report.");
+        return;
+      }
+
+      setJobGeniusReport(data.report ?? null);
+      setReportGeneratedAt(
+        typeof data.generated_at === "string" ? data.generated_at : new Date().toISOString()
+      );
+      if (typeof data.goal === "string" && data.goal.trim()) {
+        setReportGoal(data.goal);
+      }
+    } catch {
+      setReportError("Network error while generating report.");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const downloadJobGeniusReportPdf = async () => {
+    if (!jobGeniusReport) {
+      setReportError("Generate the JobGenius report first.");
+      return;
+    }
+
+    setReportDownloading(true);
+    setReportError(null);
+
+    try {
+      const response = await fetch(`/api/am/seekers/${seeker.id}/jobgenius-report/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report: jobGeniusReport,
+          goal: reportGoal,
+          admin_input: reportAdminInput,
+          generated_at: reportGeneratedAt,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setReportError(data.error || "Failed to generate PDF.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const dateLabel = (reportGeneratedAt || new Date().toISOString()).slice(0, 10);
+      const safeName = (seeker.full_name || "seeker")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      anchor.href = url;
+      anchor.download = `jobgenius-report-${safeName || "seeker"}-${dateLabel}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setReportError("Network error while downloading PDF.");
+    } finally {
+      setReportDownloading(false);
+    }
+  };
+
+  const sendJobGeniusReportToSeeker = async () => {
+    if (!jobGeniusReport) {
+      setReportSendMessage({
+        type: "error",
+        text: "Generate the JobGenius report first.",
+      });
+      return;
+    }
+
+    const goalToSend = reportGoal.trim() || DEFAULT_JOBGENIUS_REPORT_SETTINGS.default_goal;
+    const seekerName = seeker.full_name?.trim() || "there";
+    const messageBody = buildJobGeniusReportMessage({
+      seekerName,
+      goal: goalToSend,
+      report: jobGeniusReport,
+    });
+
+    if (reportAttachTask && !reportTaskTitle.trim()) {
+      setReportSendMessage({
+        type: "error",
+        text: "Task title is required when attaching a task.",
+      });
+      return;
+    }
+
+    setReportSending(true);
+    setReportSendMessage(null);
+
+    try {
+      const initialMessage: {
+        content: string;
+        task?: {
+          title: string;
+          description?: string | null;
+          due_date?: string | null;
+          priority?: "low" | "medium" | "high";
+        };
+      } = {
+        content: messageBody,
+      };
+
+      if (reportAttachTask) {
+        initialMessage.task = {
+          title: reportTaskTitle.trim(),
+          description: reportTaskDescription.trim() || null,
+          due_date: reportTaskDueDate || null,
+          priority: reportTaskPriority,
+        };
+      }
+
+      const response = await fetch(`/api/am/seekers/${seeker.id}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: "JobGenius Career Report & Action Plan",
+          conversation_type: reportAttachTask ? "task" : "general",
+          initial_message: initialMessage,
+          notify_seeker: true,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setReportSendMessage({
+          type: "error",
+          text: data.error || "Failed to send JobGenius report.",
+        });
+        return;
+      }
+
+      setReportSendMessage({
+        type: "success",
+        text: reportAttachTask
+          ? "JobGenius report and task sent to seeker."
+          : "JobGenius report sent to seeker.",
+      });
+    } catch {
+      setReportSendMessage({
+        type: "error",
+        text: "Network error while sending JobGenius report.",
+      });
+    } finally {
+      setReportSending(false);
+    }
+  };
+
+  const saveProfileChanges = async () => {
+    setEditorSaving(true);
+    setEditorMessage(null);
+    try {
+      const payload = {
+        full_name: editor.full_name.trim() || null,
+        phone: editor.phone.trim() || null,
+        location: editor.location.trim() || null,
+        linkedin_url: editor.linkedin_url.trim() || null,
+        portfolio_url: editor.portfolio_url.trim() || null,
+        seniority: editor.seniority.trim() || null,
+        work_type: editor.work_type.trim() || null,
+        salary_min: toNullableNumber(editor.salary_min),
+        salary_max: toNullableNumber(editor.salary_max),
+        years_experience: toNullableNumber(editor.years_experience),
+        bio: editor.bio.trim() || null,
+        target_titles: parseList(editor.target_titles),
+        skills: parseList(editor.skills),
+        preferred_industries: parseList(editor.preferred_industries),
+        preferred_company_sizes: parseList(editor.preferred_company_sizes),
+        preferred_locations: parseList(editor.preferred_locations),
+        open_to_relocation: parseBooleanField(editor.open_to_relocation),
+        requires_visa_sponsorship: parseBooleanField(
+          editor.requires_visa_sponsorship
+        ),
+      };
+
+      const response = await fetch(`/api/am/seekers/${seeker.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setEditorMessage({
+          type: "error",
+          text: data.error || "Failed to save profile changes.",
+        });
+        return;
+      }
+
+      setEditorMessage({
+        type: "success",
+        text: "Profile updated successfully. Reload the page to see all derived stats.",
+      });
+    } catch {
+      setEditorMessage({ type: "error", text: "Network error." });
+    } finally {
+      setEditorSaving(false);
+    }
+  };
+
   const completion = seeker.profile_completion ?? 0;
 
   const boolLabel = (val: boolean | null) =>
     val === true ? "Yes" : val === false ? "No" : "—";
+
+  const formatAuditValue = (value: unknown) => {
+    if (value === null || value === undefined) return "null";
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return String(value);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "[unserializable]";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -552,16 +1104,36 @@ function ProfileTab({ seeker }: { seeker: SeekerData }) {
       <div className="bg-gray-50 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900">AI Profile Analysis</h3>
-          <button
-            onClick={runAnalysis}
-            disabled={analysisLoading}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {analysisLoading ? "Analyzing..." : "Analyze Profile"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={sendAnalysisToSeeker}
+              disabled={analysisSending || !analysis}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {analysisSending ? "Sending..." : "Send To Seeker"}
+            </button>
+            <button
+              onClick={runAnalysis}
+              disabled={analysisLoading}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {analysisLoading ? "Analyzing..." : "Analyze Profile"}
+            </button>
+          </div>
         </div>
         {analysisError && (
           <p className="text-sm text-red-600 bg-red-50 p-3 rounded">{analysisError}</p>
+        )}
+        {analysisSendMessage && (
+          <p
+            className={`text-sm p-3 rounded ${
+              analysisSendMessage.type === "success"
+                ? "bg-green-50 text-green-700"
+                : "bg-red-50 text-red-700"
+            }`}
+          >
+            {analysisSendMessage.text}
+          </p>
         )}
         {analysis && (
           <div className="space-y-3">
@@ -578,6 +1150,405 @@ function ProfileTab({ seeker }: { seeker: SeekerData }) {
             <div className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-4 rounded-lg border">
               {analysis.analysis}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* JobGenius Report */}
+      <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">
+              JobGenius Report (Analysis, Actions, Suggestions)
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Generate a tailored report, download PDF, and send it to the seeker with an optional task.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={sendJobGeniusReportToSeeker}
+              disabled={reportSending || !jobGeniusReport}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {reportSending ? "Sending..." : "Send To Seeker"}
+            </button>
+            <button
+              onClick={downloadJobGeniusReportPdf}
+              disabled={reportDownloading || !jobGeniusReport}
+              className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {reportDownloading ? "Preparing PDF..." : "Download PDF"}
+            </button>
+            <button
+              onClick={generateJobGeniusReport}
+              disabled={reportLoading}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {reportLoading ? "Generating..." : "Generate Report"}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="md:col-span-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Report Goal
+            </label>
+            <input
+              value={reportGoal}
+              onChange={(event) => setReportGoal(event.target.value)}
+              placeholder="Goal for this seeker report"
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Admin Inputs / Context
+            </label>
+            <textarea
+              rows={3}
+              value={reportAdminInput}
+              onChange={(event) => setReportAdminInput(event.target.value)}
+              placeholder="Add context, constraints, or focus areas for the report..."
+              className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={reportAttachTask}
+              onChange={(event) => setReportAttachTask(event.target.checked)}
+            />
+            Attach a task when sending this report
+          </label>
+
+          {reportAttachTask && (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                value={reportTaskTitle}
+                onChange={(event) => setReportTaskTitle(event.target.value)}
+                placeholder="Task title"
+                className="px-3 py-2 border rounded-lg text-sm"
+              />
+              <input
+                type="date"
+                value={reportTaskDueDate}
+                onChange={(event) => setReportTaskDueDate(event.target.value)}
+                className="px-3 py-2 border rounded-lg text-sm"
+              />
+              <select
+                value={reportTaskPriority}
+                onChange={(event) =>
+                  setReportTaskPriority(event.target.value as "low" | "medium" | "high")
+                }
+                className="px-3 py-2 border rounded-lg text-sm"
+              >
+                <option value="low">Priority: Low</option>
+                <option value="medium">Priority: Medium</option>
+                <option value="high">Priority: High</option>
+              </select>
+              <input
+                value={reportTaskDescription}
+                onChange={(event) => setReportTaskDescription(event.target.value)}
+                placeholder="Task description (optional)"
+                className="px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+          )}
+        </div>
+
+        {reportError && (
+          <p className="text-sm text-red-600 bg-red-50 p-3 rounded">{reportError}</p>
+        )}
+
+        {reportSendMessage && (
+          <p
+            className={`text-sm p-3 rounded ${
+              reportSendMessage.type === "success"
+                ? "bg-green-50 text-green-700"
+                : "bg-red-50 text-red-700"
+            }`}
+          >
+            {reportSendMessage.text}
+          </p>
+        )}
+
+        {jobGeniusReport && (
+          <div className="bg-white rounded-lg border p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-semibold text-gray-900">{jobGeniusReport.title}</h4>
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">
+                {jobGeniusReport.profile_readiness}
+              </span>
+            </div>
+            {reportGeneratedAt && (
+              <p className="text-xs text-gray-500">
+                Generated: {new Date(reportGeneratedAt).toLocaleString()}
+              </p>
+            )}
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+              {jobGeniusReport.summary}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h5 className="text-sm font-semibold text-gray-900 mb-2">Analysis</h5>
+                {jobGeniusReport.analysis.length === 0 ? (
+                  <p className="text-sm text-gray-500">No analysis points generated.</p>
+                ) : (
+                  <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                    {jobGeniusReport.analysis.map((item, index) => (
+                      <li key={`analysis-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <h5 className="text-sm font-semibold text-gray-900 mb-2">Suggestions</h5>
+                {jobGeniusReport.suggestions.length === 0 ? (
+                  <p className="text-sm text-gray-500">No suggestions generated.</p>
+                ) : (
+                  <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                    {jobGeniusReport.suggestions.map((item, index) => (
+                      <li key={`suggestion-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h5 className="text-sm font-semibold text-gray-900 mb-2">Action Steps</h5>
+              {jobGeniusReport.action_steps.length === 0 ? (
+                <p className="text-sm text-gray-500">No action steps generated.</p>
+              ) : (
+                <div className="space-y-2">
+                  {jobGeniusReport.action_steps.map((step, index) => (
+                    <div key={`action-${index}`} className="border rounded-lg p-3">
+                      <p className="text-sm font-medium text-gray-900">
+                        {index + 1}. {step.step}
+                      </p>
+                      {step.why && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          <span className="font-medium">Why:</span> {step.why}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {step.timeline ? `Timeline: ${step.timeline}` : "Timeline: Not set"} |{" "}
+                        {step.priority ? `Priority: ${step.priority}` : "Priority: medium"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h5 className="text-sm font-semibold text-gray-900 mb-2">Next Steps</h5>
+              {jobGeniusReport.next_steps.length === 0 ? (
+                <p className="text-sm text-gray-500">No next steps generated.</p>
+              ) : (
+                <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                  {jobGeniusReport.next_steps.map((item, index) => (
+                    <li key={`next-step-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Profile Editor */}
+      <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">Manage Profile (Admin/AM)</h3>
+            <p className="text-xs text-gray-500">
+              Update this job seeker profile on their behalf.
+            </p>
+          </div>
+          <button
+            onClick={saveProfileChanges}
+            disabled={editorSaving}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {editorSaving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+
+        {editorMessage && (
+          <p
+            className={`text-sm p-3 rounded ${
+              editorMessage.type === "success"
+                ? "bg-green-50 text-green-700"
+                : "bg-red-50 text-red-700"
+            }`}
+          >
+            {editorMessage.text}
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            value={editor.full_name}
+            onChange={(event) => updateEditor("full_name", event.target.value)}
+            placeholder="Full name"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.phone}
+            onChange={(event) => updateEditor("phone", event.target.value)}
+            placeholder="Phone"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.location}
+            onChange={(event) => updateEditor("location", event.target.value)}
+            placeholder="Location"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.seniority}
+            onChange={(event) => updateEditor("seniority", event.target.value)}
+            placeholder="Seniority"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.work_type}
+            onChange={(event) => updateEditor("work_type", event.target.value)}
+            placeholder="Work type"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.years_experience}
+            onChange={(event) => updateEditor("years_experience", event.target.value)}
+            placeholder="Years experience"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.salary_min}
+            onChange={(event) => updateEditor("salary_min", event.target.value)}
+            placeholder="Salary min"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.salary_max}
+            onChange={(event) => updateEditor("salary_max", event.target.value)}
+            placeholder="Salary max"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.linkedin_url}
+            onChange={(event) => updateEditor("linkedin_url", event.target.value)}
+            placeholder="LinkedIn URL"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            value={editor.portfolio_url}
+            onChange={(event) => updateEditor("portfolio_url", event.target.value)}
+            placeholder="Portfolio URL"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <select
+            value={editor.open_to_relocation}
+            onChange={(event) => updateEditor("open_to_relocation", event.target.value)}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="null">Open to relocation: Unknown</option>
+            <option value="true">Open to relocation: Yes</option>
+            <option value="false">Open to relocation: No</option>
+          </select>
+          <select
+            value={editor.requires_visa_sponsorship}
+            onChange={(event) =>
+              updateEditor("requires_visa_sponsorship", event.target.value)
+            }
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="null">Visa sponsorship: Unknown</option>
+            <option value="true">Visa sponsorship: Yes</option>
+            <option value="false">Visa sponsorship: No</option>
+          </select>
+        </div>
+
+        <textarea
+          value={editor.bio}
+          onChange={(event) => updateEditor("bio", event.target.value)}
+          placeholder="Bio"
+          rows={3}
+          className="w-full px-3 py-2 border rounded-lg text-sm"
+        />
+        <input
+          value={editor.target_titles}
+          onChange={(event) => updateEditor("target_titles", event.target.value)}
+          placeholder="Target titles (comma separated)"
+          className="w-full px-3 py-2 border rounded-lg text-sm"
+        />
+        <input
+          value={editor.skills}
+          onChange={(event) => updateEditor("skills", event.target.value)}
+          placeholder="Skills (comma separated)"
+          className="w-full px-3 py-2 border rounded-lg text-sm"
+        />
+        <input
+          value={editor.preferred_industries}
+          onChange={(event) => updateEditor("preferred_industries", event.target.value)}
+          placeholder="Preferred industries (comma separated)"
+          className="w-full px-3 py-2 border rounded-lg text-sm"
+        />
+        <input
+          value={editor.preferred_company_sizes}
+          onChange={(event) =>
+            updateEditor("preferred_company_sizes", event.target.value)
+          }
+          placeholder="Preferred company sizes (comma separated)"
+          className="w-full px-3 py-2 border rounded-lg text-sm"
+        />
+        <input
+          value={editor.preferred_locations}
+          onChange={(event) => updateEditor("preferred_locations", event.target.value)}
+          placeholder="Preferred locations (comma separated)"
+          className="w-full px-3 py-2 border rounded-lg text-sm"
+        />
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+        <h3 className="font-semibold text-gray-900">Recent Profile Change Log</h3>
+        {auditLogs.length === 0 ? (
+          <p className="text-sm text-gray-500">No profile changes logged yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {auditLogs.slice(0, 12).map((log) => (
+              <div key={log.id} className="bg-white border rounded-lg p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900">
+                    {log.actor_email} ({log.actor_role})
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(log.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {(log.changed_fields || []).length === 0 ? (
+                    <p className="text-xs text-gray-500">No field diff captured.</p>
+                  ) : (
+                    (log.changed_fields || []).map((change, index) => (
+                      <p key={`${log.id}-${index}`} className="text-xs text-gray-700 break-words">
+                        <span className="font-medium">{change.field}</span>:{" "}
+                        <span className="text-gray-500">{formatAuditValue(change.from)}</span>{" "}
+                        {"->"}{" "}
+                        <span>{formatAuditValue(change.to)}</span>
+                      </p>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -771,6 +1742,220 @@ function ProfileTab({ seeker }: { seeker: SeekerData }) {
             <InfoRow label="Preferred Shift" value={seeker.preferred_shift || "—"} />
             <InfoRow label="Open to Contract" value={boolLabel(seeker.open_to_contract)} />
           </dl>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+function FinancialTab({ financial }: { financial: FinancialData }) {
+  const totalRegistrationRemaining = financial.registrationPayments.reduce((sum, payment) => {
+    const total = Number(payment.total_amount ?? 0);
+    const paid = Number(payment.amount_paid ?? 0);
+    return sum + Math.max(total - paid, 0);
+  }, 0);
+  const pendingRequests = financial.paymentRequests.filter((request) => request.status !== "acknowledged").length;
+  const openEscalations = financial.escalations.filter((escalation) => !escalation.decision).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white border rounded-lg p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">Financial Overview</h3>
+            <p className="text-sm text-gray-500">Full billing timeline for this job seeker.</p>
+          </div>
+          <Link
+            href="/dashboard/billing"
+            className="px-3 py-2 text-sm font-medium text-gray-700 border rounded-lg hover:bg-gray-50"
+          >
+            Open Billing Admin
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-gray-50 border rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Contracts</p>
+          <p className="text-xl font-bold text-gray-900">{financial.contracts.length}</p>
+        </div>
+        <div className="bg-gray-50 border rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Outstanding Reg Fee</p>
+          <p className="text-xl font-bold text-orange-600">${totalRegistrationRemaining.toLocaleString()}</p>
+        </div>
+        <div className="bg-gray-50 border rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Pending Requests</p>
+          <p className="text-xl font-bold text-indigo-600">{pendingRequests}</p>
+        </div>
+        <div className="bg-gray-50 border rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Open Escalations</p>
+          <p className="text-xl font-bold text-red-600">{openEscalations}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Section title="Contracts">
+          {financial.contracts.length === 0 ? (
+            <p className="text-sm text-gray-500">No contracts.</p>
+          ) : (
+            <div className="space-y-2">
+              {financial.contracts.map((contract) => (
+                <div key={contract.id} className="p-3 border rounded-lg bg-white">
+                  <p className="text-sm font-medium text-gray-900 capitalize">
+                    {contract.plan_type ?? "Unknown plan"}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Registration Fee: ${Number(contract.registration_fee ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Signed: {contract.agreed_at ? new Date(contract.agreed_at).toLocaleString() : "Not signed"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Registration Payments">
+          {financial.registrationPayments.length === 0 ? (
+            <p className="text-sm text-gray-500">No registration payments.</p>
+          ) : (
+            <div className="space-y-2">
+              {financial.registrationPayments.map((payment) => {
+                const remaining = Math.max(
+                  Number(payment.total_amount ?? 0) - Number(payment.amount_paid ?? 0),
+                  0
+                );
+                return (
+                  <div key={payment.id} className="p-3 border rounded-lg bg-white">
+                    <p className="text-sm font-medium text-gray-900 capitalize">
+                      {payment.status.replace(/_/g, " ")}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Paid ${Number(payment.amount_paid ?? 0).toLocaleString()} / ${Number(payment.total_amount ?? 0).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-orange-700">Remaining: ${remaining.toLocaleString()}</p>
+                    {payment.payment_deadline && (
+                      <p className="text-xs text-gray-500">
+                        Deadline: {new Date(payment.payment_deadline).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Installments">
+          {financial.installments.length === 0 ? (
+            <p className="text-sm text-gray-500">No installment records.</p>
+          ) : (
+            <div className="space-y-2">
+              {financial.installments.map((installment) => (
+                <div key={installment.id} className="p-3 border rounded-lg bg-white">
+                  <p className="text-sm font-medium text-gray-900">
+                    Installment #{installment.installment_number}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Amount: ${Number(installment.amount ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500 capitalize">
+                    Status: {installment.status.replace(/_/g, " ")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Payment Requests & Proof">
+          {financial.paymentRequests.length === 0 && financial.screenshots.length === 0 ? (
+            <p className="text-sm text-gray-500">No payment requests or screenshots.</p>
+          ) : (
+            <div className="space-y-3">
+              {financial.paymentRequests.map((request) => (
+                <div key={request.id} className="p-3 border rounded-lg bg-white">
+                  <p className="text-sm font-medium text-gray-900 capitalize">
+                    {request.method} - {request.status.replace(/_/g, " ")}
+                  </p>
+                  {request.note && <p className="text-xs text-gray-500 mt-1">{request.note}</p>}
+                </div>
+              ))}
+              {financial.screenshots.map((screenshot) => (
+                <div key={screenshot.id} className="p-3 border rounded-lg bg-white flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Screenshot Uploaded</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(screenshot.uploaded_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <a
+                    href={screenshot.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    View
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Offers & Commission">
+          {financial.offers.length === 0 ? (
+            <p className="text-sm text-gray-500">No offers reported.</p>
+          ) : (
+            <div className="space-y-2">
+              {financial.offers.map((offer) => (
+                <div key={offer.id} className="p-3 border rounded-lg bg-white">
+                  <p className="text-sm font-medium text-gray-900">
+                    {offer.role} at {offer.company}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Base Salary: ${Number(offer.base_salary ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500 capitalize">
+                    Offer: {offer.status} | Commission: {offer.commission_status}
+                  </p>
+                </div>
+              ))}
+              {financial.commissionPayments.map((payment) => (
+                <div key={payment.id} className="p-3 border rounded-lg bg-white">
+                  <p className="text-sm font-medium text-gray-900">
+                    Commission Payment ${Number(payment.amount ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {payment.paid_at ? `Paid ${new Date(payment.paid_at).toLocaleDateString()}` : "Not marked as paid"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Escalations">
+          {financial.escalations.length === 0 ? (
+            <p className="text-sm text-gray-500">No escalations.</p>
+          ) : (
+            <div className="space-y-2">
+              {financial.escalations.map((escalation) => (
+                <div key={escalation.id} className="p-3 border rounded-lg bg-white">
+                  <p className="text-sm font-medium text-gray-900 capitalize">
+                    {escalation.reason.replace(/_/g, " ")}
+                  </p>
+                  {escalation.context_notes && (
+                    <p className="text-sm text-gray-600 mt-1">{escalation.context_notes}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Decision: {escalation.decision ? escalation.decision.replace(/_/g, " ") : "Pending"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </Section>
       </div>
     </div>
@@ -1217,6 +2402,544 @@ function ApplicationsTab({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function MessagesTab({ seekerId }: { seekerId: string }) {
+  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [conversations, setConversations] = useState<SeekerConversation[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<SeekerConversationMessage[]>([]);
+  const [composeMode, setComposeMode] = useState<"reply" | "new">("reply");
+  const [subject, setSubject] = useState("");
+  const [content, setContent] = useState("");
+  const [sendAsTask, setSendAsTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskPriority, setTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [notifySeeker, setNotifySeeker] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const selectedConversation = conversations.find(
+    (conversation) => conversation.id === selectedConversationId
+  );
+
+  async function fetchConversations(preferredConversationId?: string) {
+    setLoadingConversations(true);
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}/conversations`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      const list = (data.conversations ?? []) as SeekerConversation[];
+      setConversations(list);
+
+      if (preferredConversationId) {
+        setSelectedConversationId(preferredConversationId);
+        return;
+      }
+
+      if (selectedConversationId) {
+        const stillExists = list.some(
+          (conversation) => conversation.id === selectedConversationId
+        );
+        if (!stillExists) {
+          setSelectedConversationId(list[0]?.id ?? null);
+        }
+        return;
+      }
+
+      if (list.length > 0) {
+        setSelectedConversationId(list[0].id);
+      }
+    } catch {
+      setConversations([]);
+    } finally {
+      setLoadingConversations(false);
+    }
+  }
+
+  async function fetchMessages(conversationId: string) {
+    setLoadingMessages(true);
+    try {
+      const res = await fetch(
+        `/api/am/seekers/${seekerId}/conversations/${conversationId}/messages`,
+        { cache: "no-store" }
+      );
+      const data = await res.json();
+      setMessages((data.messages ?? []) as SeekerConversationMessage[]);
+    } catch {
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekerId]);
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setMessages([]);
+      return;
+    }
+    fetchMessages(selectedConversationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId, seekerId]);
+
+  function resetTaskFields() {
+    setSendAsTask(false);
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskPriority("medium");
+    setTaskDueDate("");
+  }
+
+  async function handleSend(event: React.FormEvent) {
+    event.preventDefault();
+    if (sending) return;
+
+    const trimmedSubject = subject.trim();
+    const trimmedContent = content.trim();
+    const trimmedTaskTitle = taskTitle.trim();
+
+    if (composeMode === "new" && !trimmedSubject) {
+      setFeedback({ type: "error", text: "Subject is required for new conversations." });
+      return;
+    }
+
+    if (sendAsTask && !trimmedTaskTitle) {
+      setFeedback({ type: "error", text: "Task title is required." });
+      return;
+    }
+
+    if (!sendAsTask && !trimmedContent) {
+      setFeedback({ type: "error", text: "Message content is required." });
+      return;
+    }
+
+    setSending(true);
+    setFeedback(null);
+
+    try {
+      if (composeMode === "new" || !selectedConversationId) {
+        const res = await fetch(`/api/am/seekers/${seekerId}/conversations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: trimmedSubject,
+            conversation_type: sendAsTask ? "task" : "general",
+            initial_message: {
+              content: trimmedContent,
+              task: sendAsTask
+                ? {
+                    title: trimmedTaskTitle,
+                    description: taskDescription.trim() || undefined,
+                    priority: taskPriority,
+                    due_date: taskDueDate || undefined,
+                  }
+                : undefined,
+            },
+            notify_seeker: notifySeeker,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setFeedback({ type: "error", text: data.error || "Failed to create conversation." });
+          return;
+        }
+
+        const createdConversation = data.conversation as SeekerConversation | undefined;
+        const createdMessage = data.message as SeekerConversationMessage | undefined;
+        const newConversationId = createdConversation?.id;
+
+        if (newConversationId) {
+          await fetchConversations(newConversationId);
+          setComposeMode("reply");
+          setMessages(createdMessage ? [createdMessage] : []);
+        }
+
+        setSubject("");
+        setContent("");
+        resetTaskFields();
+        setFeedback({
+          type: "success",
+          text: sendAsTask ? "Task sent successfully." : "Conversation started successfully.",
+        });
+        return;
+      }
+
+      const res = await fetch(
+        `/api/am/seekers/${seekerId}/conversations/${selectedConversationId}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: trimmedContent,
+            task: sendAsTask
+              ? {
+                  title: trimmedTaskTitle,
+                  description: taskDescription.trim() || undefined,
+                  priority: taskPriority,
+                  due_date: taskDueDate || undefined,
+                }
+              : undefined,
+            notify_seeker: notifySeeker,
+          }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        setFeedback({ type: "error", text: data.error || "Failed to send message." });
+        return;
+      }
+
+      if (data.message) {
+        setMessages((prev) => [...prev, data.message as SeekerConversationMessage]);
+      }
+      setContent("");
+      resetTaskFields();
+      await fetchConversations(selectedConversationId);
+      setFeedback({
+        type: "success",
+        text: sendAsTask ? "Task sent successfully." : "Message sent successfully.",
+      });
+    } catch {
+      setFeedback({ type: "error", text: "Failed to send message." });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="lg:w-[320px] border rounded-lg bg-white">
+          <div className="p-3 border-b flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 text-sm">Conversations</h3>
+            <button
+              onClick={() => {
+                setComposeMode("new");
+                setSelectedConversationId(null);
+                setMessages([]);
+                setSubject("");
+                setContent("");
+                resetTaskFields();
+                setFeedback(null);
+              }}
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              New
+            </button>
+          </div>
+          <div className="max-h-[520px] overflow-y-auto divide-y">
+            {loadingConversations ? (
+              <p className="p-4 text-sm text-gray-500">Loading conversations...</p>
+            ) : conversations.length === 0 ? (
+              <p className="p-4 text-sm text-gray-500">
+                No conversations yet. Start one to message this seeker.
+              </p>
+            ) : (
+              conversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  onClick={() => {
+                    setComposeMode("reply");
+                    setSelectedConversationId(conversation.id);
+                    setFeedback(null);
+                  }}
+                  className={`w-full text-left p-3 transition-colors ${
+                    selectedConversationId === conversation.id
+                      ? "bg-blue-50"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {conversation.subject}
+                    </p>
+                    {conversation.unread_count > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">
+                        {conversation.unread_count}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        conversation.conversation_type === "application_question"
+                          ? "bg-purple-100 text-purple-700"
+                          : conversation.conversation_type === "task"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
+                    >
+                      {conversation.conversation_type === "application_question"
+                        ? "Question"
+                        : conversation.conversation_type === "task"
+                        ? "Task"
+                        : "General"}
+                    </span>
+                    {conversation.open_task_count > 0 && (
+                      <span className="text-[10px] text-amber-700">
+                        {conversation.open_task_count} open
+                      </span>
+                    )}
+                  </div>
+                  {conversation.last_message && (
+                    <p className="mt-1 text-xs text-gray-500 truncate">
+                      {conversation.last_message.sender_type === "job_seeker"
+                        ? "Seeker"
+                        : "AM"}
+                      : {conversation.last_message.content}
+                    </p>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 border rounded-lg bg-white p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                {composeMode === "new"
+                  ? "New conversation"
+                  : selectedConversation?.subject || "Select a conversation"}
+              </h3>
+              {selectedConversation && (
+                <p className="text-xs text-gray-500">
+                  Updated {new Date(selectedConversation.updated_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+            {selectedConversation && composeMode === "reply" && (
+              <button
+                onClick={() => {
+                  setComposeMode("new");
+                  setSelectedConversationId(null);
+                  setMessages([]);
+                  setSubject("");
+                  setContent("");
+                  resetTaskFields();
+                  setFeedback(null);
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Start new thread
+              </button>
+            )}
+          </div>
+
+          <div className="border rounded-lg p-3 bg-gray-50 min-h-[260px] max-h-[380px] overflow-y-auto space-y-3">
+            {composeMode === "new" ? (
+              <p className="text-sm text-gray-500">
+                New thread mode. Add subject and send your first message or task.
+              </p>
+            ) : !selectedConversationId ? (
+              <p className="text-sm text-gray-500">Choose a conversation to view messages.</p>
+            ) : loadingMessages ? (
+              <p className="text-sm text-gray-500">Loading messages...</p>
+            ) : messages.length === 0 ? (
+              <p className="text-sm text-gray-500">No messages yet.</p>
+            ) : (
+              messages.map((message) => {
+                const isSeeker = message.sender_type === "job_seeker";
+                const task = getTaskAttachmentFromAttachments(message.attachments);
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${isSeeker ? "justify-start" : "justify-end"}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                        isSeeker
+                          ? "bg-white border border-gray-200 text-gray-900"
+                          : "bg-blue-600 text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-xs mb-1 opacity-80">
+                        <span>{isSeeker ? "Seeker" : "AM/Admin"}</span>
+                        <span>
+                          {new Date(message.created_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      {task && (
+                        <div
+                          className={`mt-2 rounded border p-2 text-xs ${
+                            isSeeker
+                              ? "border-amber-200 bg-amber-50 text-amber-900"
+                              : "border-blue-300 bg-blue-500 text-blue-50"
+                          }`}
+                        >
+                          <p className="font-semibold">{task.title}</p>
+                          {task.description && (
+                            <p className="mt-1 whitespace-pre-wrap">{task.description}</p>
+                          )}
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            <span>{formatTaskStatusLabel(task.status)}</span>
+                            <span className="capitalize">{task.priority} priority</span>
+                            {task.due_date && (
+                              <span>
+                                Due {new Date(task.due_date).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <form onSubmit={handleSend} className="space-y-3">
+            {composeMode === "new" && (
+              <div>
+                <label className="text-xs font-medium text-gray-700">Subject</label>
+                <input
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  placeholder="e.g. Week 1 goals and updates"
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={sendAsTask}
+                  onChange={(event) => setSendAsTask(event.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Send as task
+              </label>
+
+              {sendAsTask && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 border rounded-lg bg-amber-50">
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-medium text-gray-700">Task title</label>
+                    <input
+                      value={taskTitle}
+                      onChange={(event) => setTaskTitle(event.target.value)}
+                      placeholder="e.g. Update LinkedIn with recent projects"
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-medium text-gray-700">Task details (optional)</label>
+                    <textarea
+                      value={taskDescription}
+                      onChange={(event) => setTaskDescription(event.target.value)}
+                      rows={2}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">Priority</label>
+                    <select
+                      value={taskPriority}
+                      onChange={(event) =>
+                        setTaskPriority(event.target.value as "low" | "medium" | "high")
+                      }
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">Due date (optional)</label>
+                    <input
+                      type="date"
+                      value={taskDueDate}
+                      onChange={(event) => setTaskDueDate(event.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-700">
+                Message {sendAsTask ? "(optional)" : ""}
+              </label>
+              <textarea
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                rows={3}
+                placeholder={
+                  sendAsTask
+                    ? "Optional context for the assigned task..."
+                    : "Type your message..."
+                }
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm resize-none"
+              />
+            </div>
+
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={notifySeeker}
+                onChange={(event) => setNotifySeeker(event.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Email notify seeker
+            </label>
+
+            {feedback && (
+              <div
+                className={`p-2 rounded text-sm ${
+                  feedback.type === "success"
+                    ? "bg-green-50 text-green-800"
+                    : "bg-red-50 text-red-800"
+                }`}
+              >
+                {feedback.text}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={sending}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {sending
+                  ? "Sending..."
+                  : composeMode === "new"
+                  ? sendAsTask
+                    ? "Create thread + send task"
+                    : "Create thread + send message"
+                  : sendAsTask
+                  ? "Send task"
+                  : "Send message"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }

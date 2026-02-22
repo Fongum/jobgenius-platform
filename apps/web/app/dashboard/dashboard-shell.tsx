@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { isAdminRole, normalizeAMRole } from "@/lib/auth/roles";
 
 interface NavItem {
   href: string;
@@ -68,6 +69,7 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/accounts", label: "Account Managers", icon: "user-cog" },
     { href: "/dashboard/admin/job-seekers", label: "All Job Seekers", icon: "users-all" },
     { href: "/dashboard/admin/assignments", label: "Assignments", icon: "link" },
+    { href: "/dashboard/admin/reports", label: "Report Settings", icon: "document" },
     { href: "/dashboard/billing", label: "Billing", icon: "credit-card" },
   ],
 };
@@ -184,6 +186,12 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
         </svg>
       );
+    case "document":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h5l5 5v9a2 2 0 01-2 2z" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -202,11 +210,12 @@ export default function DashboardShell({
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const isAdmin = userRole === "admin" || userRole === "superadmin";
+  const isAdmin = isAdminRole(userRole);
 
   const navSections = useMemo(() => {
     if (isAdmin) {
-      return [...BASE_NAV_SECTIONS, ADMIN_NAV_SECTION];
+      const [overviewSection, ...remainingSections] = BASE_NAV_SECTIONS;
+      return [overviewSection, ADMIN_NAV_SECTION, ...remainingSections];
     }
     return BASE_NAV_SECTIONS;
   }, [isAdmin]);
@@ -222,7 +231,13 @@ export default function DashboardShell({
     return pathname === href || pathname.startsWith(href + "/");
   };
 
-  const roleLabel = userRole === "superadmin" ? "Super Admin" : userRole === "admin" ? "Admin" : "Account Manager";
+  const normalizedRole = normalizeAMRole(userRole);
+  const roleLabel =
+    normalizedRole === "superadmin"
+      ? "Super Admin"
+      : normalizedRole === "admin"
+      ? "Admin"
+      : "Account Manager";
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
