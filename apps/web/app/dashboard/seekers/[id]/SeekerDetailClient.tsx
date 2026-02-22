@@ -364,6 +364,7 @@ interface SeekerConversationMessage {
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "profile", label: "Profile" },
+  { id: "reports", label: "Reports" },
   { id: "financial", label: "Financial" },
   { id: "jobs", label: "Jobs" },
   { id: "applications", label: "Applications" },
@@ -516,7 +517,7 @@ export default function SeekerDetailClient({
               documents={documents}
             />
           )}
-          {activeTab === "profile" && (
+          {(activeTab === "profile" || activeTab === "reports") && (
             <ProfileTab seeker={seeker} auditLogs={auditLogs} />
           )}
           {activeTab === "financial" && (
