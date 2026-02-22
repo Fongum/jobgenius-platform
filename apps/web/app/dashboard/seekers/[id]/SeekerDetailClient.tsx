@@ -320,6 +320,17 @@ interface FinancialData {
   escalations: FinancialEscalation[];
 }
 
+const EMPTY_FINANCIAL_DATA: FinancialData = {
+  contracts: [],
+  registrationPayments: [],
+  installments: [],
+  paymentRequests: [],
+  screenshots: [],
+  offers: [],
+  commissionPayments: [],
+  escalations: [],
+};
+
 interface SeekerConversation {
   id: string;
   subject: string;
@@ -364,7 +375,7 @@ const TABS = [
 ];
 
 export default function SeekerDetailClient({
-  backHref,
+  backHref = "/dashboard/seekers",
   seeker,
   matchedJobs,
   queueItems,
@@ -377,10 +388,10 @@ export default function SeekerDetailClient({
   documents,
   gmailConnection,
   inboundEmails,
-  auditLogs,
-  financial,
+  auditLogs = [],
+  financial = EMPTY_FINANCIAL_DATA,
 }: {
-  backHref: string;
+  backHref?: string;
   seeker: SeekerData;
   matchedJobs: MatchedJob[];
   queueItems: QueueItem[];
@@ -393,8 +404,8 @@ export default function SeekerDetailClient({
   documents: Document[];
   gmailConnection: GmailConnectionInfo | null;
   inboundEmails: InboundEmail[];
-  auditLogs: ProfileAuditLog[];
-  financial: FinancialData;
+  auditLogs?: ProfileAuditLog[];
+  financial?: FinancialData;
 }) {
   const [activeTab, setActiveTab] = useState("overview");
 
