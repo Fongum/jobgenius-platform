@@ -82,11 +82,15 @@ export default function InstallmentPlanStep({
   const [flexRequestSuccess, setFlexRequestSuccess] = useState<string | null>(
     null
   );
+  const [showFlexRequestForm, setShowFlexRequestForm] = useState(false);
 
   const maxDate = useMemo(
     () => plusDays(today, paymentWindowDays),
     [today, paymentWindowDays]
   );
+  const canSubmitFlexRequest =
+    !flexLoading &&
+    (flexRequest?.status === "rejected" || flexRequest == null);
 
   const installmentOptions = useMemo(
     () => Array.from({ length: maxInstallments }, (_, index) => index + 1),
@@ -252,6 +256,7 @@ export default function InstallmentPlanStep({
         "Flexible registration request submitted. An admin will review it."
       );
       setFlexRequestNote("");
+      setShowFlexRequestForm(false);
     } catch {
       setFlexRequestError("Network error while submitting request.");
     } finally {
@@ -303,81 +308,109 @@ export default function InstallmentPlanStep({
         </div>
       )}
 
-      {!flexLoading && flexRequest?.status !== "approved" && (
-        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <h3 className="text-sm font-semibold text-blue-900">
-            Need a more flexible registration payment plan?
-          </h3>
-          <p className="text-xs text-blue-800 mt-1">
-            Request admin approval for more installments and/or a longer payment
-            window. This only affects registration billing.
-          </p>
-
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {canSubmitFlexRequest && (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <label className="block text-xs font-semibold text-blue-900 mb-1">
-                Requested installments
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={MAX_FLEX_INSTALLMENTS}
-                value={flexRequestedCount}
-                onChange={(event) =>
-                  setFlexRequestedCount(
-                    Math.max(1, Math.min(MAX_FLEX_INSTALLMENTS, Number(event.target.value) || 1))
-                  )
-                }
-                className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
-              />
+              <h3 className="text-sm font-semibold text-gray-800">
+                Need a registration payment exception?
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">
+                Flexible terms are for special cases and require admin approval.
+              </p>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-blue-900 mb-1">
-                Requested window (days)
-              </label>
-              <input
-                type="number"
-                min={7}
-                max={MAX_FLEX_WINDOW_DAYS}
-                value={flexRequestedWindowDays}
-                onChange={(event) =>
-                  setFlexRequestedWindowDays(
-                    Math.max(7, Math.min(MAX_FLEX_WINDOW_DAYS, Number(event.target.value) || 7))
-                  )
-                }
-                className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowFlexRequestForm((prev) => !prev);
+                setFlexRequestError(null);
+                setFlexRequestSuccess(null);
+              }}
+              className="px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-700 rounded-md bg-white hover:bg-gray-100"
+            >
+              {showFlexRequestForm
+                ? "Hide Exception Form"
+                : flexRequest?.status === "rejected"
+                ? "Request Again"
+                : "Request Exception"}
+            </button>
           </div>
 
-          <div className="mt-3">
-            <label className="block text-xs font-semibold text-blue-900 mb-1">
-              Why do you need this flexibility?
-            </label>
-            <textarea
-              rows={3}
-              value={flexRequestNote}
-              onChange={(event) => setFlexRequestNote(event.target.value)}
-              placeholder="Explain your situation so admins can review your request."
-              className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"
-            />
-          </div>
+          {showFlexRequestForm && (
+            <div className="mt-4 border-t border-gray-200 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Requested installments
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_FLEX_INSTALLMENTS}
+                    value={flexRequestedCount}
+                    onChange={(event) =>
+                      setFlexRequestedCount(
+                        Math.max(
+                          1,
+                          Math.min(MAX_FLEX_INSTALLMENTS, Number(event.target.value) || 1)
+                        )
+                      )
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Requested window (days)
+                  </label>
+                  <input
+                    type="number"
+                    min={7}
+                    max={MAX_FLEX_WINDOW_DAYS}
+                    value={flexRequestedWindowDays}
+                    onChange={(event) =>
+                      setFlexRequestedWindowDays(
+                        Math.max(
+                          7,
+                          Math.min(MAX_FLEX_WINDOW_DAYS, Number(event.target.value) || 7)
+                        )
+                      )
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                  />
+                </div>
+              </div>
 
-          {flexRequestError && (
-            <p className="mt-2 text-xs text-red-700">{flexRequestError}</p>
-          )}
-          {flexRequestSuccess && (
-            <p className="mt-2 text-xs text-green-700">{flexRequestSuccess}</p>
-          )}
+              <div className="mt-3">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Why do you need this exception?
+                </label>
+                <textarea
+                  rows={3}
+                  value={flexRequestNote}
+                  onChange={(event) => setFlexRequestNote(event.target.value)}
+                  placeholder="Explain your situation so admins can review your request."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"
+                />
+              </div>
 
-          <button
-            type="button"
-            onClick={submitFlexRequest}
-            disabled={flexRequestSaving}
-            className="mt-3 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {flexRequestSaving ? "Submitting..." : "Request Flexible Terms"}
-          </button>
+              {flexRequestError && (
+                <p className="mt-2 text-xs text-red-700">{flexRequestError}</p>
+              )}
+              {flexRequestSuccess && (
+                <p className="mt-2 text-xs text-green-700">{flexRequestSuccess}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={submitFlexRequest}
+                disabled={flexRequestSaving}
+                className="mt-3 px-4 py-2 text-sm font-medium text-white bg-gray-700 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+              >
+                {flexRequestSaving ? "Submitting..." : "Submit Exception Request"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
