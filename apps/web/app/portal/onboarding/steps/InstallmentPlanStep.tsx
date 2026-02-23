@@ -66,6 +66,7 @@ export default function InstallmentPlanStep({
   const [error, setError] = useState<string | null>(null);
 
   const [flexLoading, setFlexLoading] = useState(true);
+  const [flexFeatureAvailable, setFlexFeatureAvailable] = useState(true);
   const [flexRequest, setFlexRequest] = useState<RegistrationFlexRequest | null>(
     null
   );
@@ -90,6 +91,7 @@ export default function InstallmentPlanStep({
   );
   const canSubmitFlexRequest =
     !flexLoading &&
+    flexFeatureAvailable &&
     (flexRequest?.status === "rejected" || flexRequest == null);
 
   const installmentOptions = useMemo(
@@ -107,10 +109,23 @@ export default function InstallmentPlanStep({
           method: "GET",
           cache: "no-store",
         });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
         if (!res.ok) {
+          if (data?.unavailable) {
+            setFlexFeatureAvailable(false);
+          }
           return;
         }
-        const data = await res.json();
+
+        if (data?.unavailable) {
+          setFlexFeatureAvailable(false);
+          setFlexRequest(null);
+          return;
+        }
+
+        setFlexFeatureAvailable(true);
         const latest = (data?.request ?? null) as RegistrationFlexRequest | null;
         if (cancelled) return;
 
@@ -245,6 +260,10 @@ export default function InstallmentPlanStep({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data?.unavailable) {
+          setFlexFeatureAvailable(false);
+          setShowFlexRequestForm(false);
+        }
         setFlexRequestError(
           data.error || "Failed to submit flexible registration request."
         );
@@ -305,6 +324,12 @@ export default function InstallmentPlanStep({
         <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
           Your last flexible registration request was not approved.
           {flexRequest.admin_note ? ` Admin note: ${flexRequest.admin_note}` : ""}
+        </div>
+      )}
+
+      {!flexLoading && !flexFeatureAvailable && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+          Registration exception requests are temporarily unavailable.
         </div>
       )}
 

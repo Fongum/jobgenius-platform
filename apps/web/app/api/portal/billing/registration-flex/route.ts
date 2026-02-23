@@ -13,6 +13,14 @@ type RequestPayload = {
   requested_note?: string;
 };
 
+function isFlexTableMissingError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: string; message?: string; details?: string };
+  const code = row.code ?? "";
+  const text = `${row.message ?? ""} ${row.details ?? ""}`.toLowerCase();
+  return code === "42P01" || text.includes("registration_flex_requests");
+}
+
 function toPositiveInt(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const intValue = Math.trunc(value);
@@ -34,6 +42,14 @@ export async function GET(request: Request) {
     .maybeSingle();
 
   if (error) {
+    if (isFlexTableMissingError(error)) {
+      return NextResponse.json({
+        request: null,
+        unavailable: true,
+        error:
+          "Flexible registration requests are not available yet. Please run migration 053.",
+      });
+    }
     return NextResponse.json(
       { error: "Failed to load flexible registration request." },
       { status: 500 }
@@ -129,6 +145,16 @@ export async function POST(request: Request) {
     ]);
 
   if (pendingError) {
+    if (isFlexTableMissingError(pendingError)) {
+      return NextResponse.json(
+        {
+          unavailable: true,
+          error:
+            "Flexible registration requests are not enabled yet. Please contact support.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { error: "Failed to check current request status." },
       { status: 500 }
@@ -163,6 +189,16 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !flexRequest) {
+    if (isFlexTableMissingError(error)) {
+      return NextResponse.json(
+        {
+          unavailable: true,
+          error:
+            "Flexible registration requests are not enabled yet. Please contact support.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { error: "Failed to submit flexible registration request." },
       { status: 500 }
