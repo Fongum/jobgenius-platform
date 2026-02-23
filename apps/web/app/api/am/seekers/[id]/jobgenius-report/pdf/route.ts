@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { hasJobSeekerAccess } from "@/lib/am-access";
-import { buildPagedPdf } from "@/lib/pdf";
+import { buildStyledJobGeniusReportPdf } from "@/lib/pdf";
 import {
   DEFAULT_JOBGENIUS_REPORT_SETTINGS,
-  buildJobGeniusReportPdfLines,
   normalizeJobGeniusReport,
 } from "@/lib/jobgenius/report";
 
@@ -79,20 +78,24 @@ export async function POST(request: Request, { params }: RouteParams) {
   const adminInput =
     typeof payload.admin_input === "string" ? payload.admin_input.trim() : "";
   const generatedAt = normalizeDate(payload.generated_at);
-
-  const lines = buildJobGeniusReportPdfLines({
+  const pdfBuffer = buildStyledJobGeniusReportPdf({
+    title: report.title || "JobGenius Career Action Report",
     seekerName: seeker.full_name?.trim() || "Unnamed Seeker",
-    seekerEmail: seeker.email,
+    seekerEmail: seeker.email?.trim() || "Not provided",
     generatedAtIso: generatedAt,
     goal,
     adminInput,
-    report,
-  });
-
-  const pdfBuffer = buildPagedPdf(lines, {
-    linesPerPage: 46,
-    fontSize: 10,
-    lineHeight: 13,
+    profileReadiness: report.profile_readiness || "Needs Work",
+    summary: report.summary || "No summary available.",
+    analysis: report.analysis,
+    actionSteps: report.action_steps.map((step) => ({
+      step: step.step,
+      why: step.why,
+      timeline: step.timeline,
+      priority: step.priority,
+    })),
+    suggestions: report.suggestions,
+    nextSteps: report.next_steps,
   });
 
   const namePart = safeFilenamePart(seeker.full_name || seeker.email || seeker.id) || "seeker";

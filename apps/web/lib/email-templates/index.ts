@@ -5,6 +5,7 @@ export { interviewConfirmedEmail } from "./interview-confirmed";
 export { interviewPrepReadyEmail } from "./interview-prep-ready";
 export { rejectionFeedbackEmail } from "./rejection-feedback";
 export { offerNotificationEmail } from "./offer-notification";
+export { conversationMessageNotificationEmail } from "./conversation-message-notification";
 
 export const TEMPLATE_MAP = {
   application_ack: "application-ack",
@@ -14,6 +15,7 @@ export const TEMPLATE_MAP = {
   interview_prep_ready: "interview-prep-ready",
   rejection_feedback: "rejection-feedback",
   offer_notification: "offer-notification",
+  conversation_message_notification: "conversation-message-notification",
 } as const;
 
 export type TemplateKey = keyof typeof TEMPLATE_MAP;

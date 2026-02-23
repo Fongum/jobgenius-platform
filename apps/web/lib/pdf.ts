@@ -160,3 +160,357 @@ export function buildPagedPdf(
 
   return Buffer.from(parts.join(""), "utf8");
 }
+
+type PdfFontName = "F1" | "F2";
+type PdfRgb = [number, number, number];
+
+export type StyledJobGeniusActionStep = {
+  step: string;
+  why?: string;
+  timeline?: string;
+  priority?: string;
+};
+
+export type StyledJobGeniusReportPayload = {
+  title: string;
+  seekerName: string;
+  seekerEmail: string;
+  generatedAtIso: string;
+  goal: string;
+  adminInput: string;
+  profileReadiness: string;
+  summary: string;
+  analysis: string[];
+  actionSteps: StyledJobGeniusActionStep[];
+  suggestions: string[];
+  nextSteps: string[];
+};
+
+function wrapTextForPdf(value: string, maxChars: number): string[] {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [""];
+  if (cleaned.length <= maxChars) return [cleaned];
+
+  const words = cleaned.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+
+    if (current.length + 1 + word.length <= maxChars) {
+      current += ` ${word}`;
+      continue;
+    }
+
+    lines.push(current);
+    current = word;
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
+}
+
+function pushText(
+  commands: string[],
+  text: string,
+  x: number,
+  y: number,
+  font: PdfFontName,
+  size: number,
+  color: PdfRgb
+) {
+  commands.push("BT");
+  commands.push(`/${font} ${size} Tf`);
+  commands.push(`${color[0]} ${color[1]} ${color[2]} rg`);
+  commands.push(`${x} ${y} Td`);
+  commands.push(`(${escapePdfText(text)}) Tj`);
+  commands.push("ET");
+}
+
+function buildPdfFromPageStreams(pageStreams: string[]) {
+  const pageCount = Math.max(1, pageStreams.length);
+  const objects: string[] = [];
+  const pageStart = 3;
+  const contentStart = pageStart + pageCount;
+  const fontRegularObj = contentStart + pageCount;
+  const fontBoldObj = fontRegularObj + 1;
+
+  const pageRefs = Array.from({ length: pageCount }, (_, index) => {
+    return `${pageStart + index} 0 R`;
+  }).join(" ");
+
+  objects.push("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj");
+  objects.push(`2 0 obj << /Type /Pages /Kids [${pageRefs}] /Count ${pageCount} >> endobj`);
+
+  for (let index = 0; index < pageCount; index += 1) {
+    const pageObj = pageStart + index;
+    const contentObj = contentStart + index;
+    objects.push(
+      `${pageObj} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${contentObj} 0 R /Resources << /Font << /F1 ${fontRegularObj} 0 R /F2 ${fontBoldObj} 0 R >> >> >> endobj`
+    );
+  }
+
+  for (let index = 0; index < pageCount; index += 1) {
+    const contentObj = contentStart + index;
+    const stream = pageStreams[index] || "";
+    objects.push(
+      `${contentObj} 0 obj << /Length ${Buffer.byteLength(stream, "utf8")} >> stream\n${stream}\nendstream endobj`
+    );
+  }
+
+  objects.push(
+    `${fontRegularObj} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`
+  );
+  objects.push(
+    `${fontBoldObj} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj`
+  );
+
+  let offset = 0;
+  const parts: string[] = [];
+  const offsets: number[] = [];
+
+  const header = "%PDF-1.4\n";
+  parts.push(header);
+  offset += Buffer.byteLength(header, "utf8");
+
+  for (const obj of objects) {
+    offsets.push(offset);
+    const chunk = `${obj}\n`;
+    parts.push(chunk);
+    offset += Buffer.byteLength(chunk, "utf8");
+  }
+
+  const xrefStart = offset;
+  const xrefLines = ["xref", `0 ${objects.length + 1}`, "0000000000 65535 f "];
+  offsets.forEach((objOffset) => {
+    xrefLines.push(`${objOffset.toString().padStart(10, "0")} 00000 n `);
+  });
+  const xref = `${xrefLines.join("\n")}\n`;
+  parts.push(xref);
+
+  const trailer = `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  parts.push(trailer);
+
+  return Buffer.from(parts.join(""), "utf8");
+}
+
+export function buildStyledJobGeniusReportPdf(
+  payload: StyledJobGeniusReportPayload
+) {
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const marginX = 48;
+  const contentWidth = pageWidth - marginX * 2;
+  const bodyColor: PdfRgb = [0.16, 0.19, 0.24];
+  const mutedColor: PdfRgb = [0.36, 0.41, 0.5];
+
+  const pages: string[][] = [];
+  let commands: string[] = [];
+  let y = 0;
+
+  const startPage = (continuation: boolean) => {
+    if (commands.length > 0) {
+      pages.push(commands);
+    }
+
+    commands = [];
+    commands.push("1 1 1 rg");
+    commands.push(`0 0 ${pageWidth} ${pageHeight} re f`);
+
+    if (!continuation) {
+      commands.push("0.08 0.2 0.44 rg");
+      commands.push(`0 666 ${pageWidth} 126 re f`);
+
+      pushText(commands, payload.title || "JobGenius Career Strategy Report", 48, 748, "F2", 23, [1, 1, 1]);
+      pushText(commands, "Analysis, actions, and direction to secure a strong-fit job.", 48, 726, "F1", 11, [0.86, 0.9, 0.98]);
+
+      commands.push("0.93 0.96 1 rg");
+      commands.push("402 705 162 36 re f");
+      commands.push("0.76 0.84 0.96 RG");
+      commands.push("0.8 w");
+      commands.push("402 705 162 36 re S");
+      pushText(commands, "Readiness", 414, 726, "F1", 8, [0.14, 0.22, 0.42]);
+      pushText(commands, payload.profileReadiness || "Needs Work", 414, 713, "F2", 11, [0.08, 0.2, 0.44]);
+
+      pushText(
+        commands,
+        `Generated ${new Date(payload.generatedAtIso).toLocaleString()}`,
+        48,
+        704,
+        "F1",
+        9,
+        [0.86, 0.9, 0.98]
+      );
+      y = 642;
+    } else {
+      commands.push("0.93 0.96 1 rg");
+      commands.push(`0 748 ${pageWidth} 44 re f`);
+      pushText(commands, payload.title || "JobGenius Career Strategy Report", 48, 766, "F2", 12, [0.08, 0.2, 0.44]);
+      y = 726;
+    }
+  };
+
+  const ensureSpace = (height: number) => {
+    if (y - height < 64) {
+      startPage(true);
+    }
+  };
+
+  const addSectionTitle = (title: string) => {
+    ensureSpace(30);
+    commands.push("0.94 0.97 1 rg");
+    commands.push(`${marginX} ${y - 20} ${contentWidth} 22 re f`);
+    pushText(commands, title, marginX + 10, y - 5, "F2", 12, [0.08, 0.2, 0.44]);
+    y -= 30;
+  };
+
+  const addParagraph = (
+    text: string,
+    opts?: { maxChars?: number; indent?: number; font?: PdfFontName; size?: number; color?: PdfRgb; lineHeight?: number }
+  ) => {
+    const maxChars = opts?.maxChars ?? 96;
+    const indent = opts?.indent ?? 0;
+    const font = opts?.font ?? "F1";
+    const size = opts?.size ?? 10.8;
+    const color = opts?.color ?? bodyColor;
+    const lineHeight = opts?.lineHeight ?? 14.5;
+    const lines = wrapTextForPdf(text, maxChars);
+
+    ensureSpace(lines.length * lineHeight + 6);
+    lines.forEach((line) => {
+      pushText(commands, line, marginX + indent, y, font, size, color);
+      y -= lineHeight;
+    });
+    y -= 3;
+  };
+
+  const addBulletList = (items: string[]) => {
+    if (items.length === 0) {
+      addParagraph("- No items available.", { color: mutedColor });
+      return;
+    }
+
+    items.forEach((item) => {
+      const wrapped = wrapTextForPdf(item, 86);
+      ensureSpace(wrapped.length * 14.5 + 4);
+      pushText(commands, `- ${wrapped[0]}`, marginX + 8, y, "F1", 10.6, bodyColor);
+      y -= 14.5;
+      for (let index = 1; index < wrapped.length; index += 1) {
+        pushText(commands, wrapped[index], marginX + 20, y, "F1", 10.6, bodyColor);
+        y -= 14.5;
+      }
+      y -= 2.5;
+    });
+  };
+
+  const addActionStep = (step: StyledJobGeniusActionStep, index: number) => {
+    const stepLines = wrapTextForPdf(`${index + 1}. ${step.step}`, 84);
+    const whyLines = step.why ? wrapTextForPdf(`Why: ${step.why}`, 82) : [];
+    const meta = [
+      step.timeline ? `Timeline: ${step.timeline}` : null,
+      step.priority ? `Priority: ${step.priority}` : null,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" | ");
+    const metaLines = meta ? wrapTextForPdf(meta, 82) : [];
+
+    const lineCount = stepLines.length + whyLines.length + metaLines.length;
+    const boxHeight = lineCount * 13.5 + 16;
+    ensureSpace(boxHeight + 10);
+
+    const boxX = marginX + 4;
+    const boxY = y - boxHeight + 4;
+    const boxWidth = contentWidth - 8;
+    commands.push("0.97 0.98 1 rg");
+    commands.push(`${boxX} ${boxY} ${boxWidth} ${boxHeight} re f`);
+    commands.push("0.84 0.89 0.96 RG");
+    commands.push("0.8 w");
+    commands.push(`${boxX} ${boxY} ${boxWidth} ${boxHeight} re S`);
+
+    let localY = y - 11;
+    stepLines.forEach((line) => {
+      pushText(commands, line, marginX + 14, localY, "F2", 10.8, [0.09, 0.2, 0.44]);
+      localY -= 13.5;
+    });
+    whyLines.forEach((line) => {
+      pushText(commands, line, marginX + 14, localY, "F1", 10.2, bodyColor);
+      localY -= 13.5;
+    });
+    metaLines.forEach((line) => {
+      pushText(commands, line, marginX + 14, localY, "F1", 9.6, mutedColor);
+      localY -= 13.5;
+    });
+
+    y = boxY - 8;
+  };
+
+  startPage(false);
+
+  addSectionTitle("Profile Snapshot");
+  addParagraph(`Job Seeker: ${payload.seekerName}`);
+  addParagraph(`Email: ${payload.seekerEmail}`);
+  addParagraph(`Generated On: ${new Date(payload.generatedAtIso).toLocaleString()}`);
+
+  addSectionTitle("Goal");
+  addParagraph(payload.goal);
+
+  if (payload.adminInput.trim()) {
+    addSectionTitle("Admin Inputs and Context");
+    addParagraph(payload.adminInput);
+  }
+
+  addSectionTitle("Executive Summary");
+  addParagraph(payload.summary);
+
+  addSectionTitle("Analysis Highlights");
+  addBulletList(payload.analysis);
+
+  addSectionTitle("Action Plan");
+  if (payload.actionSteps.length === 0) {
+    addParagraph("- No action steps available.", { color: mutedColor });
+  } else {
+    payload.actionSteps.forEach((step, index) => {
+      addActionStep(step, index);
+    });
+  }
+
+  addSectionTitle("Suggestions To Move Forward");
+  addBulletList(payload.suggestions);
+
+  addSectionTitle("Next Steps For This Week");
+  addBulletList(payload.nextSteps);
+
+  addSectionTitle("JobGenius Note");
+  addParagraph(
+    "Focused, consistent execution creates interview momentum. Complete the highest-priority steps first, keep your profile current, and review outcomes weekly with your account manager."
+  );
+
+  if (commands.length > 0) {
+    pages.push(commands);
+  }
+
+  const totalPages = pages.length || 1;
+  pages.forEach((pageCommands, index) => {
+    pageCommands.push("0.87 0.9 0.95 RG");
+    pageCommands.push("0.5 w");
+    pageCommands.push("48 40 m 564 40 l S");
+    pushText(
+      pageCommands,
+      `JobGenius Report | Page ${index + 1} of ${totalPages}`,
+      48,
+      26,
+      "F1",
+      8.8,
+      [0.4, 0.45, 0.54]
+    );
+  });
+
+  return buildPdfFromPageStreams(pages.map((pageCommands) => pageCommands.join("\n")));
+}
