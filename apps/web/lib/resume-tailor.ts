@@ -38,6 +38,11 @@ export interface OptimizeBaseResumeStructuredInput {
   keySkills: string[] | null;
 }
 
+export interface RefineResumeStructuredInput {
+  baseResume: StructuredResume;
+  guidance: string;
+}
+
 export interface SeekerRow {
   full_name: string | null;
   email: string;
@@ -309,6 +314,72 @@ Respond with valid JSON containing:
   const tailoredData = parsed.tailored_resume;
   if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
     throw new Error("Invalid optimized resume returned by AI: missing contact fields");
+  }
+  if (!Array.isArray(tailoredData.workExperience)) {
+    tailoredData.workExperience = [];
+  }
+  if (!Array.isArray(tailoredData.education)) {
+    tailoredData.education = [];
+  }
+  if (!Array.isArray(tailoredData.skills)) {
+    tailoredData.skills = [];
+  }
+  if (!Array.isArray(tailoredData.certifications)) {
+    tailoredData.certifications = [];
+  }
+
+  return {
+    tailoredData,
+    tailoredText: structuredResumeToText(tailoredData),
+    changesSummary: parsed.changes_summary,
+  };
+}
+
+export async function refineResumeStructuredWithGuidance(
+  input: RefineResumeStructuredInput
+): Promise<TailorResumeStructuredResult> {
+  const openai = getOpenAIClient();
+  const response = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `You are an expert resume editor. Update the candidate's structured resume JSON using the admin guidance.
+
+Rules:
+- Keep all claims truthful and do not fabricate facts
+- Preserve candidate identity, timeline, and role history
+- Apply the guidance with concise ATS-friendly phrasing
+- Keep formatting schema-valid and professional
+
+Respond with valid JSON containing:
+- "tailored_resume": a JSON object matching this schema: ${STRUCTURED_RESUME_SCHEMA}
+- "changes_summary": a short bullet summary (3-6 bullets) of what you changed.`,
+      },
+      {
+        role: "user",
+        content: `Guidance to apply:\n${input.guidance}\n\nCurrent Resume (JSON):\n${JSON.stringify(
+          input.baseResume
+        )}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("No response from OpenAI");
+  }
+
+  const parsed = JSON.parse(content) as {
+    tailored_resume: StructuredResume;
+    changes_summary: string;
+  };
+
+  const tailoredData = parsed.tailored_resume;
+  if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
+    throw new Error("Invalid refined resume returned by AI: missing contact fields");
   }
   if (!Array.isArray(tailoredData.workExperience)) {
     tailoredData.workExperience = [];

@@ -2,12 +2,87 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { hasJobSeekerAccess } from "@/lib/am-access";
-import { renderResumePdf } from "@/lib/resume-templates";
+import { isOpenAIConfigured } from "@/lib/openai";
+import { renderResumePdf, RESUME_TEMPLATES } from "@/lib/resume-templates";
 import type { ResumeTemplateId, StructuredResume } from "@/lib/resume-templates";
 import {
   normalizeJobTitle,
   structuredResumeToText,
 } from "@/lib/resume-bank";
+import { refineResumeStructuredWithGuidance } from "@/lib/resume-tailor";
+
+const VALID_TEMPLATE_IDS = new Set<string>(RESUME_TEMPLATES.map((t) => t.id));
+
+const VERSION_SELECT_FIELDS =
+  "id, job_seeker_id, name, title_focus, source, status, is_default, template_id, resume_url, resume_text, resume_data, created_at, updated_at";
+
+function isMissingColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return maybe.code === "42703" || text.includes("column") || text.includes("does not exist");
+}
+
+function getMissingColumnName(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const maybe = error as { message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`;
+  const match = text.match(/column\s+["']?([a-zA-Z0-9_]+)["']?\s+/i);
+  return match?.[1] ?? null;
+}
+
+async function syncDefaultVersionToJobSeeker(params: {
+  jobSeekerId: string;
+  resumeText: string;
+  resumeUrl: string | null;
+  templateId: ResumeTemplateId;
+}) {
+  const payloads = [
+    {
+      resume_text: params.resumeText,
+      resume_url: params.resumeUrl,
+      resume_template_id: params.templateId,
+    },
+    {
+      resume_text: params.resumeText,
+      resume_url: params.resumeUrl,
+    },
+    {
+      resume_text: params.resumeText,
+    },
+  ];
+
+  let warning: string | null = null;
+  let lastError: unknown = null;
+
+  for (let idx = 0; idx < payloads.length; idx += 1) {
+    const { error } = await supabaseAdmin
+      .from("job_seekers")
+      .update(payloads[idx])
+      .eq("id", params.jobSeekerId);
+
+    if (!error) {
+      if (idx > 0) {
+        warning =
+          "Default resume updated, but optional seeker profile columns are missing in this environment.";
+      }
+      return { error: null as unknown, warning };
+    }
+
+    lastError = error;
+    if (!isMissingColumnError(error)) {
+      return { error, warning };
+    }
+
+    const missing = getMissingColumnName(error);
+    warning =
+      missing
+        ? `Default resume updated with compatibility fallback (missing column '${missing}').`
+        : "Default resume updated with compatibility fallback due to missing optional columns.";
+  }
+
+  return { error: lastError, warning };
+}
 
 function isMissingResumeBankTable(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -112,16 +187,29 @@ async function createResumeVersion(params: {
       approved_at: params.approvedByAmId ? nowIso : null,
       updated_at: nowIso,
     })
-    .select(
-      "id, job_seeker_id, name, title_focus, source, status, is_default, template_id, resume_url, created_at, updated_at"
-    )
+    .select(VERSION_SELECT_FIELDS)
     .single();
 
   if (error) {
     return { error: error.message, version: null } as const;
   }
 
-  return { error: null, version: data } as const;
+  let warning: string | null = null;
+  if (params.makeDefault) {
+    const syncResult = await syncDefaultVersionToJobSeeker({
+      jobSeekerId: params.jobSeekerId,
+      resumeText: params.resumeText,
+      resumeUrl: computedResumeUrl,
+      templateId: params.templateId,
+    });
+    if (syncResult.error) {
+      warning = "Version saved, but failed to sync default to seeker profile.";
+      return { error: null, version: data, warning } as const;
+    }
+    warning = syncResult.warning;
+  }
+
+  return { error: null, version: data, warning } as const;
 }
 
 export async function GET(request: Request) {
@@ -143,9 +231,7 @@ export async function GET(request: Request) {
 
   const { data: versions, error: versionsError } = await supabaseAdmin
     .from("resume_bank_versions")
-    .select(
-      "id, job_seeker_id, name, title_focus, source, status, is_default, template_id, resume_url, created_at, updated_at"
-    )
+    .select(VERSION_SELECT_FIELDS)
     .eq("job_seeker_id", jobSeekerId)
     .eq("status", "active")
     .order("is_default", { ascending: false })
@@ -262,7 +348,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create resume bank version." }, { status: 500 });
   }
 
-  return NextResponse.json({ version: created.version });
+  return NextResponse.json({ version: created.version, warning: created.warning ?? null });
 }
 
 export async function PATCH(request: Request) {
@@ -289,6 +375,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "version_id is required." }, { status: 400 });
     }
 
+    const { data: targetVersion } = await supabaseAdmin
+      .from("resume_bank_versions")
+      .select("id, resume_text, resume_data, resume_url, template_id")
+      .eq("id", versionId)
+      .eq("job_seeker_id", jobSeekerId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!targetVersion) {
+      return NextResponse.json({ error: "Resume version not found." }, { status: 404 });
+    }
+
     await supabaseAdmin
       .from("resume_bank_versions")
       .update({ is_default: false, updated_at: new Date().toISOString() })
@@ -306,7 +404,217 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Failed to set default version." }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    const syncedResumeText =
+      targetVersion.resume_text ||
+      (targetVersion.resume_data
+        ? structuredResumeToText(targetVersion.resume_data as StructuredResume)
+        : "");
+
+    if (!syncedResumeText) {
+      return NextResponse.json({
+        success: true,
+        warning: "Default flag updated, but selected version had no resume text to sync.",
+      });
+    }
+
+    const syncResult = await syncDefaultVersionToJobSeeker({
+      jobSeekerId,
+      resumeText: syncedResumeText,
+      resumeUrl: targetVersion.resume_url ?? null,
+      templateId: (targetVersion.template_id || "classic") as ResumeTemplateId,
+    });
+
+    if (syncResult.error) {
+      return NextResponse.json({
+        success: true,
+        warning: "Default flag updated, but failed to sync seeker base resume fields.",
+      });
+    }
+
+    return NextResponse.json({ success: true, warning: syncResult.warning });
+  }
+
+  if (action === "update_version") {
+    const versionId = String(body.version_id ?? "").trim();
+    if (!versionId) {
+      return NextResponse.json({ error: "version_id is required." }, { status: 400 });
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from("resume_bank_versions")
+      .select("id, name, is_default, template_id, resume_text, resume_data, resume_url")
+      .eq("id", versionId)
+      .eq("job_seeker_id", jobSeekerId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!existing) {
+      return NextResponse.json({ error: "Resume version not found." }, { status: 404 });
+    }
+
+    const rawName = String(body.name ?? "").trim();
+    const hasResumeDataInBody = Object.prototype.hasOwnProperty.call(body, "resume_data");
+    const hasResumeTextInBody = Object.prototype.hasOwnProperty.call(body, "resume_text");
+    const hasResumeUrlInBody = Object.prototype.hasOwnProperty.call(body, "resume_url");
+    const hasTemplateInBody = Object.prototype.hasOwnProperty.call(body, "template_id");
+
+    const nextName = rawName || existing.name || "Reusable Resume Version";
+    const requestedTemplate = String(body.template_id ?? "").trim();
+    const nextTemplate = (
+      requestedTemplate ||
+      existing.template_id ||
+      "classic"
+    ) as ResumeTemplateId;
+
+    if (!VALID_TEMPLATE_IDS.has(nextTemplate)) {
+      return NextResponse.json(
+        { error: `Invalid template_id. Valid options: ${Array.from(VALID_TEMPLATE_IDS).join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    const nextResumeData = (
+      hasResumeDataInBody
+        ? ((body.resume_data ?? null) as StructuredResume | null)
+        : ((existing.resume_data as StructuredResume | null) ?? null)
+    );
+    const nextResumeTextRaw = hasResumeTextInBody
+      ? String(body.resume_text ?? "").trim()
+      : "";
+    const nextResumeText =
+      nextResumeTextRaw ||
+      (nextResumeData ? structuredResumeToText(nextResumeData) : existing.resume_text ?? "");
+    const nextResumeUrl =
+      hasResumeUrlInBody
+        ? String(body.resume_url ?? "").trim() || null
+        : existing.resume_url ?? null;
+
+    if (!nextResumeText) {
+      return NextResponse.json(
+        { error: "Updated version must include resume_text or resume_data." },
+        { status: 400 }
+      );
+    }
+
+    let finalResumeUrl = nextResumeUrl;
+    if (nextResumeData && (hasResumeDataInBody || hasTemplateInBody || !nextResumeUrl)) {
+      finalResumeUrl = await uploadResumeBankPdf({
+        jobSeekerId,
+        versionId,
+        data: nextResumeData,
+        templateId: nextTemplate,
+      });
+    }
+
+    const { data: updatedVersion, error: updateError } = await supabaseAdmin
+      .from("resume_bank_versions")
+      .update({
+        name: nextName,
+        template_id: nextTemplate,
+        resume_text: nextResumeText,
+        resume_data: nextResumeData,
+        resume_url: finalResumeUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", versionId)
+      .eq("job_seeker_id", jobSeekerId)
+      .eq("status", "active")
+      .select(VERSION_SELECT_FIELDS)
+      .single();
+
+    if (updateError || !updatedVersion) {
+      return NextResponse.json({ error: "Failed to update resume version." }, { status: 500 });
+    }
+
+    let warning: string | null = null;
+    const makeDefault = Boolean(body.make_default);
+
+    if (makeDefault) {
+      await supabaseAdmin
+        .from("resume_bank_versions")
+        .update({ is_default: false, updated_at: new Date().toISOString() })
+        .eq("job_seeker_id", jobSeekerId)
+        .eq("status", "active")
+        .neq("id", versionId);
+
+      await supabaseAdmin
+        .from("resume_bank_versions")
+        .update({ is_default: true, updated_at: new Date().toISOString() })
+        .eq("id", versionId)
+        .eq("job_seeker_id", jobSeekerId)
+        .eq("status", "active");
+    }
+
+    if (makeDefault || updatedVersion.is_default) {
+      const syncResult = await syncDefaultVersionToJobSeeker({
+        jobSeekerId,
+        resumeText: updatedVersion.resume_text ?? nextResumeText,
+        resumeUrl: updatedVersion.resume_url ?? finalResumeUrl,
+        templateId: (updatedVersion.template_id || nextTemplate) as ResumeTemplateId,
+      });
+      if (syncResult.error) {
+        warning = "Version updated, but failed to sync seeker base resume fields.";
+      } else if (syncResult.warning) {
+        warning = syncResult.warning;
+      }
+    }
+
+    return NextResponse.json({ success: true, version: updatedVersion, warning });
+  }
+
+  if (action === "suggest_adjustments") {
+    if (!isOpenAIConfigured()) {
+      return NextResponse.json(
+        { error: "OpenAI is not configured. Set OPENAI_API_KEY to enable suggestions." },
+        { status: 503 }
+      );
+    }
+
+    const versionId = String(body.version_id ?? "").trim();
+    const guidance = String(body.guidance ?? "").trim();
+    if (!versionId || !guidance) {
+      return NextResponse.json({ error: "version_id and guidance are required." }, { status: 400 });
+    }
+
+    const { data: version } = await supabaseAdmin
+      .from("resume_bank_versions")
+      .select("id, template_id, resume_data")
+      .eq("id", versionId)
+      .eq("job_seeker_id", jobSeekerId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!version) {
+      return NextResponse.json({ error: "Resume version not found." }, { status: 404 });
+    }
+
+    if (!version.resume_data) {
+      return NextResponse.json(
+        { error: "This version has no structured resume data yet. Optimize base resume first." },
+        { status: 400 }
+      );
+    }
+
+    try {
+      const suggestion = await refineResumeStructuredWithGuidance({
+        baseResume: version.resume_data as StructuredResume,
+        guidance,
+      });
+
+      return NextResponse.json({
+        suggestion: {
+          tailored_data: suggestion.tailoredData,
+          tailored_text: suggestion.tailoredText,
+          changes_summary: suggestion.changesSummary,
+          template_id: (version.template_id || "classic") as ResumeTemplateId,
+        },
+      });
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to generate AI suggestions for this resume version." },
+        { status: 500 }
+      );
+    }
   }
 
   if (action === "archive") {
@@ -446,7 +754,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Hardened version created, but alert could not be resolved." }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, version: created.version });
+    return NextResponse.json({
+      success: true,
+      version: created.version,
+      warning: created.warning ?? null,
+    });
   }
 
   return NextResponse.json({ error: "Unsupported action." }, { status: 400 });

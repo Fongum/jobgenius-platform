@@ -117,6 +117,8 @@ interface ResumeBankVersion {
   is_default: boolean;
   template_id: ResumeTemplateId | null;
   resume_url: string | null;
+  resume_text: string;
+  resume_data: StructuredResume | null;
   created_at: string;
   updated_at: string;
 }
@@ -1039,6 +1041,18 @@ function ResumesTab({
   const [processingAlertId, setProcessingAlertId] = useState<string | null>(null);
   const [processingVersionId, setProcessingVersionId] = useState<string | null>(null);
   const [optimizingBase, setOptimizingBase] = useState(false);
+  const [selectedBankVersionId, setSelectedBankVersionId] = useState<string | null>(null);
+  const [bankEditMode, setBankEditMode] = useState(false);
+  const [bankEditedName, setBankEditedName] = useState("");
+  const [bankEditedTemplate, setBankEditedTemplate] =
+    useState<ResumeTemplateId>("classic");
+  const [bankEditedData, setBankEditedData] = useState<StructuredResume | null>(null);
+  const [bankEditedText, setBankEditedText] = useState("");
+  const [savingBankEdits, setSavingBankEdits] = useState(false);
+  const [suggestionPrompt, setSuggestionPrompt] = useState("");
+  const [suggestingAdjustments, setSuggestingAdjustments] = useState(false);
+  const [bankSuggestionSummary, setBankSuggestionSummary] = useState<string | null>(null);
+  const [downloadingVersionId, setDownloadingVersionId] = useState<string | null>(null);
 
   const queuedJobs = queueItems.filter((q) => q.job_posts);
   const selectedItem = queuedJobs.find((q) => q.id === selectedId);
@@ -1056,17 +1070,18 @@ function ResumesTab({
   const relevantAlerts = hardeningAlerts.filter(
     (alert) => alert.normalized_title === selectedNormalizedTitle
   );
-  const selectedSeekerIdForBase =
-    selectedItem?.job_seeker_id ||
+  const activeSeekerId =
     (selectedSeeker !== "all" && seekerMap.has(selectedSeeker)
       ? selectedSeeker
-      : null);
-  const selectedSeekerProfileForBase = selectedSeekerIdForBase
-    ? seekerMap.get(selectedSeekerIdForBase)
+      : selectedItem?.job_seeker_id) ?? null;
+  const activeSeekerProfile = activeSeekerId
+    ? seekerMap.get(activeSeekerId)
     : null;
+  const selectedBankVersion =
+    bankVersions.find((row) => row.id === selectedBankVersionId) ?? null;
 
   const optimizeBaseResume = async () => {
-    if (!selectedSeekerIdForBase) {
+    if (!activeSeekerId) {
       setMsg({
         type: "error",
         text: "Choose a single seeker first, then optimize the base resume.",
@@ -1080,8 +1095,8 @@ function ResumesTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          job_seeker_id: selectedSeekerIdForBase,
-          template_id: selectedSeekerProfileForBase?.resume_template_id ?? "classic",
+          job_seeker_id: activeSeekerId,
+          template_id: activeSeekerProfile?.resume_template_id ?? "classic",
         }),
       });
       const data = await res.json();
@@ -1109,35 +1124,49 @@ function ResumesTab({
   };
 
   useEffect(() => {
-    if (!selectedItem) {
+    if (!activeSeekerId) {
       setBankVersions([]);
       setHardeningAlerts([]);
       setVersionMatches([]);
+      setSelectedBankVersionId(null);
+      setBankEditedData(null);
+      setBankEditedText("");
+      setBankEditedName("");
+      setBankSuggestionSummary(null);
+      setSuggestionPrompt("");
       return;
     }
 
     let alive = true;
     setBankLoading(true);
 
-    fetch(`/api/am/resume-bank?job_seeker_id=${selectedItem.job_seeker_id}`)
+    fetch(`/api/am/resume-bank?job_seeker_id=${activeSeekerId}`)
       .then(async (res) => {
         const data = await res.json();
         if (!alive) return;
         if (!res.ok) {
           setBankVersions([]);
           setHardeningAlerts([]);
+          setSelectedBankVersionId(null);
           if (data?.error) {
             setMsg({ type: "error", text: data.error });
           }
           return;
         }
-        setBankVersions((data.versions ?? []) as ResumeBankVersion[]);
+        const versions = (data.versions ?? []) as ResumeBankVersion[];
+        setBankVersions(versions);
         setHardeningAlerts((data.alerts ?? []) as ResumeHardeningAlert[]);
+        setSelectedBankVersionId((prev) => {
+          if (prev && versions.some((row) => row.id === prev)) return prev;
+          const nextDefault = versions.find((row) => row.is_default) ?? versions[0];
+          return nextDefault?.id ?? null;
+        });
       })
       .catch(() => {
         if (!alive) return;
         setBankVersions([]);
         setHardeningAlerts([]);
+        setSelectedBankVersionId(null);
       })
       .finally(() => {
         if (alive) setBankLoading(false);
@@ -1146,7 +1175,27 @@ function ResumesTab({
     return () => {
       alive = false;
     };
-  }, [selectedItem?.job_seeker_id, setMsg]);
+  }, [activeSeekerId, setMsg]);
+
+  useEffect(() => {
+    if (!selectedBankVersion) {
+      setBankEditMode(false);
+      setBankEditedData(null);
+      setBankEditedText("");
+      setBankEditedName("");
+      setBankSuggestionSummary(null);
+      return;
+    }
+
+    setBankEditMode(false);
+    setBankEditedName(selectedBankVersion.name);
+    setBankEditedTemplate(
+      (selectedBankVersion.template_id || activeSeekerProfile?.resume_template_id || "classic") as ResumeTemplateId
+    );
+    setBankEditedData(selectedBankVersion.resume_data ?? null);
+    setBankEditedText(selectedBankVersion.resume_text ?? "");
+    setBankSuggestionSummary(null);
+  }, [selectedBankVersion?.id, selectedBankVersion, activeSeekerProfile?.resume_template_id]);
 
   const selectItem = (id: string) => {
     setSelectedId(id);
@@ -1385,8 +1434,13 @@ function ResumesTab({
       }
       if (data.version) {
         setBankVersions((prev) => [data.version as ResumeBankVersion, ...prev]);
+        setSelectedBankVersionId((data.version as ResumeBankVersion).id);
       }
-      setMsg({ type: "success", text: "Reusable resume version saved." });
+      if (data.warning) {
+        setMsg({ type: "error", text: data.warning });
+      } else {
+        setMsg({ type: "success", text: "Reusable resume version saved." });
+      }
     } catch {
       setMsg({ type: "error", text: "Network error while saving version." });
     } finally {
@@ -1395,7 +1449,7 @@ function ResumesTab({
   };
 
   const setDefaultVersion = async (versionId: string) => {
-    if (!selectedItem) return;
+    if (!activeSeekerId) return;
     setProcessingVersionId(versionId);
     try {
       const res = await fetch("/api/am/resume-bank", {
@@ -1403,7 +1457,7 @@ function ResumesTab({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "set_default",
-          job_seeker_id: selectedItem.job_seeker_id,
+          job_seeker_id: activeSeekerId,
           version_id: versionId,
         }),
       });
@@ -1415,12 +1469,176 @@ function ResumesTab({
       setBankVersions((prev) =>
         prev.map((row) => ({ ...row, is_default: row.id === versionId }))
       );
-      setMsg({ type: "success", text: "Default reusable version updated." });
+      if (data.warning) {
+        setMsg({ type: "error", text: data.warning });
+      } else {
+        setMsg({ type: "success", text: "Primary reusable resume updated for this seeker." });
+      }
     } catch {
       setMsg({ type: "error", text: "Network error while updating default version." });
     } finally {
       setProcessingVersionId(null);
     }
+  };
+
+  const saveBankVersionEdits = async () => {
+    if (!activeSeekerId || !selectedBankVersion) return;
+    if (!bankEditedData && !bankEditedText.trim()) {
+      setMsg({ type: "error", text: "Resume content is empty. Add content before saving." });
+      return;
+    }
+
+    setSavingBankEdits(true);
+    try {
+      const payload: Record<string, unknown> = {
+        action: "update_version",
+        job_seeker_id: activeSeekerId,
+        version_id: selectedBankVersion.id,
+        name: bankEditedName.trim() || selectedBankVersion.name,
+        template_id: bankEditedTemplate,
+        make_default: selectedBankVersion.is_default,
+      };
+      if (bankEditedData) {
+        payload.resume_data = bankEditedData;
+      } else {
+        payload.resume_text = bankEditedText;
+      }
+
+      const res = await fetch("/api/am/resume-bank", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to save resume version." });
+        return;
+      }
+
+      if (data.version) {
+        const updated = data.version as ResumeBankVersion;
+        setBankVersions((prev) =>
+          prev.map((row) => (row.id === updated.id ? updated : row))
+        );
+      }
+      setBankEditMode(false);
+      if (data.warning) {
+        setMsg({ type: "error", text: data.warning });
+      } else {
+        setMsg({ type: "success", text: "Resume version saved." });
+      }
+    } catch {
+      setMsg({ type: "error", text: "Network error while saving resume version." });
+    } finally {
+      setSavingBankEdits(false);
+    }
+  };
+
+  const suggestAdjustmentsForVersion = async () => {
+    if (!activeSeekerId || !selectedBankVersion) return;
+    if (suggestionPrompt.trim().length < 10) {
+      setMsg({
+        type: "error",
+        text: "Enter at least 10 characters of guidance for adjustment suggestions.",
+      });
+      return;
+    }
+
+    setSuggestingAdjustments(true);
+    try {
+      const res = await fetch("/api/am/resume-bank", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "suggest_adjustments",
+          job_seeker_id: activeSeekerId,
+          version_id: selectedBankVersion.id,
+          guidance: suggestionPrompt.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to generate suggestions." });
+        return;
+      }
+
+      const suggestion = data.suggestion as {
+        tailored_data: StructuredResume | null;
+        tailored_text: string;
+        changes_summary: string | null;
+        template_id: ResumeTemplateId | null;
+      };
+      if (suggestion.tailored_data) {
+        setBankEditedData(suggestion.tailored_data);
+      } else {
+        setBankEditedData(null);
+      }
+      setBankEditedText(suggestion.tailored_text ?? "");
+      if (suggestion.template_id) {
+        setBankEditedTemplate(suggestion.template_id);
+      }
+      setBankSuggestionSummary(suggestion.changes_summary ?? null);
+      setBankEditMode(true);
+      setMsg({
+        type: "success",
+        text: "Adjustment suggestions generated. Review and save if approved.",
+      });
+    } catch {
+      setMsg({ type: "error", text: "Network error while generating suggestions." });
+    } finally {
+      setSuggestingAdjustments(false);
+    }
+  };
+
+  const downloadBankVersionPdf = async (version: ResumeBankVersion) => {
+    if (!activeSeekerId) return;
+    if (!version.resume_data && version.resume_url) {
+      window.open(version.resume_url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setDownloadingVersionId(version.id);
+    try {
+      const res = await fetch("/api/am/resume-bank/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: activeSeekerId,
+          version_id: version.id,
+          template_id: bankEditedTemplate || version.template_id || "classic",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMsg({ type: "error", text: data.error || "PDF download failed." });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(version.name || "resume-version").replace(/\s+/g, "-").toLowerCase()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      setMsg({ type: "error", text: "Network error while downloading PDF." });
+    } finally {
+      setDownloadingVersionId(null);
+    }
+  };
+
+  const resetBankEdits = () => {
+    if (!selectedBankVersion) return;
+    setBankEditMode(false);
+    setBankEditedName(selectedBankVersion.name);
+    setBankEditedTemplate(
+      (selectedBankVersion.template_id || activeSeekerProfile?.resume_template_id || "classic") as ResumeTemplateId
+    );
+    setBankEditedData(selectedBankVersion.resume_data ?? null);
+    setBankEditedText(selectedBankVersion.resume_text ?? "");
+    setBankSuggestionSummary(null);
   };
 
   const approveAlert = async (alertId: string) => {
@@ -1446,7 +1664,11 @@ function ResumesTab({
       if (data.version) {
         setBankVersions((prev) => [data.version as ResumeBankVersion, ...prev]);
       }
-      setMsg({ type: "success", text: "Hardened resume version approved and added to bank." });
+      if (data.warning) {
+        setMsg({ type: "error", text: data.warning });
+      } else {
+        setMsg({ type: "success", text: "Hardened resume version approved and added to bank." });
+      }
     } catch {
       setMsg({ type: "error", text: "Network error while approving hardening alert." });
     } finally {
@@ -1496,12 +1718,186 @@ function ResumesTab({
           </div>
           <button
             onClick={optimizeBaseResume}
-            disabled={optimizingBase || !selectedSeekerIdForBase}
+            disabled={optimizingBase || !activeSeekerId}
             className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
           >
             {optimizingBase ? "Optimizing..." : "Optimize Base Resume"}
           </button>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Base Resume Manager</h3>
+            <p className="text-xs text-gray-600 mt-1">
+              View, edit, suggest adjustments, download, and set the primary reusable resume for the selected seeker.
+            </p>
+          </div>
+          {activeSeekerProfile && (
+            <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+              Seeker: {activeSeekerProfile.full_name || activeSeekerProfile.email}
+            </span>
+          )}
+        </div>
+
+        {!activeSeekerId ? (
+          <p className="text-sm text-gray-500">
+            Choose a single seeker in the top-right selector to manage base resumes.
+          </p>
+        ) : bankVersions.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No reusable resume versions yet for this seeker. Click "Optimize Base Resume" to create one.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-[320px,1fr] gap-4">
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {bankVersions.map((version) => (
+                <button
+                  key={version.id}
+                  onClick={() => setSelectedBankVersionId(version.id)}
+                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                    selectedBankVersionId === version.id
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-gray-900">
+                    {version.name}
+                    {version.is_default && (
+                      <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
+                        Primary
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {version.source}
+                    {version.title_focus ? ` | ${version.title_focus}` : ""}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {!selectedBankVersion ? (
+              <div className="text-sm text-gray-500">
+                Select a resume version to manage it.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr,220px] gap-3">
+                  <input
+                    value={bankEditedName}
+                    onChange={(e) => setBankEditedName(e.target.value)}
+                    placeholder="Version name"
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                  <select
+                    value={bankEditedTemplate}
+                    onChange={(e) => setBankEditedTemplate(e.target.value as ResumeTemplateId)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                  >
+                    {RESUME_TEMPLATES.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setDefaultVersion(selectedBankVersion.id)}
+                    disabled={processingVersionId === selectedBankVersion.id || selectedBankVersion.is_default}
+                    className="px-3 py-2 bg-gray-100 text-gray-800 text-xs font-medium rounded hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    {selectedBankVersion.is_default
+                      ? "Primary Resume"
+                      : processingVersionId === selectedBankVersion.id
+                      ? "Saving..."
+                      : "Set As Primary"}
+                  </button>
+                  <button
+                    onClick={() => downloadBankVersionPdf(selectedBankVersion)}
+                    disabled={downloadingVersionId === selectedBankVersion.id}
+                    className="px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {downloadingVersionId === selectedBankVersion.id ? "Downloading..." : "Download PDF"}
+                  </button>
+                  <button
+                    onClick={() => setBankEditMode((prev) => !prev)}
+                    className="px-3 py-2 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100"
+                  >
+                    {bankEditMode ? "Stop Editing" : "Edit Version"}
+                  </button>
+                  {bankEditMode && (
+                    <>
+                      <button
+                        onClick={saveBankVersionEdits}
+                        disabled={savingBankEdits}
+                        className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {savingBankEdits ? "Saving..." : "Save Changes"}
+                      </button>
+                      <button
+                        onClick={resetBankEdits}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200"
+                      >
+                        Reset
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  <label className="text-xs font-medium text-gray-600">
+                    Suggest Adjustment Guidance
+                  </label>
+                  <textarea
+                    value={suggestionPrompt}
+                    onChange={(e) => setSuggestionPrompt(e.target.value)}
+                    placeholder="Example: strengthen achievements for cybersecurity roles, prioritize SOC metrics, and shorten summary."
+                    className="w-full h-20 px-3 py-2 border border-gray-300 rounded text-sm resize-y"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={suggestAdjustmentsForVersion}
+                      disabled={suggestingAdjustments}
+                      className="px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {suggestingAdjustments ? "Generating..." : "Suggest Adjustments"}
+                    </button>
+                    <span className="text-xs text-gray-500">
+                      Suggestions are not saved until you click "Save Changes".
+                    </span>
+                  </div>
+                </div>
+
+                {bankSuggestionSummary && (
+                  <div className="bg-indigo-50 rounded-lg p-3">
+                    <h4 className="text-xs font-semibold text-indigo-800 mb-1">Suggestion Summary</h4>
+                    <p className="text-xs text-indigo-700 whitespace-pre-wrap">{bankSuggestionSummary}</p>
+                  </div>
+                )}
+
+                {bankEditedData ? (
+                  <ResumePreview
+                    data={bankEditedData}
+                    templateId={bankEditedTemplate}
+                    editMode={bankEditMode}
+                    onDataChange={setBankEditedData}
+                  />
+                ) : (
+                  <textarea
+                    value={bankEditedText}
+                    onChange={(e) => setBankEditedText(e.target.value)}
+                    className="w-full h-64 px-3 py-2 border border-gray-300 rounded text-sm font-sans resize-y"
+                    readOnly={!bankEditMode}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-6 min-h-[500px]">
@@ -1690,7 +2086,7 @@ function ResumesTab({
                           )}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Source: {version.source} {version.title_focus ? `• Focus: ${version.title_focus}` : ""}
+                          Source: {version.source} {version.title_focus ? `| Focus: ${version.title_focus}` : ""}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1731,7 +2127,7 @@ function ResumesTab({
                         )}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {version.source} {version.title_focus ? `• ${version.title_focus}` : ""}
+                        {version.source} {version.title_focus ? `| ${version.title_focus}` : ""}
                       </p>
                     </div>
                     {!version.is_default && (
