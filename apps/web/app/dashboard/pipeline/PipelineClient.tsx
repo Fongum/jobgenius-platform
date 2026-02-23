@@ -1058,7 +1058,9 @@ function ResumesTab({
   );
   const selectedSeekerIdForBase =
     selectedItem?.job_seeker_id ||
-    (selectedSeeker !== "all" ? selectedSeeker : null);
+    (selectedSeeker !== "all" && seekerMap.has(selectedSeeker)
+      ? selectedSeeker
+      : null);
   const selectedSeekerProfileForBase = selectedSeekerIdForBase
     ? seekerMap.get(selectedSeekerIdForBase)
     : null;

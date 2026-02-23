@@ -17,11 +17,65 @@ type ResumeVersionRow = {
   resume_data: StructuredResume | null;
 };
 
+type SeekerBaseRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  skills: string[] | null;
+  work_history: unknown;
+  education: unknown;
+  bio: string | null;
+  resume_template_id: string | null;
+  target_titles: string[] | null;
+  seniority: string | null;
+  preferred_industries: string[] | null;
+};
+
 function isMissingResumeBankTable(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const row = error as { code?: string; message?: string; details?: string };
   const text = `${row.message ?? ""} ${row.details ?? ""}`.toLowerCase();
   return row.code === "42P01" || text.includes("resume_bank_versions");
+}
+
+const SEEKER_SELECT_FIELDS =
+  "id, full_name, email, phone, linkedin_url, address_city, address_state, skills, work_history, education, bio, resume_template_id, target_titles, seniority, preferred_industries";
+
+async function resolveJobSeeker(identifier: string): Promise<SeekerBaseRow | null> {
+  const trimmed = identifier.trim();
+  if (!trimmed) return null;
+
+  const { data: byId } = await supabaseAdmin
+    .from("job_seekers")
+    .select(SEEKER_SELECT_FIELDS)
+    .eq("id", trimmed)
+    .maybeSingle();
+  if (byId?.id) return byId as SeekerBaseRow;
+
+  if (trimmed.includes("@")) {
+    const { data: byEmail } = await supabaseAdmin
+      .from("job_seekers")
+      .select(SEEKER_SELECT_FIELDS)
+      .eq("email", trimmed)
+      .maybeSingle();
+    if (byEmail?.id) return byEmail as SeekerBaseRow;
+  }
+
+  const { data: byName } = await supabaseAdmin
+    .from("job_seekers")
+    .select(SEEKER_SELECT_FIELDS)
+    .eq("full_name", trimmed)
+    .limit(1);
+
+  if (Array.isArray(byName) && byName.length > 0) {
+    return byName[0] as SeekerBaseRow;
+  }
+
+  return null;
 }
 
 async function uploadBasePdf(params: {
@@ -76,30 +130,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const jobSeekerId = String(body.job_seeker_id ?? "").trim();
+  const jobSeekerInput = String(body.job_seeker_id ?? "").trim();
   const selectedVersionId = String(body.resume_version_id ?? "").trim() || null;
   const forcedTemplateId = String(body.template_id ?? "").trim() || null;
 
-  if (!jobSeekerId) {
+  if (!jobSeekerInput) {
     return NextResponse.json({ error: "job_seeker_id is required." }, { status: 400 });
   }
 
-  if (!(await hasJobSeekerAccess(auth.user.id, jobSeekerId))) {
-    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  const seeker = await resolveJobSeeker(jobSeekerInput);
+  if (!seeker?.id) {
+    return NextResponse.json({ error: "Job seeker not found." }, { status: 404 });
   }
+  const jobSeekerId = seeker.id;
 
   const [
-    { data: seeker },
     { data: explicitVersion, error: explicitVersionError },
     { data: defaultVersion, error: defaultVersionError },
   ] = await Promise.all([
-    supabaseAdmin
-      .from("job_seekers")
-      .select(
-        "full_name, email, phone, linkedin_url, address_city, address_state, skills, work_history, education, bio, resume_template_id, target_titles, seniority, preferred_industries"
-      )
-      .eq("id", jobSeekerId)
-      .maybeSingle(),
     selectedVersionId
       ? supabaseAdmin
           .from("resume_bank_versions")
@@ -118,8 +166,8 @@ export async function POST(request: Request) {
       .maybeSingle(),
   ]);
 
-  if (!seeker?.email) {
-    return NextResponse.json({ error: "Job seeker not found." }, { status: 404 });
+  if (!(await hasJobSeekerAccess(auth.user.id, jobSeekerId))) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
   if (selectedVersionId) {
@@ -144,6 +192,11 @@ export async function POST(request: Request) {
   }
 
   const sourceVersion = (explicitVersion ?? defaultVersion ?? null) as ResumeVersionRow | null;
+  const fallbackEmail =
+    sourceVersion?.resume_data?.contact?.email?.trim() ||
+    sourceVersion?.resume_text?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ||
+    "candidate@jobgenius.local";
+  const seekerEmail = seeker.email?.trim() || fallbackEmail;
 
   const templateId = (
     forcedTemplateId ||
@@ -156,7 +209,7 @@ export async function POST(request: Request) {
     sourceVersion?.resume_data ??
     buildStructuredResumeFromSeeker({
       full_name: seeker.full_name ?? null,
-      email: seeker.email,
+      email: seekerEmail,
       phone: seeker.phone ?? null,
       linkedin_url: seeker.linkedin_url ?? null,
       address_city: seeker.address_city ?? null,
