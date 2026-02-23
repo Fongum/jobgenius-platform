@@ -30,6 +30,9 @@ interface RegistrationFlexRequest {
   requested_installment_count: number | null;
   requested_window_days: number | null;
   requested_note: string;
+  requested_schedule:
+    | { installment_number: number; amount: number; proposed_date: string }[]
+    | null;
   approved_max_installments: number | null;
   approved_window_days: number | null;
   admin_note: string | null;
@@ -200,6 +203,20 @@ export default function BillingClient({
           {flexRequest.admin_note && (
             <p className="mt-1">Admin note: {flexRequest.admin_note}</p>
           )}
+          {Array.isArray(flexRequest.requested_schedule) &&
+            flexRequest.requested_schedule.length > 0 && (
+              <div className="mt-2 rounded-md border border-current/20 bg-white/60 p-2">
+                <p className="text-xs font-semibold">Requested payment schedule</p>
+                <div className="mt-1 space-y-1 text-xs">
+                  {flexRequest.requested_schedule.map((inst, index) => (
+                    <p key={`${flexRequest.id}-schedule-${index}`}>
+                      #{inst.installment_number || index + 1}: $
+                      {Number(inst.amount).toFixed(2)} on {inst.proposed_date}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
       )}
 

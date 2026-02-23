@@ -67,6 +67,9 @@ interface RegistrationFlexRequest {
   requested_installment_count: number | null;
   requested_window_days: number | null;
   requested_note: string;
+  requested_schedule:
+    | { installment_number: number; amount: number; proposed_date: string }[]
+    | null;
   approved_max_installments: number | null;
   approved_window_days: number | null;
   admin_note: string | null;
@@ -166,8 +169,14 @@ export default function BillingAdminClient({
     if (existing) {
       return existing;
     }
+    const requestedScheduleCount = Array.isArray(req.requested_schedule)
+      ? req.requested_schedule.length
+      : 0;
+    const requestedCount =
+      req.requested_installment_count ??
+      (requestedScheduleCount > 0 ? requestedScheduleCount : 4);
     return {
-      maxInstallments: String(req.requested_installment_count ?? 4),
+      maxInstallments: String(requestedCount),
       windowDays: String(req.requested_window_days ?? 60),
       adminNote: "",
     };
@@ -285,6 +294,13 @@ export default function BillingAdminClient({
           <div className="space-y-3">
             {flexRequests.map((req) => {
               const draft = getFlexDraft(req);
+              const requestedSchedule = Array.isArray(req.requested_schedule)
+                ? req.requested_schedule
+                : [];
+              const requestedScheduleTotal = requestedSchedule.reduce(
+                (sum, row) => sum + (Number(row.amount) || 0),
+                0
+              );
               return (
                 <div
                   key={req.id}
@@ -306,6 +322,28 @@ export default function BillingAdminClient({
                       <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
                         {req.requested_note}
                       </p>
+                      {requestedSchedule.length > 0 && (
+                        <div className="mt-2 rounded-md border border-gray-200 bg-white p-2">
+                          <p className="text-xs font-semibold text-gray-700">
+                            Proposed schedule
+                          </p>
+                          <div className="mt-1 space-y-1">
+                            {requestedSchedule.map((row, index) => (
+                              <p
+                                key={`${req.id}-schedule-${index}`}
+                                className="text-xs text-gray-600"
+                              >
+                                #{row.installment_number || index + 1}: $
+                                {Number(row.amount).toFixed(2)} on{" "}
+                                {row.proposed_date}
+                              </p>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-1">
+                            Total proposed: ${requestedScheduleTotal.toFixed(2)}
+                          </p>
+                        </div>
+                      )}
                       {req.admin_note && (
                         <p className="text-xs text-gray-600 mt-1">
                           Admin note: {req.admin_note}

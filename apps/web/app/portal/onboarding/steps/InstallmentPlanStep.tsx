@@ -7,12 +7,19 @@ interface Installment {
   proposedDate: string;
 }
 
+interface FlexScheduleItem {
+  installment_number: number;
+  amount: number;
+  proposed_date: string;
+}
+
 interface RegistrationFlexRequest {
   id: string;
   status: "pending" | "approved" | "rejected";
   requested_installment_count: number | null;
   requested_window_days: number | null;
   requested_note: string;
+  requested_schedule?: FlexScheduleItem[] | null;
   approved_max_installments: number | null;
   approved_window_days: number | null;
   admin_note: string | null;
@@ -50,6 +57,47 @@ function formatCurrency(val: number) {
   return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+function parseInputDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function buildInstallmentDraft(
+  totalFee: number,
+  count: number,
+  paymentWindowDays: number,
+  today: Date
+): Installment[] {
+  const safeCount = Math.max(1, count);
+  const base = Math.floor(totalFee / safeCount);
+  const remainder = totalFee - base * safeCount;
+  const intervalDays =
+    safeCount <= 1
+      ? 0
+      : Math.max(1, Math.floor(paymentWindowDays / (safeCount - 1)));
+
+  return Array.from({ length: safeCount }, (_, i) => {
+    const dueDate = plusDays(today, intervalDays * i);
+    return {
+      amount: i === safeCount - 1 ? String(base + remainder) : String(base),
+      proposedDate: formatDateInput(dueDate),
+    };
+  });
+}
+
 export default function InstallmentPlanStep({
   planType,
   onContinue,
@@ -77,6 +125,9 @@ export default function InstallmentPlanStep({
 
   const [flexRequestedCount, setFlexRequestedCount] = useState(4);
   const [flexRequestedWindowDays, setFlexRequestedWindowDays] = useState(60);
+  const [flexRequestedInstallments, setFlexRequestedInstallments] = useState<
+    Installment[]
+  >(() => buildInstallmentDraft(totalFee, 4, 60, today));
   const [flexRequestNote, setFlexRequestNote] = useState("");
   const [flexRequestSaving, setFlexRequestSaving] = useState(false);
   const [flexRequestError, setFlexRequestError] = useState<string | null>(null);
@@ -163,21 +214,14 @@ export default function InstallmentPlanStep({
   }, [count, maxInstallments]);
 
   useEffect(() => {
-    const base = Math.floor(totalFee / count);
-    const remainder = totalFee - base * count;
-    const intervalDays =
-      count <= 1 ? 0 : Math.max(1, Math.floor(paymentWindowDays / (count - 1)));
-
-    const nextInstallments: Installment[] = Array.from({ length: count }, (_, i) => {
-      const dueDate = plusDays(today, intervalDays * i);
-      return {
-        amount: i === count - 1 ? String(base + remainder) : String(base),
-        proposedDate: formatDateInput(dueDate),
-      };
-    });
-
-    setInstallments(nextInstallments);
+    setInstallments(buildInstallmentDraft(totalFee, count, paymentWindowDays, today));
   }, [count, paymentWindowDays, today, totalFee]);
+
+  useEffect(() => {
+    setFlexRequestedInstallments(
+      buildInstallmentDraft(totalFee, flexRequestedCount, flexRequestedWindowDays, today)
+    );
+  }, [flexRequestedCount, flexRequestedWindowDays, today, totalFee]);
 
   const updateInstallment = (
     index: number,
@@ -185,6 +229,16 @@ export default function InstallmentPlanStep({
     value: string
   ) => {
     setInstallments((prev) =>
+      prev.map((inst, i) => (i === index ? { ...inst, [field]: value } : inst))
+    );
+  };
+
+  const updateFlexRequestedInstallment = (
+    index: number,
+    field: keyof Installment,
+    value: string
+  ) => {
+    setFlexRequestedInstallments((prev) =>
       prev.map((inst, i) => (i === index ? { ...inst, [field]: value } : inst))
     );
   };
@@ -197,7 +251,8 @@ export default function InstallmentPlanStep({
 
   const allDatesValid = installments.every((inst) => {
     if (!inst.proposedDate) return false;
-    const d = new Date(inst.proposedDate);
+    const d = parseInputDate(inst.proposedDate);
+    if (!d) return false;
     return d >= today && d <= maxDate;
   });
 
@@ -205,6 +260,25 @@ export default function InstallmentPlanStep({
     totalMatch &&
     allDatesValid &&
     installments.every((inst) => inst.amount && parseFloat(inst.amount) > 0);
+
+  const flexMaxDate = useMemo(
+    () => plusDays(today, flexRequestedWindowDays),
+    [today, flexRequestedWindowDays]
+  );
+  const flexTotalEntered = flexRequestedInstallments.reduce(
+    (sum, inst) => sum + (parseFloat(inst.amount) || 0),
+    0
+  );
+  const flexTotalMatch = Math.abs(flexTotalEntered - totalFee) < 0.01;
+  const flexAllDatesValid = flexRequestedInstallments.every((inst) => {
+    if (!inst.proposedDate) return false;
+    const d = parseInputDate(inst.proposedDate);
+    if (!d) return false;
+    return d >= today && d <= flexMaxDate;
+  });
+  const flexAllAmountsValid = flexRequestedInstallments.every(
+    (inst) => inst.amount && parseFloat(inst.amount) > 0
+  );
 
   const handleConfirm = async () => {
     if (!canSubmit) return;
@@ -244,6 +318,24 @@ export default function InstallmentPlanStep({
       setFlexRequestError("Please include at least 15 characters for your reason.");
       return;
     }
+    if (!flexAllAmountsValid) {
+      setFlexRequestError(
+        "Each requested installment must include a valid amount greater than 0."
+      );
+      return;
+    }
+    if (!flexAllDatesValid) {
+      setFlexRequestError(
+        `Requested payment dates must be within ${flexRequestedWindowDays} days from today.`
+      );
+      return;
+    }
+    if (!flexTotalMatch) {
+      setFlexRequestError(
+        `Requested installment amounts must add up to ${formatCurrency(totalFee)}.`
+      );
+      return;
+    }
 
     setFlexRequestSaving(true);
     setFlexRequestError(null);
@@ -256,6 +348,10 @@ export default function InstallmentPlanStep({
           requested_installment_count: flexRequestedCount,
           requested_window_days: flexRequestedWindowDays,
           requested_note: note,
+          requested_schedule: flexRequestedInstallments.map((inst) => ({
+            amount: parseFloat(inst.amount),
+            proposed_date: inst.proposedDate,
+          })),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -407,6 +503,97 @@ export default function InstallmentPlanStep({
               </div>
 
               <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-700">
+                  Proposed payment dates and amounts
+                </p>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Keep total at {formatCurrency(totalFee)} and set dates no later than{" "}
+                  {formatDateInput(flexMaxDate)}.
+                </p>
+                <div className="mt-2 space-y-2">
+                  {flexRequestedInstallments.map((inst, index) => {
+                    const dateObj = inst.proposedDate
+                      ? parseInputDate(inst.proposedDate)
+                      : null;
+                    const dateInvalid = dateObj
+                      ? dateObj < today || dateObj > flexMaxDate
+                      : true;
+
+                    return (
+                      <div
+                        key={`flex-inst-${index}`}
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                      >
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                            Installment {index + 1} amount
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="0.01"
+                            value={inst.amount}
+                            onChange={(event) =>
+                              updateFlexRequestedInstallment(
+                                index,
+                                "amount",
+                                event.target.value
+                              )
+                            }
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                            Installment {index + 1} date
+                          </label>
+                          <input
+                            type="date"
+                            value={inst.proposedDate}
+                            min={formatDateInput(today)}
+                            max={formatDateInput(flexMaxDate)}
+                            onChange={(event) =>
+                              updateFlexRequestedInstallment(
+                                index,
+                                "proposedDate",
+                                event.target.value
+                              )
+                            }
+                            className={`w-full border rounded-lg px-3 py-2 text-sm ${
+                              dateInvalid
+                                ? "border-red-400 bg-red-50 text-gray-900"
+                                : "border-gray-300 bg-white text-gray-900"
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div
+                  className={`mt-2 rounded-lg border px-3 py-2 text-xs flex items-center justify-between ${
+                    flexTotalMatch
+                      ? "border-green-200 bg-green-50 text-green-700"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
+                  <span>
+                    Total proposed:{" "}
+                    <strong>{formatCurrency(flexTotalEntered)}</strong>
+                  </span>
+                  {flexTotalMatch ? (
+                    <span>Matches registration fee</span>
+                  ) : (
+                    <span>
+                      Must equal {formatCurrency(totalFee)} (diff{" "}
+                      {formatCurrency(Math.abs(flexTotalEntered - totalFee))})
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3">
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Why do you need this exception?
                 </label>
@@ -458,7 +645,9 @@ export default function InstallmentPlanStep({
 
       <div className="space-y-3 mb-4">
         {installments.map((inst, index) => {
-          const dateObj = inst.proposedDate ? new Date(inst.proposedDate) : null;
+          const dateObj = inst.proposedDate
+            ? parseInputDate(inst.proposedDate)
+            : null;
           const dateInvalid = dateObj ? dateObj < today || dateObj > maxDate : true;
 
           return (
