@@ -7,7 +7,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const [requestsRes, screenshotsRes, contractsRes, offersRes, escalationsRes] =
+  const [
+    requestsRes,
+    screenshotsRes,
+    contractsRes,
+    offersRes,
+    escalationsRes,
+    flexRequestsRes,
+  ] =
     await Promise.all([
       supabaseAdmin
         .from("payment_requests")
@@ -36,6 +43,11 @@ export async function GET(request: Request) {
         .is("decision", null)
         .order("created_at", { ascending: false })
         .limit(100),
+      supabaseAdmin
+        .from("registration_flex_requests")
+        .select("*, job_seekers(full_name, email)")
+        .order("created_at", { ascending: false })
+        .limit(100),
     ]);
 
   return NextResponse.json({
@@ -44,5 +56,6 @@ export async function GET(request: Request) {
     contracts: contractsRes.data ?? [],
     offers: offersRes.data ?? [],
     escalations: escalationsRes.data ?? [],
+    flexRequests: flexRequestsRes.data ?? [],
   });
 }

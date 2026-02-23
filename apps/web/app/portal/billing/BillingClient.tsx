@@ -24,6 +24,19 @@ interface RegistrationPayment {
   work_started: boolean;
 }
 
+interface RegistrationFlexRequest {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  requested_installment_count: number | null;
+  requested_window_days: number | null;
+  requested_note: string;
+  approved_max_installments: number | null;
+  approved_window_days: number | null;
+  admin_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
 interface Installment {
   id: string;
   installment_number: number;
@@ -61,6 +74,7 @@ interface BillingClientProps {
   installments: Installment[];
   offers: JobOffer[];
   paymentRequests: PaymentRequest[];
+  flexRequest: RegistrationFlexRequest | null;
   seekerId: string;
   userEmail: string;
 }
@@ -95,6 +109,7 @@ export default function BillingClient({
   installments,
   offers,
   paymentRequests,
+  flexRequest,
   seekerId,
 }: BillingClientProps) {
   const router = useRouter();
@@ -157,6 +172,34 @@ export default function BillingClient({
       {registrationPayment && !registrationPayment.work_started && (
         <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 text-sm text-amber-800">
           <strong>Services Pending:</strong> Your Account Manager will begin working on your job search once your first payment is confirmed.
+        </div>
+      )}
+
+      {flexRequest && (
+        <div
+          className={`rounded-xl p-4 text-sm border ${
+            flexRequest.status === "approved"
+              ? "bg-green-50 border-green-300 text-green-800"
+              : flexRequest.status === "rejected"
+              ? "bg-red-50 border-red-300 text-red-800"
+              : "bg-amber-50 border-amber-300 text-amber-800"
+          }`}
+        >
+          {flexRequest.status === "approved" ? (
+            <p>
+              Flexible registration terms approved: up to{" "}
+              <strong>{flexRequest.approved_max_installments ?? "-"}</strong>{" "}
+              installments within{" "}
+              <strong>{flexRequest.approved_window_days ?? "-"}</strong> days.
+            </p>
+          ) : flexRequest.status === "rejected" ? (
+            <p>Your flexible registration request was not approved.</p>
+          ) : (
+            <p>Your flexible registration request is pending admin review.</p>
+          )}
+          {flexRequest.admin_note && (
+            <p className="mt-1">Admin note: {flexRequest.admin_note}</p>
+          )}
         </div>
       )}
 

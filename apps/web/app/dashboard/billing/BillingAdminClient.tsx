@@ -61,12 +61,28 @@ interface Escalation {
   job_seekers: { id: string; full_name: string; email: string } | null;
 }
 
+interface RegistrationFlexRequest {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  requested_installment_count: number | null;
+  requested_window_days: number | null;
+  requested_note: string;
+  approved_max_installments: number | null;
+  approved_window_days: number | null;
+  admin_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  job_seeker_id: string;
+  job_seekers: { id: string; full_name: string; email: string } | null;
+}
+
 interface BillingAdminClientProps {
   paymentRequests: PaymentRequest[];
   screenshots: Screenshot[];
   contracts: Contract[];
   offers: JobOffer[];
   escalations: Escalation[];
+  flexRequests: RegistrationFlexRequest[];
 }
 
 const TABS = ["Requests", "Screenshots", "Contracts", "Offers", "Escalations"] as const;
@@ -80,6 +96,11 @@ const STATUS_COLORS: Record<string, string> = {
   reported: "bg-gray-100 text-gray-700",
   confirmed: "bg-blue-100 text-blue-700",
   accepted: "bg-green-100 text-green-800",
+  approved: "bg-green-100 text-green-800",
+  rejected: "bg-red-100 text-red-800",
+  signed: "bg-green-100 text-green-800",
+  cleared: "bg-green-100 text-green-800",
+  terminated: "bg-red-100 text-red-800",
   overdue: "bg-red-100 text-red-800",
   legal: "bg-red-200 text-red-900",
 };
@@ -99,11 +120,15 @@ export default function BillingAdminClient({
   contracts,
   offers,
   escalations,
+  flexRequests,
 }: BillingAdminClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("Requests");
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [flexDrafts, setFlexDrafts] = useState<
+    Record<string, { maxInstallments: string; windowDays: string; adminNote: string }>
+  >({});
 
   const refresh = () => router.refresh();
 
@@ -134,6 +159,72 @@ export default function BillingAdminClient({
   const pendingRequests = paymentRequests.filter((r) => r.status === "pending");
   const pendingScreenshots = screenshots.filter((s) => !s.acknowledged_at);
   const openEscalations = escalations.filter((e) => !e.decision);
+  const pendingFlexRequests = flexRequests.filter((r) => r.status === "pending");
+
+  const getFlexDraft = (req: RegistrationFlexRequest) => {
+    const existing = flexDrafts[req.id];
+    if (existing) {
+      return existing;
+    }
+    return {
+      maxInstallments: String(req.requested_installment_count ?? 4),
+      windowDays: String(req.requested_window_days ?? 60),
+      adminNote: "",
+    };
+  };
+
+  const setFlexDraft = (
+    requestId: string,
+    next: Partial<{ maxInstallments: string; windowDays: string; adminNote: string }>
+  ) => {
+    setFlexDrafts((prev) => {
+      const current = prev[requestId] ?? {
+        maxInstallments: "4",
+        windowDays: "60",
+        adminNote: "",
+      };
+      return {
+        ...prev,
+        [requestId]: { ...current, ...next },
+      };
+    });
+  };
+
+  const reviewFlexRequest = async (
+    requestId: string,
+    decision: "approved" | "rejected"
+  ) => {
+    const draft = flexDrafts[requestId] ?? {
+      maxInstallments: "4",
+      windowDays: "60",
+      adminNote: "",
+    };
+    const maxInstallments = Number(draft.maxInstallments);
+    const windowDays = Number(draft.windowDays);
+
+    if (
+      decision === "approved" &&
+      (!Number.isFinite(maxInstallments) ||
+        maxInstallments < 1 ||
+        maxInstallments > 12 ||
+        !Number.isFinite(windowDays) ||
+        windowDays < 7 ||
+        windowDays > 365)
+    ) {
+      setError(
+        "Approved terms must be within valid limits (installments 1-12, days 7-365)."
+      );
+      return;
+    }
+
+    await callApi("/api/admin/billing/registration-flex/review", {
+      requestId,
+      decision,
+      approvedMaxInstallments: decision === "approved" ? maxInstallments : null,
+      approvedWindowDays: decision === "approved" ? windowDays : null,
+      adminNote: draft.adminNote.trim() || null,
+    });
+  };
 
   return (
     <div>
@@ -148,7 +239,7 @@ export default function BillingAdminClient({
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
           <p className="text-2xl font-bold text-yellow-600">{pendingRequests.length}</p>
           <p className="text-xs text-gray-500">Pending Requests</p>
@@ -167,12 +258,142 @@ export default function BillingAdminClient({
           <p className="text-2xl font-bold text-red-600">{openEscalations.length}</p>
           <p className="text-xs text-gray-500">Open Escalations</p>
         </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
+          <p className="text-2xl font-bold text-orange-600">{pendingFlexRequests.length}</p>
+          <p className="text-xs text-gray-500">Flex Reg Requests</p>
+        </div>
       </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
           {error}
           <button onClick={() => setError(null)} className="ml-2 underline text-xs">Dismiss</button>
+        </div>
+      )}
+
+      {flexRequests.length > 0 && (
+        <div className="mb-6 bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-gray-900">
+              Flexible Registration Requests
+            </h2>
+            <span className="text-xs text-gray-500">
+              {pendingFlexRequests.length} pending
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {flexRequests.map((req) => {
+              const draft = getFlexDraft(req);
+              return (
+                <div
+                  key={req.id}
+                  className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900">
+                        {req.job_seekers?.full_name ?? req.job_seeker_id}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {req.job_seekers?.email}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Requested: {req.requested_installment_count ?? "-"} installments
+                        {" | "}
+                        {req.requested_window_days ?? "-"} days
+                      </p>
+                      <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
+                        {req.requested_note}
+                      </p>
+                      {req.admin_note && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Admin note: {req.admin_note}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">
+                        Submitted {new Date(req.created_at).toLocaleString()}
+                        {req.reviewed_at
+                          ? ` | Reviewed ${new Date(req.reviewed_at).toLocaleString()}`
+                          : ""}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 flex flex-col items-end gap-2 min-w-[220px]">
+                      <StatusBadge status={req.status} />
+                      {req.status === "approved" && (
+                        <p className="text-xs text-green-700 text-right">
+                          Approved terms: {req.approved_max_installments ?? "-"} installments
+                          {" | "}
+                          {req.approved_window_days ?? "-"} days
+                        </p>
+                      )}
+
+                      {req.status === "pending" && (
+                        <>
+                          <div className="grid grid-cols-2 gap-2 w-full">
+                            <input
+                              type="number"
+                              min={1}
+                              max={12}
+                              value={draft.maxInstallments}
+                              onChange={(event) =>
+                                setFlexDraft(req.id, {
+                                  maxInstallments: event.target.value,
+                                })
+                              }
+                              className="px-2 py-1 text-xs border rounded bg-white"
+                              placeholder="Installments"
+                            />
+                            <input
+                              type="number"
+                              min={7}
+                              max={365}
+                              value={draft.windowDays}
+                              onChange={(event) =>
+                                setFlexDraft(req.id, {
+                                  windowDays: event.target.value,
+                                })
+                              }
+                              className="px-2 py-1 text-xs border rounded bg-white"
+                              placeholder="Days"
+                            />
+                          </div>
+                          <textarea
+                            rows={2}
+                            value={draft.adminNote}
+                            onChange={(event) =>
+                              setFlexDraft(req.id, {
+                                adminNote: event.target.value,
+                              })
+                            }
+                            className="w-full px-2 py-1 text-xs border rounded bg-white resize-none"
+                            placeholder="Optional admin note..."
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => reviewFlexRequest(req.id, "approved")}
+                              disabled={loading === "/api/admin/billing/registration-flex/review"}
+                              className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => reviewFlexRequest(req.id, "rejected")}
+                              disabled={loading === "/api/admin/billing/registration-flex/review"}
+                              className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

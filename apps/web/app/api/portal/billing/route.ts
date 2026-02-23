@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
   const seekerId = auth.user.id;
 
-  const [contractRes, regPaymentRes, installmentsRes, offersRes] =
+  const [contractRes, regPaymentRes, installmentsRes, offersRes, flexRequestRes] =
     await Promise.all([
       supabaseAdmin
         .from("job_seeker_contracts")
@@ -35,6 +35,13 @@ export async function GET(request: Request) {
         .select("*")
         .eq("job_seeker_id", seekerId)
         .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("registration_flex_requests")
+        .select("*")
+        .eq("job_seeker_id", seekerId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
   // Fetch payment requests linked to this seeker
@@ -50,5 +57,6 @@ export async function GET(request: Request) {
     installments: installmentsRes.data ?? [],
     offers: offersRes.data ?? [],
     paymentRequests: paymentRequests ?? [],
+    flexRequest: flexRequestRes.data ?? null,
   });
 }

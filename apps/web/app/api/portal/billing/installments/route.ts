@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
 
-const PAYMENT_WINDOW_MONTHS = 1;
+const DEFAULT_MAX_INSTALLMENTS = 3;
+const DEFAULT_WINDOW_DAYS = 31;
 
 export async function POST(request: Request) {
   const auth = await requireJobSeeker(request);
@@ -24,25 +25,44 @@ export async function POST(request: Request) {
     installments: { amount: number; proposedDate: string }[];
   };
 
-  if (!count || count < 1 || count > 3) {
-    return NextResponse.json({ error: "Installment count must be 1, 2, or 3." }, { status: 400 });
+  const [{ data: contract }, { data: approvedFlex }] = await Promise.all([
+    supabaseAdmin
+      .from("job_seeker_contracts")
+      .select("id, registration_fee")
+      .eq("job_seeker_id", auth.user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("registration_flex_requests")
+      .select("approved_max_installments, approved_window_days")
+      .eq("job_seeker_id", auth.user.id)
+      .eq("status", "approved")
+      .order("reviewed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (!contract) {
+    return NextResponse.json({ error: "No signed contract found. Please complete the contract step first." }, { status: 400 });
+  }
+
+  const maxInstallments =
+    approvedFlex?.approved_max_installments ?? DEFAULT_MAX_INSTALLMENTS;
+  const paymentWindowDays = approvedFlex?.approved_window_days ?? DEFAULT_WINDOW_DAYS;
+
+  if (!count || count < 1 || count > maxInstallments) {
+    return NextResponse.json(
+      {
+        error: `Installment count must be between 1 and ${maxInstallments}.`,
+      },
+      { status: 400 }
+    );
   }
 
   if (!Array.isArray(installments) || installments.length !== count) {
     return NextResponse.json({ error: "Installments array length must match count." }, { status: 400 });
-  }
-
-  // Get contract to get fee
-  const { data: contract } = await supabaseAdmin
-    .from("job_seeker_contracts")
-    .select("id, registration_fee")
-    .eq("job_seeker_id", auth.user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!contract) {
-    return NextResponse.json({ error: "No signed contract found. Please complete the contract step first." }, { status: 400 });
   }
 
   // Validate total matches fee
@@ -58,13 +78,15 @@ export async function POST(request: Request) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const maxDate = new Date(today);
-  maxDate.setMonth(maxDate.getMonth() + PAYMENT_WINDOW_MONTHS);
+  maxDate.setDate(maxDate.getDate() + paymentWindowDays);
 
   for (const inst of installments) {
     const d = new Date(inst.proposedDate);
     if (d < today || d > maxDate) {
       return NextResponse.json(
-        { error: "All payment dates must be within 1 month of today." },
+        {
+          error: `All payment dates must be within ${paymentWindowDays} days of today.`,
+        },
         { status: 400 }
       );
     }

@@ -10,7 +10,14 @@ export default async function BillingPage() {
 
   const seekerId = user.id;
 
-  const [contractRes, regPaymentRes, installmentsRes, offersRes, requestsRes] =
+  const [
+    contractRes,
+    regPaymentRes,
+    installmentsRes,
+    offersRes,
+    requestsRes,
+    flexRequestRes,
+  ] =
     await Promise.all([
       supabaseAdmin
         .from("job_seeker_contracts")
@@ -41,6 +48,13 @@ export default async function BillingPage() {
         .select("*")
         .eq("job_seeker_id", seekerId)
         .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("registration_flex_requests")
+        .select("*")
+        .eq("job_seeker_id", seekerId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
   return (
@@ -50,6 +64,7 @@ export default async function BillingPage() {
       installments={installmentsRes.data ?? []}
       offers={offersRes.data ?? []}
       paymentRequests={requestsRes.data ?? []}
+      flexRequest={flexRequestRes.data ?? null}
       seekerId={seekerId}
       userEmail={user.email}
     />

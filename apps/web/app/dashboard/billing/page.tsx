@@ -9,7 +9,14 @@ export default async function AdminBillingPage() {
     redirect("/dashboard");
   }
 
-  const [requestsRes, screenshotsRes, contractsRes, offersRes, escalationsRes] =
+  const [
+    requestsRes,
+    screenshotsRes,
+    contractsRes,
+    offersRes,
+    escalationsRes,
+    flexRequestsRes,
+  ] =
     await Promise.all([
       supabaseAdmin
         .from("payment_requests")
@@ -36,6 +43,11 @@ export default async function AdminBillingPage() {
         .select("*, job_seekers(id, full_name, email)")
         .order("created_at", { ascending: false })
         .limit(200),
+      supabaseAdmin
+        .from("registration_flex_requests")
+        .select("*, job_seekers(id, full_name, email)")
+        .order("created_at", { ascending: false })
+        .limit(200),
     ]);
 
   return (
@@ -45,6 +57,7 @@ export default async function AdminBillingPage() {
       contracts={contractsRes.data ?? []}
       offers={offersRes.data ?? []}
       escalations={escalationsRes.data ?? []}
+      flexRequests={flexRequestsRes.data ?? []}
     />
   );
 }
