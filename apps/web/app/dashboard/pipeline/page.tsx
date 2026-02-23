@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+import { isAdminRole } from "@/lib/auth/roles";
 import PipelineClient from "./PipelineClient";
 
 async function loadPipelineSeekers(seekerIds: string[]) {
@@ -37,19 +38,34 @@ export default async function PipelinePage() {
   const user = await getCurrentUser();
   if (!user || user.userType !== "am") return notFound();
 
-  // Fetch assigned seekers
-  const { data: assignments } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("job_seeker_id")
-    .eq("account_manager_id", user.id);
+  const adminAccessAll = isAdminRole(user.role);
 
-  const seekerIds = (assignments || []).map((a) => a.job_seeker_id);
+  let seekerIds: string[] = [];
+  if (adminAccessAll) {
+    const { data: allSeekers } = await supabaseAdmin
+      .from("job_seekers")
+      .select("id");
+
+    seekerIds = (allSeekers || []).map((row) => row.id);
+  } else {
+    // AMs see only their assigned seekers.
+    const { data: assignments } = await supabaseAdmin
+      .from("job_seeker_assignments")
+      .select("job_seeker_id")
+      .eq("account_manager_id", user.id);
+
+    seekerIds = (assignments || []).map((a) => a.job_seeker_id);
+  }
 
   if (seekerIds.length === 0) {
     return (
       <div className="max-w-7xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Job Hub</h1>
-        <p className="text-gray-500">No job seekers assigned. Assign seekers to get started.</p>
+        <p className="text-gray-500">
+          {adminAccessAll
+            ? "No job seekers found."
+            : "No job seekers assigned. Assign seekers to get started."}
+        </p>
       </div>
     );
   }
