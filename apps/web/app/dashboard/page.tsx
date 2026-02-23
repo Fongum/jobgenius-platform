@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+import { isAdminRole } from "@/lib/auth/roles";
 import { RunMatchingButton, TopOppQueueButton } from "./DashboardActions";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) return null;
+  const isAdmin = isAdminRole(user.role);
 
   // Get assigned job seekers
   const { data: assignments } = await supabaseAdmin
@@ -51,11 +53,20 @@ export default async function DashboardPage() {
     job_posts: { id: string; title: string; company: string | null; location: string | null } | null;
     job_seekers: { full_name: string | null } | null;
   };
+  type ResumeHardeningAlertRow = {
+    id: string;
+    job_seeker_id: string;
+    sample_title: string;
+    tailored_count: number;
+    status: string;
+    last_triggered_at: string;
+  };
 
   let weekInterviews: InterviewRow[] = [];
   let attentionItems: AttentionRow[] = [];
   let followUpThreads: { id: string; job_seeker_id: string; next_follow_up_at: string }[] = [];
   let topOpportunities: TopOppRow[] = [];
+  let hardeningAlerts: Array<ResumeHardeningAlertRow & { seeker_name: string | null }> = [];
   let alreadyQueuedSet = new Set<string>();
   let responseRate = 0;
 
@@ -211,6 +222,37 @@ export default async function DashboardPage() {
     }
   }
 
+  const hardeningQuery = supabaseAdmin
+    .from("resume_hardening_alerts")
+    .select("id, job_seeker_id, sample_title, tailored_count, status, last_triggered_at")
+    .eq("status", "pending")
+    .order("last_triggered_at", { ascending: false })
+    .limit(10);
+
+  const { data: rawHardeningAlerts } = isAdmin
+    ? await hardeningQuery
+    : seekerIds.length > 0
+    ? await hardeningQuery.in("job_seeker_id", seekerIds)
+    : { data: [] as ResumeHardeningAlertRow[] };
+
+  const hardeningSeekerIds = Array.from(
+    new Set((rawHardeningAlerts ?? []).map((row) => row.job_seeker_id).filter(Boolean))
+  );
+  const hardeningSeekerMap = new Map<string, string | null>();
+  if (hardeningSeekerIds.length > 0) {
+    const { data: hardeningSeekers } = await supabaseAdmin
+      .from("job_seekers")
+      .select("id, full_name")
+      .in("id", hardeningSeekerIds);
+    for (const row of hardeningSeekers ?? []) {
+      hardeningSeekerMap.set(row.id, row.full_name ?? null);
+    }
+  }
+  hardeningAlerts = (rawHardeningAlerts ?? []).map((row) => ({
+    ...row,
+    seeker_name: hardeningSeekerMap.get(row.job_seeker_id) ?? null,
+  }));
+
   // Build priority list
   const now = new Date();
   const tomorrow = new Date(now);
@@ -250,6 +292,16 @@ export default async function DashboardPage() {
       label: `Attention: ${seeker?.full_name || "Unknown"}`,
       detail: `${job?.company} - ${job?.title}${a.needs_attention_reason ? ` (${a.needs_attention_reason})` : ""}`,
       href: "/dashboard/attention",
+    });
+  });
+
+  // HIGH: Resume hardening approvals
+  hardeningAlerts.forEach((alert) => {
+    priorities.push({
+      level: "HIGH",
+      label: `Resume Hardening: ${alert.seeker_name || "Unknown Seeker"}`,
+      detail: `${alert.sample_title} tailored ${alert.tailored_count} times. Approve a reusable version.`,
+      href: `/dashboard/pipeline?tab=resumes&seeker=${alert.job_seeker_id}`,
     });
   });
 
@@ -312,6 +364,31 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {isAdmin && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-purple-900">Admin access is active for this account.</p>
+            <p className="text-sm text-purple-700">
+              To view and manage every job seeker profile, use <span className="font-medium">Administration &gt; All Job Seekers</span>.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/admin/job-seekers"
+              className="px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              View &amp; Manage All Job Seekers
+            </Link>
+            <Link
+              href="/dashboard/admin"
+              className="px-3 py-2 text-sm font-medium bg-white text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-100 transition-colors"
+            >
+              Open Admin Overview
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Action Cards Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

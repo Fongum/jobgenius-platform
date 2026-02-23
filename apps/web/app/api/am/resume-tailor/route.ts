@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
+import { hasJobSeekerAccess } from "@/lib/am-access";
 import { isOpenAIConfigured } from "@/lib/openai";
 import { tailorResume } from "@/lib/resume-tailor";
 import {
@@ -7,17 +8,8 @@ import {
   buildStructuredResumeFromSeeker,
 } from "@/lib/resume-tailor";
 import { renderResumePdf } from "@/lib/resume-templates";
-import type { ResumeTemplateId } from "@/lib/resume-templates";
-
-async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", amId)
-    .eq("job_seeker_id", seekerId)
-    .maybeSingle();
-  return !!data;
-}
+import type { ResumeTemplateId, StructuredResume } from "@/lib/resume-templates";
+import { maybeUpsertResumeHardeningAlert } from "@/lib/resume-bank-alerts";
 
 export async function POST(request: Request) {
   const auth = await requireAM(request);
@@ -34,6 +26,10 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { job_seeker_id, job_post_id } = body;
+  const resumeVersionId =
+    typeof body.resume_version_id === "string" && body.resume_version_id.trim()
+      ? body.resume_version_id.trim()
+      : null;
 
   if (!job_seeker_id || !job_post_id) {
     return NextResponse.json(
@@ -42,11 +38,12 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  const [{ data: seeker }, { data: jobPost }] = await Promise.all([
+  const [{ data: seeker }, { data: jobPost }, { data: selectedVersion, error: selectedVersionError }] =
+    await Promise.all([
     supabaseAdmin
       .from("job_seekers")
       .select(
@@ -59,9 +56,38 @@ export async function POST(request: Request) {
       .select("id, title, company, description_text, required_skills, preferred_skills")
       .eq("id", job_post_id)
       .single(),
+    resumeVersionId
+      ? supabaseAdmin
+          .from("resume_bank_versions")
+          .select("id, name, template_id, resume_text, resume_data")
+          .eq("id", resumeVersionId)
+          .eq("job_seeker_id", job_seeker_id)
+          .eq("status", "active")
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
-  if (!seeker?.resume_text && !seeker?.email) {
+  if (selectedVersionError) {
+    const missingTable =
+      selectedVersionError.code === "42P01" ||
+      String(selectedVersionError.message ?? "").includes("resume_bank_versions");
+    if (missingTable) {
+      return NextResponse.json(
+        { error: "Resume bank migration is not applied yet. Run migration 054 first." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: "Failed to load selected resume version." }, { status: 500 });
+  }
+
+  if (resumeVersionId && !selectedVersion?.id) {
+    return NextResponse.json({ error: "Selected resume version not found." }, { status: 404 });
+  }
+
+  const sourceResumeText =
+    selectedVersion?.resume_text?.trim() || seeker?.resume_text?.trim() || null;
+
+  if (!sourceResumeText && !selectedVersion?.resume_data && !seeker?.email) {
     return NextResponse.json(
       { error: "Job seeker has no resume text on file." },
       { status: 400 }
@@ -72,23 +98,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Job post not found." }, { status: 404 });
   }
 
-  const templateId = (seeker.resume_template_id || "classic") as ResumeTemplateId;
+  const templateId = (
+    selectedVersion?.template_id ||
+    seeker?.resume_template_id ||
+    "classic"
+  ) as ResumeTemplateId;
 
   try {
     // Try structured tailoring first
-    const baseResume = buildStructuredResumeFromSeeker({
-      full_name: seeker.full_name,
-      email: seeker.email,
-      phone: seeker.phone ?? null,
-      linkedin_url: seeker.linkedin_url ?? null,
-      address_city: seeker.address_city ?? null,
-      address_state: seeker.address_state ?? null,
-      bio: seeker.bio ?? null,
-      skills: seeker.skills ?? null,
-      work_history: seeker.work_history,
-      education: seeker.education,
-      resume_text: seeker.resume_text ?? null,
-    });
+    const baseResume =
+      (selectedVersion?.resume_data as StructuredResume | null) ??
+      buildStructuredResumeFromSeeker({
+        full_name: seeker?.full_name ?? null,
+        email: seeker?.email ?? "",
+        phone: seeker?.phone ?? null,
+        linkedin_url: seeker?.linkedin_url ?? null,
+        address_city: seeker?.address_city ?? null,
+        address_state: seeker?.address_state ?? null,
+        bio: seeker?.bio ?? null,
+        skills: seeker?.skills ?? null,
+        work_history: seeker?.work_history,
+        education: seeker?.education,
+        resume_text: sourceResumeText,
+      });
 
     const structuredResult = await tailorResumeStructured({
       baseResume,
@@ -135,12 +167,13 @@ export async function POST(request: Request) {
         {
           job_seeker_id,
           job_post_id,
-          original_text: seeker.resume_text ?? "",
+          original_text: sourceResumeText ?? "",
           tailored_text: structuredResult.tailoredText,
           tailored_data: structuredResult.tailoredData,
           template_id: templateId,
           changes_summary: structuredResult.changesSummary,
           resume_url: resumeUrl,
+          resume_bank_version_id: selectedVersion?.id ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "job_seeker_id,job_post_id" }
@@ -155,6 +188,13 @@ export async function POST(request: Request) {
       );
     }
 
+    await maybeUpsertResumeHardeningAlert({
+      supabase: supabaseAdmin,
+      jobSeekerId: job_seeker_id,
+      jobTitle: jobPost.title,
+      threshold: 5,
+    });
+
     return NextResponse.json({
       tailored_resume: upserted,
       changes_summary: structuredResult.changesSummary,
@@ -163,7 +203,7 @@ export async function POST(request: Request) {
     // Fall back to plain-text tailoring
     console.error("Structured tailoring failed, falling back to plain text:", structuredErr);
 
-    if (!seeker.resume_text) {
+    if (!sourceResumeText) {
       const message = structuredErr instanceof Error ? structuredErr.message : "Unknown error";
       return NextResponse.json(
         { error: `Resume tailoring failed: ${message}` },
@@ -173,7 +213,7 @@ export async function POST(request: Request) {
 
     try {
       const result = await tailorResume({
-        resumeText: seeker.resume_text,
+        resumeText: sourceResumeText,
         jobTitle: jobPost.title,
         company: jobPost.company,
         jobDescription: jobPost.description_text,
@@ -187,9 +227,10 @@ export async function POST(request: Request) {
           {
             job_seeker_id,
             job_post_id,
-            original_text: seeker.resume_text,
+            original_text: sourceResumeText,
             tailored_text: result.tailoredText,
             changes_summary: result.changesSummary,
+            resume_bank_version_id: selectedVersion?.id ?? null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "job_seeker_id,job_post_id" }
@@ -203,6 +244,13 @@ export async function POST(request: Request) {
           { status: 500 }
         );
       }
+
+      await maybeUpsertResumeHardeningAlert({
+        supabase: supabaseAdmin,
+        jobSeekerId: job_seeker_id,
+        jobTitle: jobPost.title,
+        threshold: 5,
+      });
 
       return NextResponse.json({
         tailored_resume: upserted,

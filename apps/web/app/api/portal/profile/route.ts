@@ -1,6 +1,7 @@
 import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { calculateProfileCompletion } from "@/lib/portal/profile-completion";
+import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 
 export async function GET(request: Request) {
   const auth = await requireJobSeeker(request);
@@ -83,6 +84,7 @@ const ALLOWED_FIELDS = [
   // Resume
   "resume_text",
   "resume_url",
+  "resume_template_id",
   "profile_photo_url",
   // Onboarding
   "onboarding_completed_at",
@@ -134,6 +136,15 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "Invalid years_experience." }, { status: 400 });
     }
     updates.years_experience = val;
+  }
+
+  if (updates.resume_template_id !== undefined && updates.resume_template_id !== null) {
+    const valid = new Set(RESUME_TEMPLATES.map((t) => t.id));
+    const templateId = String(updates.resume_template_id);
+    if (!valid.has(templateId as (typeof RESUME_TEMPLATES)[number]["id"])) {
+      return Response.json({ error: "Invalid resume_template_id." }, { status: 400 });
+    }
+    updates.resume_template_id = templateId;
   }
 
   // Validate array fields

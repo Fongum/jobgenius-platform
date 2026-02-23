@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import ResumePreview from "./ResumePreview";
 import type { StructuredResume, ResumeTemplateId } from "@/lib/resume-templates/types";
@@ -107,6 +107,43 @@ interface TailoredResume {
   resume_url: string | null;
 }
 
+interface ResumeBankVersion {
+  id: string;
+  job_seeker_id: string;
+  name: string;
+  title_focus: string | null;
+  source: string;
+  status: string;
+  is_default: boolean;
+  template_id: ResumeTemplateId | null;
+  resume_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ResumeHardeningAlert {
+  id: string;
+  job_seeker_id: string;
+  normalized_title: string;
+  sample_title: string;
+  tailored_count: number;
+  status: string;
+  last_triggered_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ResumeVersionMatch {
+  id: string;
+  name: string;
+  source: string;
+  is_default: boolean;
+  title_focus: string | null;
+  template_id: ResumeTemplateId | null;
+  resume_url: string | null;
+  match_percent: number;
+}
+
 interface PipelineClientProps {
   seekers: SeekerSummary[];
   matchScores: MatchScore[];
@@ -145,15 +182,24 @@ export default function PipelineClient({
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialTab = (searchParams.get("tab") as TabId) || "discover";
+  const initialSeekerParam = searchParams.get("seeker");
   const [activeTab, setActiveTab] = useState<TabId>(
     TABS.some((t) => t.id === initialTab) ? initialTab : "discover"
   );
-  const [selectedSeeker, setSelectedSeeker] = useState<string>("all");
+  const [selectedSeeker, setSelectedSeeker] = useState<string>(() => {
+    if (!initialSeekerParam) return "all";
+    return seekers.some((s) => s.id === initialSeekerParam) ? initialSeekerParam : "all";
+  });
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const switchTab = (tab: TabId) => {
     setActiveTab(tab);
-    router.replace(`/dashboard/pipeline?tab=${tab}`, { scroll: false });
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    if (selectedSeeker !== "all") {
+      params.set("seeker", selectedSeeker);
+    }
+    router.replace(`/dashboard/pipeline?${params.toString()}`, { scroll: false });
   };
 
   // Build lookup maps
@@ -237,7 +283,16 @@ export default function PipelineClient({
           <h1 className="text-2xl font-bold text-gray-900">Job Hub</h1>
           <select
             value={selectedSeeker}
-            onChange={(e) => setSelectedSeeker(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedSeeker(value);
+              const params = new URLSearchParams();
+              params.set("tab", activeTab);
+              if (value !== "all") {
+                params.set("seeker", value);
+              }
+              router.replace(`/dashboard/pipeline?${params.toString()}`, { scroll: false });
+            }}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
           >
             <option value="all">All Seekers</option>
@@ -956,6 +1011,13 @@ function ResumesTab({
   tailoredMap: Map<string, TailoredResume>;
   setMsg: (m: { type: "success" | "error"; text: string } | null) => void;
 }) {
+  const normalizeTitle = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tailoring, setTailoring] = useState(false);
   const [editedText, setEditedText] = useState("");
@@ -964,6 +1026,15 @@ function ResumesTab({
   const [editedData, setEditedData] = useState<StructuredResume | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplateId>("classic");
   const [saving, setSaving] = useState(false);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankVersions, setBankVersions] = useState<ResumeBankVersion[]>([]);
+  const [hardeningAlerts, setHardeningAlerts] = useState<ResumeHardeningAlert[]>([]);
+  const [scoringVersions, setScoringVersions] = useState(false);
+  const [versionMatches, setVersionMatches] = useState<ResumeVersionMatch[]>([]);
+  const [applyingVersionId, setApplyingVersionId] = useState<string | null>(null);
+  const [savingBankVersion, setSavingBankVersion] = useState(false);
+  const [processingAlertId, setProcessingAlertId] = useState<string | null>(null);
+  const [processingVersionId, setProcessingVersionId] = useState<string | null>(null);
 
   const queuedJobs = queueItems.filter((q) => q.job_posts);
   const selectedItem = queuedJobs.find((q) => q.id === selectedId);
@@ -975,11 +1046,58 @@ function ResumesTab({
 
   // Active data for preview: edited > existing tailored
   const activeData = editedData ?? existingTailored?.tailored_data ?? null;
+  const selectedNormalizedTitle = selectedItem?.job_posts?.title
+    ? normalizeTitle(selectedItem.job_posts.title)
+    : "";
+  const relevantAlerts = hardeningAlerts.filter(
+    (alert) => alert.normalized_title === selectedNormalizedTitle
+  );
+
+  useEffect(() => {
+    if (!selectedItem) {
+      setBankVersions([]);
+      setHardeningAlerts([]);
+      setVersionMatches([]);
+      return;
+    }
+
+    let alive = true;
+    setBankLoading(true);
+
+    fetch(`/api/am/resume-bank?job_seeker_id=${selectedItem.job_seeker_id}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!alive) return;
+        if (!res.ok) {
+          setBankVersions([]);
+          setHardeningAlerts([]);
+          if (data?.error) {
+            setMsg({ type: "error", text: data.error });
+          }
+          return;
+        }
+        setBankVersions((data.versions ?? []) as ResumeBankVersion[]);
+        setHardeningAlerts((data.alerts ?? []) as ResumeHardeningAlert[]);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setBankVersions([]);
+        setHardeningAlerts([]);
+      })
+      .finally(() => {
+        if (alive) setBankLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [selectedItem?.job_seeker_id, setMsg]);
 
   const selectItem = (id: string) => {
     setSelectedId(id);
     setEditMode(false);
     setEditedData(null);
+    setVersionMatches([]);
     const item = queuedJobs.find((q) => q.id === id);
     if (item) {
       const key = `${item.job_seeker_id}:${item.job_post_id}`;
@@ -1124,6 +1242,190 @@ function ResumesTab({
     setEditMode(!editMode);
   };
 
+  const compareSavedVersions = async () => {
+    if (!selectedItem) return;
+    setScoringVersions(true);
+    try {
+      const res = await fetch("/api/am/resume-bank/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: selectedItem.job_seeker_id,
+          job_post_id: selectedItem.job_post_id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to score resume versions." });
+        return;
+      }
+      setVersionMatches((data.versions ?? []) as ResumeVersionMatch[]);
+      if ((data.versions ?? []).length === 0) {
+        setMsg({ type: "error", text: "No reusable resume versions found for this seeker yet." });
+      }
+    } catch {
+      setMsg({ type: "error", text: "Network error while scoring versions." });
+    } finally {
+      setScoringVersions(false);
+    }
+  };
+
+  const useSavedVersionForJob = async (versionId: string) => {
+    if (!selectedItem) return;
+    setApplyingVersionId(versionId);
+    try {
+      const res = await fetch("/api/am/resume-tailor/use-version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: selectedItem.job_seeker_id,
+          job_post_id: selectedItem.job_post_id,
+          resume_version_id: versionId,
+          template_id: selectedTemplate,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to apply resume version." });
+        return;
+      }
+
+      const key = `${selectedItem.job_seeker_id}:${selectedItem.job_post_id}`;
+      tailoredMap.set(key, data.tailored_resume);
+      setEditedText(data.tailored_resume.tailored_text ?? "");
+      setChangesSummary(data.tailored_resume.changes_summary ?? null);
+      setEditedData(null);
+      setEditMode(false);
+      setMsg({ type: "success", text: "Saved resume version applied to this job." });
+    } catch {
+      setMsg({ type: "error", text: "Network error while applying version." });
+    } finally {
+      setApplyingVersionId(null);
+    }
+  };
+
+  const saveCurrentToBank = async () => {
+    if (!selectedItem) return;
+    if (!existingTailored && !activeData && !editedText.trim()) {
+      setMsg({ type: "error", text: "Tailor the resume first, then save it to the bank." });
+      return;
+    }
+
+    setSavingBankVersion(true);
+    try {
+      const res = await fetch("/api/am/resume-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: selectedItem.job_seeker_id,
+          from_job_post_id: selectedItem.job_post_id,
+          name: `${selectedItem.job_posts?.title || "Resume"} Reusable Version`,
+          source: "manual",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to save version." });
+        return;
+      }
+      if (data.version) {
+        setBankVersions((prev) => [data.version as ResumeBankVersion, ...prev]);
+      }
+      setMsg({ type: "success", text: "Reusable resume version saved." });
+    } catch {
+      setMsg({ type: "error", text: "Network error while saving version." });
+    } finally {
+      setSavingBankVersion(false);
+    }
+  };
+
+  const setDefaultVersion = async (versionId: string) => {
+    if (!selectedItem) return;
+    setProcessingVersionId(versionId);
+    try {
+      const res = await fetch("/api/am/resume-bank", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set_default",
+          job_seeker_id: selectedItem.job_seeker_id,
+          version_id: versionId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to set default version." });
+        return;
+      }
+      setBankVersions((prev) =>
+        prev.map((row) => ({ ...row, is_default: row.id === versionId }))
+      );
+      setMsg({ type: "success", text: "Default reusable version updated." });
+    } catch {
+      setMsg({ type: "error", text: "Network error while updating default version." });
+    } finally {
+      setProcessingVersionId(null);
+    }
+  };
+
+  const approveAlert = async (alertId: string) => {
+    if (!selectedItem) return;
+    setProcessingAlertId(alertId);
+    try {
+      const res = await fetch("/api/am/resume-bank", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "approve_alert",
+          job_seeker_id: selectedItem.job_seeker_id,
+          alert_id: alertId,
+          make_default: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to approve hardening alert." });
+        return;
+      }
+      setHardeningAlerts((prev) => prev.filter((row) => row.id !== alertId));
+      if (data.version) {
+        setBankVersions((prev) => [data.version as ResumeBankVersion, ...prev]);
+      }
+      setMsg({ type: "success", text: "Hardened resume version approved and added to bank." });
+    } catch {
+      setMsg({ type: "error", text: "Network error while approving hardening alert." });
+    } finally {
+      setProcessingAlertId(null);
+    }
+  };
+
+  const dismissAlert = async (alertId: string) => {
+    if (!selectedItem) return;
+    setProcessingAlertId(alertId);
+    try {
+      const res = await fetch("/api/am/resume-bank", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "dismiss_alert",
+          job_seeker_id: selectedItem.job_seeker_id,
+          alert_id: alertId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({ type: "error", text: data.error || "Failed to dismiss hardening alert." });
+        return;
+      }
+      setHardeningAlerts((prev) => prev.filter((row) => row.id !== alertId));
+      setMsg({ type: "success", text: "Hardening alert dismissed." });
+    } catch {
+      setMsg({ type: "error", text: "Network error while dismissing alert." });
+    } finally {
+      setProcessingAlertId(null);
+    }
+  };
+
   return (
     <div className="flex gap-6 min-h-[500px]">
       {/* Left panel - job list */}
@@ -1169,6 +1471,42 @@ function ResumesTab({
           </div>
         ) : (
           <div className="space-y-4">
+            {relevantAlerts.length > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-orange-900 mb-2">
+                  Hardening Approval Needed
+                </h4>
+                <div className="space-y-2">
+                  {relevantAlerts.map((alert) => (
+                    <div key={alert.id} className="bg-white border border-orange-100 rounded p-3">
+                      <p className="text-sm text-orange-900">
+                        This title has been tailored <span className="font-semibold">{alert.tailored_count}</span> times.
+                      </p>
+                      <p className="text-xs text-orange-700 mt-1">
+                        Approve a hardened reusable version for faster reuse.
+                      </p>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => approveAlert(alert.id)}
+                          disabled={processingAlertId === alert.id}
+                          className="px-3 py-1.5 bg-orange-600 text-white text-xs font-medium rounded hover:bg-orange-700 disabled:opacity-50"
+                        >
+                          {processingAlertId === alert.id ? "Approving..." : "Approve Hardened Version"}
+                        </button>
+                        <button
+                          onClick={() => dismissAlert(alert.id)}
+                          disabled={processingAlertId === alert.id}
+                          className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 text-xs font-medium rounded hover:bg-orange-100 disabled:opacity-50"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Template Selector */}
             <div>
               <h4 className="text-xs font-medium text-gray-500 mb-2">Resume Template</h4>
@@ -1201,11 +1539,25 @@ function ResumesTab({
               </div>
               <div className="flex gap-2">
                 <button
+                  onClick={compareSavedVersions}
+                  disabled={scoringVersions}
+                  className="px-4 py-2 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                >
+                  {scoringVersions ? "Scoring..." : "Compare Saved Versions"}
+                </button>
+                <button
                   onClick={tailorWithAI}
                   disabled={tailoring}
                   className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {tailoring ? "Tailoring..." : "Tailor with AI"}
+                </button>
+                <button
+                  onClick={saveCurrentToBank}
+                  disabled={savingBankVersion}
+                  className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {savingBankVersion ? "Saving..." : "Save to Resume Bank"}
                 </button>
                 {activeData && (
                   <>
@@ -1239,6 +1591,85 @@ function ResumesTab({
                   >
                     Revert
                   </button>
+                )}
+              </div>
+            </div>
+
+            {versionMatches.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-blue-900">
+                  Resume Match Scores (for this job description)
+                </h4>
+                <div className="space-y-2">
+                  {versionMatches.map((version) => (
+                    <div key={version.id} className="bg-white border border-blue-100 rounded p-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {version.name}
+                          {version.is_default && (
+                            <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
+                              Default
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Source: {version.source} {version.title_focus ? `• Focus: ${version.title_focus}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          {version.match_percent}%
+                        </span>
+                        {version.id !== "__base__" && (
+                          <button
+                            onClick={() => useSavedVersionForJob(version.id)}
+                            disabled={applyingVersionId === version.id}
+                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {applyingVersionId === version.id ? "Applying..." : "Use This Version"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-gray-900">Resume Bank</h4>
+                {bankLoading && <span className="text-xs text-gray-500">Loading...</span>}
+              </div>
+              <div className="space-y-2">
+                {bankVersions.slice(0, 6).map((version) => (
+                  <div key={version.id} className="bg-white border border-gray-200 rounded p-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {version.name}
+                        {version.is_default && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
+                            Default
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {version.source} {version.title_focus ? `• ${version.title_focus}` : ""}
+                      </p>
+                    </div>
+                    {!version.is_default && (
+                      <button
+                        onClick={() => setDefaultVersion(version.id)}
+                        disabled={processingVersionId === version.id}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 disabled:opacity-50"
+                      >
+                        {processingVersionId === version.id ? "Saving..." : "Set Default"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {bankVersions.length === 0 && (
+                  <p className="text-xs text-gray-500">No reusable versions yet.</p>
                 )}
               </div>
             </div>

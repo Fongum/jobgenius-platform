@@ -18,6 +18,7 @@ import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { interviewPrepReadyEmail } from "@/lib/email-templates/interview-prep-ready";
 import { scanAllInboxes, scanSeekerInbox } from "@/lib/gmail/inbox-scanner";
 import { findMatchesForContact, findMatchesForJobPost } from "@/lib/network/matching";
+import { maybeUpsertResumeHardeningAlert } from "@/lib/resume-bank-alerts";
 import { randomUUID } from "crypto";
 
 type BackgroundJobRow = {
@@ -876,6 +877,13 @@ async function runTailorResume(payload: Record<string, unknown>) {
     },
     { onConflict: "job_seeker_id,job_post_id" }
   );
+
+  await maybeUpsertResumeHardeningAlert({
+    supabase: supabaseServer,
+    jobSeekerId,
+    jobTitle: jobPost.title ?? "",
+    threshold: 5,
+  });
 
   if (AUTO_TAILOR_REQUIRED && !tailoredResumeUrl && queueId) {
     await flagQueueAttention(

@@ -6,6 +6,8 @@ import MultiCheckbox from "../components/MultiCheckbox";
 import BooleanToggle from "../components/BooleanToggle";
 import LocationMultiSelect, { US_CANADA_LOCATIONS } from "../components/LocationMultiSelect";
 import Field from "../components/Field";
+import { RESUME_TEMPLATES } from "@/lib/resume-templates/types";
+import type { ResumeTemplateId } from "@/lib/resume-templates/types";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -85,6 +87,8 @@ interface ProfileData {
   non_compete_subject?: boolean;
   consent_background_check?: boolean;
   consent_drug_screening?: boolean;
+  // Resume
+  resume_template_id?: ResumeTemplateId;
 }
 
 interface DocRecord {
@@ -450,6 +454,45 @@ export default function ProfileClient({
             </>
           )}
         </div>
+
+        <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Resume Template Preference
+              </label>
+              <select
+                value={profile.resume_template_id || "classic"}
+                onChange={(e) =>
+                  update("resume_template_id", e.target.value as ResumeTemplateId)
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                {RESUME_TEMPLATES.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} - {template.description}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                AM/Admin tailoring and generated resume PDFs will follow this template unless manually overridden.
+              </p>
+            </div>
+            <button
+              onClick={() =>
+                save("Resume Template", {
+                  resume_template_id:
+                    (profile.resume_template_id || "classic") as ResumeTemplateId,
+                })
+              }
+              disabled={saving === "Resume Template"}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving === "Resume Template" ? "Saving..." : "Save Template"}
+            </button>
+          </div>
+        </div>
+
         {docs.length > 0 && (
           <div className="mt-4 space-y-2">
             <h4 className="text-sm font-medium text-gray-700">Uploaded Resumes</h4>
@@ -864,4 +907,3 @@ export default function ProfileClient({
     </div>
   );
 }
-
