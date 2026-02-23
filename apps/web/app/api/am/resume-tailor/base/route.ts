@@ -56,6 +56,14 @@ function isMissingColumnError(error: unknown) {
   return maybe.code === "42703" || text.includes("column") || text.includes("does not exist");
 }
 
+function getMissingColumnName(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const maybe = error as { message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`;
+  const match = text.match(/column\s+["']?([a-zA-Z0-9_]+)["']?\s+/i);
+  return match?.[1] ?? null;
+}
+
 function toSeekerBaseRow(row: Record<string, unknown>): SeekerBaseRow {
   return {
     id: String(row.id ?? ""),
@@ -183,6 +191,7 @@ async function updateBaseResumeOnSeeker(params: {
   ];
 
   let usedCompatibilityFallback = false;
+  let missingColumn: string | null = null;
   let lastError: unknown = null;
 
   for (let idx = 0; idx < payloads.length; idx += 1) {
@@ -197,13 +206,14 @@ async function updateBaseResumeOnSeeker(params: {
 
     lastError = error;
     if (!isMissingColumnError(error)) {
-      return { error, usedCompatibilityFallback };
+      return { error, usedCompatibilityFallback, missingColumn };
     }
 
+    missingColumn = missingColumn ?? getMissingColumnName(error);
     usedCompatibilityFallback = true;
   }
 
-  return { error: lastError, usedCompatibilityFallback };
+  return { error: lastError, usedCompatibilityFallback, missingColumn };
 }
 
 async function uploadBasePdf(params: {
@@ -366,7 +376,11 @@ export async function POST(request: Request) {
 
   const warnings: string[] = [];
 
-  const { error: updateSeekerError, usedCompatibilityFallback } =
+  const {
+    error: updateSeekerError,
+    usedCompatibilityFallback,
+    missingColumn,
+  } =
     await updateBaseResumeOnSeeker({
       jobSeekerId,
       tailoredText: optimized.tailoredText,
@@ -382,8 +396,14 @@ export async function POST(request: Request) {
   }
 
   if (usedCompatibilityFallback) {
+    const migrationHint =
+      missingColumn === "resume_template_id"
+        ? " Run migration 044_structured_resume_templates.sql."
+        : " Run latest migrations.";
     warnings.push(
-      "Base resume was optimized, but some optional profile columns are missing in this environment. Run latest migrations."
+      `Base resume was optimized, but optional profile column${
+        missingColumn ? ` '${missingColumn}'` : "(s)"
+      } is missing in this environment.${migrationHint}`
     );
   }
 
