@@ -378,6 +378,7 @@ export default function PipelineClient({
           {activeTab === "resumes" && (
             <ResumesTab
               queueItems={filteredQueue}
+              selectedSeeker={selectedSeeker}
               seekerMap={seekerMap}
               tailoredMap={tailoredMap}
               setMsg={setMsg}
@@ -1002,11 +1003,13 @@ function QueueTab({
 
 function ResumesTab({
   queueItems,
+  selectedSeeker,
   seekerMap,
   tailoredMap,
   setMsg,
 }: {
   queueItems: QueueItem[];
+  selectedSeeker: string;
   seekerMap: Map<string, SeekerSummary>;
   tailoredMap: Map<string, TailoredResume>;
   setMsg: (m: { type: "success" | "error"; text: string } | null) => void;
@@ -1035,6 +1038,7 @@ function ResumesTab({
   const [savingBankVersion, setSavingBankVersion] = useState(false);
   const [processingAlertId, setProcessingAlertId] = useState<string | null>(null);
   const [processingVersionId, setProcessingVersionId] = useState<string | null>(null);
+  const [optimizingBase, setOptimizingBase] = useState(false);
 
   const queuedJobs = queueItems.filter((q) => q.job_posts);
   const selectedItem = queuedJobs.find((q) => q.id === selectedId);
@@ -1052,6 +1056,55 @@ function ResumesTab({
   const relevantAlerts = hardeningAlerts.filter(
     (alert) => alert.normalized_title === selectedNormalizedTitle
   );
+  const selectedSeekerIdForBase =
+    selectedItem?.job_seeker_id ||
+    (selectedSeeker !== "all" ? selectedSeeker : null);
+  const selectedSeekerProfileForBase = selectedSeekerIdForBase
+    ? seekerMap.get(selectedSeekerIdForBase)
+    : null;
+
+  const optimizeBaseResume = async () => {
+    if (!selectedSeekerIdForBase) {
+      setMsg({
+        type: "error",
+        text: "Choose a single seeker first, then optimize the base resume.",
+      });
+      return;
+    }
+
+    setOptimizingBase(true);
+    try {
+      const res = await fetch("/api/am/resume-tailor/base", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: selectedSeekerIdForBase,
+          template_id: selectedSeekerProfileForBase?.resume_template_id ?? "classic",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg({
+          type: "error",
+          text: data.error || "Failed to optimize base resume.",
+        });
+        return;
+      }
+
+      if (typeof data.warning === "string" && data.warning) {
+        setMsg({ type: "error", text: data.warning });
+      } else {
+        setMsg({
+          type: "success",
+          text: "Base resume optimized and saved as the default reusable version.",
+        });
+      }
+    } catch {
+      setMsg({ type: "error", text: "Network error while optimizing base resume." });
+    } finally {
+      setOptimizingBase(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedItem) {
@@ -1427,7 +1480,29 @@ function ResumesTab({
   };
 
   return (
-    <div className="flex gap-6 min-h-[500px]">
+    <div className="space-y-4">
+      <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-indigo-900">
+              Base Resume Optimization
+            </h3>
+            <p className="text-xs text-indigo-800 mt-1">
+              Optimize the seeker&apos;s default ATS resume (not tied to one job). New
+              job tailoring will reuse this base by default.
+            </p>
+          </div>
+          <button
+            onClick={optimizeBaseResume}
+            disabled={optimizingBase || !selectedSeekerIdForBase}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {optimizingBase ? "Optimizing..." : "Optimize Base Resume"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-6 min-h-[500px]">
       {/* Left panel - job list */}
       <div className="w-80 shrink-0 border-r pr-4 overflow-y-auto">
         <h3 className="font-semibold text-gray-900 mb-3">Queued Jobs</h3>
@@ -1753,6 +1828,7 @@ function ResumesTab({
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

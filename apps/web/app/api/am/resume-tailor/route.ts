@@ -11,6 +11,13 @@ import { renderResumePdf } from "@/lib/resume-templates";
 import type { ResumeTemplateId, StructuredResume } from "@/lib/resume-templates";
 import { maybeUpsertResumeHardeningAlert } from "@/lib/resume-bank-alerts";
 
+function isMissingResumeBankTable(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return maybe.code === "42P01" || text.includes("resume_bank_versions");
+}
+
 export async function POST(request: Request) {
   const auth = await requireAM(request);
   if (!auth.authenticated) {
@@ -42,7 +49,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  const [{ data: seeker }, { data: jobPost }, { data: selectedVersion, error: selectedVersionError }] =
+  const [
+    { data: seeker },
+    { data: jobPost },
+    { data: selectedVersion, error: selectedVersionError },
+    { data: defaultVersion, error: defaultVersionError },
+  ] =
     await Promise.all([
     supabaseAdmin
       .from("job_seekers")
@@ -65,12 +77,17 @@ export async function POST(request: Request) {
           .eq("status", "active")
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    supabaseAdmin
+      .from("resume_bank_versions")
+      .select("id, name, template_id, resume_text, resume_data")
+      .eq("job_seeker_id", job_seeker_id)
+      .eq("status", "active")
+      .eq("is_default", true)
+      .maybeSingle(),
   ]);
 
   if (selectedVersionError) {
-    const missingTable =
-      selectedVersionError.code === "42P01" ||
-      String(selectedVersionError.message ?? "").includes("resume_bank_versions");
+    const missingTable = isMissingResumeBankTable(selectedVersionError);
     if (missingTable) {
       return NextResponse.json(
         { error: "Resume bank migration is not applied yet. Run migration 054 first." },
@@ -84,8 +101,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Selected resume version not found." }, { status: 404 });
   }
 
+  if (defaultVersionError && !isMissingResumeBankTable(defaultVersionError)) {
+    return NextResponse.json({ error: "Failed to load default resume version." }, { status: 500 });
+  }
+
+  const sourceVersion = selectedVersion ?? defaultVersion ?? null;
+
   const sourceResumeText =
-    selectedVersion?.resume_text?.trim() || seeker?.resume_text?.trim() || null;
+    sourceVersion?.resume_text?.trim() || seeker?.resume_text?.trim() || null;
 
   if (!sourceResumeText && !selectedVersion?.resume_data && !seeker?.email) {
     return NextResponse.json(
@@ -99,7 +122,7 @@ export async function POST(request: Request) {
   }
 
   const templateId = (
-    selectedVersion?.template_id ||
+    sourceVersion?.template_id ||
     seeker?.resume_template_id ||
     "classic"
   ) as ResumeTemplateId;
@@ -107,7 +130,7 @@ export async function POST(request: Request) {
   try {
     // Try structured tailoring first
     const baseResume =
-      (selectedVersion?.resume_data as StructuredResume | null) ??
+      (sourceVersion?.resume_data as StructuredResume | null) ??
       buildStructuredResumeFromSeeker({
         full_name: seeker?.full_name ?? null,
         email: seeker?.email ?? "",
@@ -173,7 +196,7 @@ export async function POST(request: Request) {
           template_id: templateId,
           changes_summary: structuredResult.changesSummary,
           resume_url: resumeUrl,
-          resume_bank_version_id: selectedVersion?.id ?? null,
+          resume_bank_version_id: sourceVersion?.id ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "job_seeker_id,job_post_id" }
@@ -230,7 +253,7 @@ export async function POST(request: Request) {
             original_text: sourceResumeText,
             tailored_text: result.tailoredText,
             changes_summary: result.changesSummary,
-            resume_bank_version_id: selectedVersion?.id ?? null,
+            resume_bank_version_id: sourceVersion?.id ?? null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "job_seeker_id,job_post_id" }

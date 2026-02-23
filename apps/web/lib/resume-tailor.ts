@@ -30,6 +30,14 @@ export interface TailorResumeStructuredResult {
   changesSummary: string;
 }
 
+export interface OptimizeBaseResumeStructuredInput {
+  baseResume: StructuredResume;
+  targetTitles: string[] | null;
+  seniority: string | null;
+  preferredIndustries: string[] | null;
+  keySkills: string[] | null;
+}
+
 export interface SeekerRow {
   full_name: string | null;
   email: string;
@@ -218,6 +226,89 @@ Respond with valid JSON containing two fields:
   // Basic validation
   if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
     throw new Error("Invalid structured resume returned by AI: missing contact fields");
+  }
+  if (!Array.isArray(tailoredData.workExperience)) {
+    tailoredData.workExperience = [];
+  }
+  if (!Array.isArray(tailoredData.education)) {
+    tailoredData.education = [];
+  }
+  if (!Array.isArray(tailoredData.skills)) {
+    tailoredData.skills = [];
+  }
+  if (!Array.isArray(tailoredData.certifications)) {
+    tailoredData.certifications = [];
+  }
+
+  return {
+    tailoredData,
+    tailoredText: structuredResumeToText(tailoredData),
+    changesSummary: parsed.changes_summary,
+  };
+}
+
+export async function optimizeBaseResumeStructured(
+  input: OptimizeBaseResumeStructuredInput
+): Promise<TailorResumeStructuredResult> {
+  const openai = getOpenAIClient();
+
+  const profileContext = [
+    input.targetTitles?.length
+      ? `Target roles: ${input.targetTitles.join(", ")}`
+      : "",
+    input.seniority ? `Seniority: ${input.seniority}` : "",
+    input.preferredIndustries?.length
+      ? `Preferred industries: ${input.preferredIndustries.join(", ")}`
+      : "",
+    input.keySkills?.length
+      ? `Core skills to emphasize: ${input.keySkills.join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const response = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `You are an expert ATS resume strategist. Optimize the candidate's base structured resume so it performs well across many job applications.
+
+Rules:
+- Improve ATS readability and keyword density naturally
+- Strengthen impact bullets with measurable outcomes when present in source text
+- Keep claims truthful and never invent companies, roles, dates, or credentials
+- Preserve candidate identity and career direction
+- Keep wording concise and professional
+
+Respond with valid JSON containing:
+- "tailored_resume": a JSON object matching this schema: ${STRUCTURED_RESUME_SCHEMA}
+- "changes_summary": a short bullet summary (3-6 bullets) of optimization changes.`,
+      },
+      {
+        role: "user",
+        content: `Optimize this base resume for broad ATS performance.\n\nCandidate context:\n${profileContext || "No additional profile context."}\n\nOriginal Resume (JSON):\n${JSON.stringify(
+          input.baseResume
+        )}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("No response from OpenAI");
+  }
+
+  const parsed = JSON.parse(content) as {
+    tailored_resume: StructuredResume;
+    changes_summary: string;
+  };
+
+  const tailoredData = parsed.tailored_resume;
+  if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
+    throw new Error("Invalid optimized resume returned by AI: missing contact fields");
   }
   if (!Array.isArray(tailoredData.workExperience)) {
     tailoredData.workExperience = [];
