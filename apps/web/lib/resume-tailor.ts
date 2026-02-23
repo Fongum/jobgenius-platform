@@ -22,6 +22,7 @@ export interface TailorResumeStructuredInput {
   jobDescription: string | null;
   requiredSkills: string[] | null;
   preferredSkills: string[] | null;
+  excludedFields?: ResumeFieldKey[] | null;
 }
 
 export interface TailorResumeStructuredResult {
@@ -36,12 +37,37 @@ export interface OptimizeBaseResumeStructuredInput {
   seniority: string | null;
   preferredIndustries: string[] | null;
   keySkills: string[] | null;
+  excludedFields?: ResumeFieldKey[] | null;
 }
 
 export interface RefineResumeStructuredInput {
   baseResume: StructuredResume;
   guidance: string;
+  excludedFields?: ResumeFieldKey[] | null;
 }
+
+export type ResumeFieldKey =
+  | "summary"
+  | "workExperience"
+  | "education"
+  | "skills"
+  | "certifications"
+  | "contact.phone"
+  | "contact.location"
+  | "contact.linkedinUrl"
+  | "contact.portfolioUrl";
+
+export const EXCLUDABLE_RESUME_FIELDS: ResumeFieldKey[] = [
+  "summary",
+  "workExperience",
+  "education",
+  "skills",
+  "certifications",
+  "contact.phone",
+  "contact.location",
+  "contact.linkedinUrl",
+  "contact.portfolioUrl",
+];
 
 export interface SeekerRow {
   full_name: string | null;
@@ -171,10 +197,93 @@ const STRUCTURED_RESUME_SCHEMA = `{
   "certifications": [{ "name": string, "issuer": string|null, "date": string|null }]
 }`;
 
+function sanitizeExcludedFields(value: unknown): ResumeFieldKey[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set(EXCLUDABLE_RESUME_FIELDS);
+  const unique = new Set<ResumeFieldKey>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    if (allowed.has(item as ResumeFieldKey)) {
+      unique.add(item as ResumeFieldKey);
+    }
+  }
+  return Array.from(unique);
+}
+
+function ensureStructuredResumeShape(data: StructuredResume): StructuredResume {
+  if (!data?.contact?.fullName || !data?.contact?.email) {
+    throw new Error("Invalid structured resume returned by AI: missing contact fields");
+  }
+  if (!Array.isArray(data.workExperience)) {
+    data.workExperience = [];
+  }
+  if (!Array.isArray(data.education)) {
+    data.education = [];
+  }
+  if (!Array.isArray(data.skills)) {
+    data.skills = [];
+  }
+  if (!Array.isArray(data.certifications)) {
+    data.certifications = [];
+  }
+  if (typeof data.summary !== "string") {
+    data.summary = "";
+  }
+  data.contact.phone = data.contact.phone || null;
+  data.contact.location = data.contact.location || null;
+  data.contact.linkedinUrl = data.contact.linkedinUrl || null;
+  data.contact.portfolioUrl = data.contact.portfolioUrl || null;
+  return data;
+}
+
+function applyExcludedFields(
+  data: StructuredResume,
+  excluded: ResumeFieldKey[]
+): StructuredResume {
+  if (excluded.length === 0) return data;
+  for (const field of excluded) {
+    switch (field) {
+      case "summary":
+        data.summary = "";
+        break;
+      case "workExperience":
+        data.workExperience = [];
+        break;
+      case "education":
+        data.education = [];
+        break;
+      case "skills":
+        data.skills = [];
+        break;
+      case "certifications":
+        data.certifications = [];
+        break;
+      case "contact.phone":
+        data.contact.phone = null;
+        break;
+      case "contact.location":
+        data.contact.location = null;
+        break;
+      case "contact.linkedinUrl":
+        data.contact.linkedinUrl = null;
+        break;
+      case "contact.portfolioUrl":
+        data.contact.portfolioUrl = null;
+        break;
+    }
+  }
+  return data;
+}
+
 export async function tailorResumeStructured(
   input: TailorResumeStructuredInput
 ): Promise<TailorResumeStructuredResult> {
   const openai = getOpenAIClient();
+  const excludedFields = sanitizeExcludedFields(input.excludedFields);
+  const excludedHint =
+    excludedFields.length > 0
+      ? `\nExcluded fields (must be empty/null): ${excludedFields.join(", ")}`
+      : "";
 
   const skillsSection = [
     input.requiredSkills?.length ? `Required skills: ${input.requiredSkills.join(", ")}` : "",
@@ -202,6 +311,8 @@ Rules:
 - NEVER fabricate experience, skills, or qualifications
 - NEVER remove truthful information, only adjust emphasis and ordering
 - Keep the resume professional and concise
+- Always return all schema fields (even when empty arrays/empty string/null as appropriate)
+- If excluded fields are provided, keep those fields empty/null
 
 Respond with valid JSON containing two fields:
 - "tailored_resume": a JSON object matching this schema: ${STRUCTURED_RESUME_SCHEMA}
@@ -209,7 +320,7 @@ Respond with valid JSON containing two fields:
       },
       {
         role: "user",
-        content: `Tailor this resume for the following job:\n\n${jobContext}\n\n---\n\nOriginal Resume (JSON):\n${JSON.stringify(input.baseResume)}`,
+        content: `Tailor this resume for the following job:\n\n${jobContext}\n\n---\n\nOriginal Resume (JSON):\n${JSON.stringify(input.baseResume)}${excludedHint}`,
       },
     ],
     response_format: { type: "json_object" },
@@ -226,24 +337,10 @@ Respond with valid JSON containing two fields:
     changes_summary: string;
   };
 
-  const tailoredData = parsed.tailored_resume;
-
-  // Basic validation
-  if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
-    throw new Error("Invalid structured resume returned by AI: missing contact fields");
-  }
-  if (!Array.isArray(tailoredData.workExperience)) {
-    tailoredData.workExperience = [];
-  }
-  if (!Array.isArray(tailoredData.education)) {
-    tailoredData.education = [];
-  }
-  if (!Array.isArray(tailoredData.skills)) {
-    tailoredData.skills = [];
-  }
-  if (!Array.isArray(tailoredData.certifications)) {
-    tailoredData.certifications = [];
-  }
+  const tailoredData = applyExcludedFields(
+    ensureStructuredResumeShape(parsed.tailored_resume),
+    excludedFields
+  );
 
   return {
     tailoredData,
@@ -256,6 +353,11 @@ export async function optimizeBaseResumeStructured(
   input: OptimizeBaseResumeStructuredInput
 ): Promise<TailorResumeStructuredResult> {
   const openai = getOpenAIClient();
+  const excludedFields = sanitizeExcludedFields(input.excludedFields);
+  const excludedHint =
+    excludedFields.length > 0
+      ? `\nExcluded fields (must be empty/null): ${excludedFields.join(", ")}`
+      : "";
 
   const profileContext = [
     input.targetTitles?.length
@@ -285,6 +387,8 @@ Rules:
 - Keep claims truthful and never invent companies, roles, dates, or credentials
 - Preserve candidate identity and career direction
 - Keep wording concise and professional
+- Always return all schema fields (even when empty arrays/empty string/null as appropriate)
+- If excluded fields are provided, keep those fields empty/null
 
 Respond with valid JSON containing:
 - "tailored_resume": a JSON object matching this schema: ${STRUCTURED_RESUME_SCHEMA}
@@ -292,7 +396,7 @@ Respond with valid JSON containing:
       },
       {
         role: "user",
-        content: `Optimize this base resume for broad ATS performance.\n\nCandidate context:\n${profileContext || "No additional profile context."}\n\nOriginal Resume (JSON):\n${JSON.stringify(
+        content: `Optimize this base resume for broad ATS performance.\n\nCandidate context:\n${profileContext || "No additional profile context."}${excludedHint}\n\nOriginal Resume (JSON):\n${JSON.stringify(
           input.baseResume
         )}`,
       },
@@ -311,22 +415,10 @@ Respond with valid JSON containing:
     changes_summary: string;
   };
 
-  const tailoredData = parsed.tailored_resume;
-  if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
-    throw new Error("Invalid optimized resume returned by AI: missing contact fields");
-  }
-  if (!Array.isArray(tailoredData.workExperience)) {
-    tailoredData.workExperience = [];
-  }
-  if (!Array.isArray(tailoredData.education)) {
-    tailoredData.education = [];
-  }
-  if (!Array.isArray(tailoredData.skills)) {
-    tailoredData.skills = [];
-  }
-  if (!Array.isArray(tailoredData.certifications)) {
-    tailoredData.certifications = [];
-  }
+  const tailoredData = applyExcludedFields(
+    ensureStructuredResumeShape(parsed.tailored_resume),
+    excludedFields
+  );
 
   return {
     tailoredData,
@@ -339,6 +431,11 @@ export async function refineResumeStructuredWithGuidance(
   input: RefineResumeStructuredInput
 ): Promise<TailorResumeStructuredResult> {
   const openai = getOpenAIClient();
+  const excludedFields = sanitizeExcludedFields(input.excludedFields);
+  const excludedHint =
+    excludedFields.length > 0
+      ? `\nExcluded fields (must be empty/null): ${excludedFields.join(", ")}`
+      : "";
   const response = await openai.chat.completions.create({
     model: OPENAI_MODEL,
     messages: [
@@ -351,6 +448,8 @@ Rules:
 - Preserve candidate identity, timeline, and role history
 - Apply the guidance with concise ATS-friendly phrasing
 - Keep formatting schema-valid and professional
+- Always return all schema fields (even when empty arrays/empty string/null as appropriate)
+- If excluded fields are provided, keep those fields empty/null
 
 Respond with valid JSON containing:
 - "tailored_resume": a JSON object matching this schema: ${STRUCTURED_RESUME_SCHEMA}
@@ -358,7 +457,7 @@ Respond with valid JSON containing:
       },
       {
         role: "user",
-        content: `Guidance to apply:\n${input.guidance}\n\nCurrent Resume (JSON):\n${JSON.stringify(
+        content: `Guidance to apply:\n${input.guidance}${excludedHint}\n\nCurrent Resume (JSON):\n${JSON.stringify(
           input.baseResume
         )}`,
       },
@@ -377,22 +476,10 @@ Respond with valid JSON containing:
     changes_summary: string;
   };
 
-  const tailoredData = parsed.tailored_resume;
-  if (!tailoredData?.contact?.fullName || !tailoredData?.contact?.email) {
-    throw new Error("Invalid refined resume returned by AI: missing contact fields");
-  }
-  if (!Array.isArray(tailoredData.workExperience)) {
-    tailoredData.workExperience = [];
-  }
-  if (!Array.isArray(tailoredData.education)) {
-    tailoredData.education = [];
-  }
-  if (!Array.isArray(tailoredData.skills)) {
-    tailoredData.skills = [];
-  }
-  if (!Array.isArray(tailoredData.certifications)) {
-    tailoredData.certifications = [];
-  }
+  const tailoredData = applyExcludedFields(
+    ensureStructuredResumeShape(parsed.tailored_resume),
+    excludedFields
+  );
 
   return {
     tailoredData,

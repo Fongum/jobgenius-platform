@@ -49,17 +49,20 @@ function escapePdfText(value: string) {
 
 export type FontName = "Helvetica" | "Helvetica-Bold" | "Helvetica-Oblique";
 export type Align = "left" | "center" | "right";
+export type RgbColor = [number, number, number];
 
 interface TextSegment {
   text: string;
   font: FontName;
   fontSize: number;
   align: Align;
+  color: RgbColor;
 }
 
 interface RuleSegment {
   type: "rule";
   thickness: number;
+  color: RgbColor;
 }
 
 interface SpacingSegment {
@@ -90,6 +93,24 @@ const FONT_MAP: Record<FontName, string> = {
   "Helvetica-Bold": "/F2",
   "Helvetica-Oblique": "/F3",
 };
+
+const BLACK: RgbColor = [0, 0, 0];
+
+function clampColor(value: number) {
+  if (Number.isNaN(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function normalizeColor(color?: RgbColor): RgbColor {
+  if (!color) return BLACK;
+  return [
+    clampColor(color[0]),
+    clampColor(color[1]),
+    clampColor(color[2]),
+  ];
+}
 
 function measureText(text: string, font: FontName, fontSize: number): number {
   const isBold = font === "Helvetica-Bold";
@@ -160,17 +181,19 @@ export class ResumeDocBuilder {
       font?: FontName;
       fontSize?: number;
       align?: Align;
+      color?: RgbColor;
     }
   ): this {
     const font = options?.font ?? "Helvetica";
     const fontSize = options?.fontSize ?? this.defaultFontSize;
     const align = options?.align ?? "left";
+    const color = normalizeColor(options?.color);
 
     const lines = wrapLine(text, font, fontSize, this.contentWidth);
     for (const line of lines) {
       this.segments.push({
         type: "text",
-        segment: { text: line, font, fontSize, align },
+        segment: { text: line, font, fontSize, align, color },
       });
     }
     return this;
@@ -183,12 +206,14 @@ export class ResumeDocBuilder {
       fontSize?: number;
       indent?: number;
       prefix?: string;
+      color?: RgbColor;
     }
   ): this {
     const font = options?.font ?? "Helvetica";
     const fontSize = options?.fontSize ?? this.defaultFontSize;
     const indent = options?.indent ?? 15;
     const prefix = options?.prefix ?? "\u2022 ";
+    const color = normalizeColor(options?.color);
 
     const prefixWidth = measureText(prefix, font, fontSize);
     const availableWidth = this.contentWidth - indent - prefixWidth;
@@ -204,14 +229,15 @@ export class ResumeDocBuilder {
           font,
           fontSize,
           align: "left",
+          color,
         },
       });
     }
     return this;
   }
 
-  addRule(thickness = 0.5): this {
-    this.segments.push({ type: "rule", thickness });
+  addRule(thickness = 0.5, color?: RgbColor): this {
+    this.segments.push({ type: "rule", thickness, color: normalizeColor(color) });
     return this;
   }
 
@@ -268,6 +294,7 @@ export class ResumeDocBuilder {
       if (seg.type === "rule") {
         curY -= 4;
         ops.push(
+          `${seg.color[0].toFixed(3)} ${seg.color[1].toFixed(3)} ${seg.color[2].toFixed(3)} RG`,
           `${seg.thickness} w`,
           `${this.marginLeft} ${curY} m`,
           `${this.pageWidth - this.marginRight} ${curY} l`,
@@ -282,7 +309,7 @@ export class ResumeDocBuilder {
         continue;
       }
 
-      const { text, font, fontSize, align } = seg.segment;
+      const { text, font, fontSize, align, color } = seg.segment;
       const lineHeight = this.getLineHeight(fontSize);
       curY -= lineHeight;
 
@@ -297,6 +324,7 @@ export class ResumeDocBuilder {
 
       ops.push("BT");
       ops.push(`${FONT_MAP[font]} ${fontSize} Tf`);
+      ops.push(`${color[0].toFixed(3)} ${color[1].toFixed(3)} ${color[2].toFixed(3)} rg`);
       ops.push(`${x.toFixed(2)} ${curY.toFixed(2)} Td`);
       ops.push(`(${escapePdfText(text)}) Tj`);
       ops.push("ET");

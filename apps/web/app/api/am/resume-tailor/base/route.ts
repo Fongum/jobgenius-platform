@@ -5,6 +5,7 @@ import { isOpenAIConfigured } from "@/lib/openai";
 import {
   buildStructuredResumeFromSeeker,
   optimizeBaseResumeStructured,
+  type ResumeFieldKey,
   type SeekerRow,
 } from "@/lib/resume-tailor";
 import { renderResumePdf } from "@/lib/resume-templates";
@@ -271,6 +272,11 @@ export async function POST(request: Request) {
   const jobSeekerInput = String(body.job_seeker_id ?? "").trim();
   const selectedVersionId = String(body.resume_version_id ?? "").trim() || null;
   const forcedTemplateId = String(body.template_id ?? "").trim() || null;
+  const excludedFields = Array.isArray(body.excluded_fields)
+    ? body.excluded_fields.filter(
+        (entry): entry is ResumeFieldKey => typeof entry === "string"
+      )
+    : null;
 
   if (!jobSeekerInput) {
     return NextResponse.json({ error: "job_seeker_id is required." }, { status: 400 });
@@ -366,6 +372,7 @@ export async function POST(request: Request) {
     seniority: typeof seeker.seniority === "string" ? seeker.seniority : null,
     preferredIndustries: (seeker.preferred_industries as string[] | null) ?? null,
     keySkills: (seeker.skills as string[] | null) ?? null,
+    excludedFields,
   });
 
   const resumeUrl = await uploadBasePdf({
@@ -474,6 +481,7 @@ export async function POST(request: Request) {
       tailored_text: optimized.tailoredText,
       changes_summary: optimized.changesSummary,
       resume_url: resumeUrl,
+      excluded_fields: excludedFields ?? [],
     },
     version: createdVersion,
     warning: warnings.length > 0 ? warnings.join(" ") : null,

@@ -9,7 +9,10 @@ import {
   normalizeJobTitle,
   structuredResumeToText,
 } from "@/lib/resume-bank";
-import { refineResumeStructuredWithGuidance } from "@/lib/resume-tailor";
+import {
+  refineResumeStructuredWithGuidance,
+  type ResumeFieldKey,
+} from "@/lib/resume-tailor";
 
 const VALID_TEMPLATE_IDS = new Set<string>(RESUME_TEMPLATES.map((t) => t.id));
 
@@ -572,6 +575,12 @@ export async function PATCH(request: Request) {
 
     const versionId = String(body.version_id ?? "").trim();
     const guidance = String(body.guidance ?? "").trim();
+    const excludedFields = Array.isArray(body.excluded_fields)
+      ? body.excluded_fields.filter(
+          (entry: unknown): entry is ResumeFieldKey =>
+            typeof entry === "string"
+        )
+      : null;
     if (!versionId || !guidance) {
       return NextResponse.json({ error: "version_id and guidance are required." }, { status: 400 });
     }
@@ -599,6 +608,7 @@ export async function PATCH(request: Request) {
       const suggestion = await refineResumeStructuredWithGuidance({
         baseResume: version.resume_data as StructuredResume,
         guidance,
+        excludedFields,
       });
 
       return NextResponse.json({

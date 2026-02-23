@@ -168,6 +168,29 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+type ResumeFieldToggle =
+  | "summary"
+  | "workExperience"
+  | "education"
+  | "skills"
+  | "certifications"
+  | "contact.phone"
+  | "contact.location"
+  | "contact.linkedinUrl"
+  | "contact.portfolioUrl";
+
+const RESUME_FIELD_TOGGLE_OPTIONS: { key: ResumeFieldToggle; label: string }[] = [
+  { key: "summary", label: "Summary" },
+  { key: "workExperience", label: "Work Experience" },
+  { key: "education", label: "Education" },
+  { key: "skills", label: "Skills" },
+  { key: "certifications", label: "Certifications" },
+  { key: "contact.phone", label: "Phone" },
+  { key: "contact.location", label: "Location" },
+  { key: "contact.linkedinUrl", label: "LinkedIn URL" },
+  { key: "contact.portfolioUrl", label: "Portfolio URL" },
+];
+
 // ─── Main Component ─────────────────────────────────────────────────
 
 export default function PipelineClient({
@@ -1053,6 +1076,7 @@ function ResumesTab({
   const [suggestingAdjustments, setSuggestingAdjustments] = useState(false);
   const [bankSuggestionSummary, setBankSuggestionSummary] = useState<string | null>(null);
   const [downloadingVersionId, setDownloadingVersionId] = useState<string | null>(null);
+  const [excludedResumeFields, setExcludedResumeFields] = useState<ResumeFieldToggle[]>([]);
 
   const queuedJobs = queueItems.filter((q) => q.job_posts);
   const selectedItem = queuedJobs.find((q) => q.id === selectedId);
@@ -1080,6 +1104,12 @@ function ResumesTab({
   const selectedBankVersion =
     bankVersions.find((row) => row.id === selectedBankVersionId) ?? null;
 
+  const toggleExcludedField = (field: ResumeFieldToggle) => {
+    setExcludedResumeFields((prev) =>
+      prev.includes(field) ? prev.filter((item) => item !== field) : [...prev, field]
+    );
+  };
+
   const optimizeBaseResume = async () => {
     if (!activeSeekerId) {
       setMsg({
@@ -1097,6 +1127,7 @@ function ResumesTab({
         body: JSON.stringify({
           job_seeker_id: activeSeekerId,
           template_id: activeSeekerProfile?.resume_template_id ?? "classic",
+          excluded_fields: excludedResumeFields,
         }),
       });
       const data = await res.json();
@@ -1554,6 +1585,7 @@ function ResumesTab({
           job_seeker_id: activeSeekerId,
           version_id: selectedBankVersion.id,
           guidance: suggestionPrompt.trim(),
+          excluded_fields: excludedResumeFields,
         }),
       });
       const data = await res.json();
@@ -1724,6 +1756,30 @@ function ResumesTab({
             {optimizingBase ? "Optimizing..." : "Optimize Base Resume"}
           </button>
         </div>
+        <div className="mt-3">
+          <p className="text-xs font-medium text-indigo-900 mb-2">
+            Hide Optional Fields (not shown in generated output)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {RESUME_FIELD_TOGGLE_OPTIONS.map((option) => {
+              const active = excludedResumeFields.includes(option.key);
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => toggleExcludedField(option.key)}
+                  className={`px-2.5 py-1.5 text-xs rounded border transition-colors ${
+                    active
+                      ? "border-indigo-400 bg-indigo-100 text-indigo-900"
+                      : "border-indigo-200 bg-white text-indigo-700 hover:border-indigo-300"
+                  }`}
+                >
+                  {active ? `Hidden: ${option.label}` : option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
@@ -1869,6 +1925,11 @@ function ResumesTab({
                     <span className="text-xs text-gray-500">
                       Suggestions are not saved until you click "Save Changes".
                     </span>
+                    {excludedResumeFields.length > 0 && (
+                      <span className="text-xs text-indigo-600">
+                        Hidden fields active: {excludedResumeFields.length}
+                      </span>
+                    )}
                   </div>
                 </div>
 
