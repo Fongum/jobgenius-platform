@@ -21,6 +21,7 @@ type SeekerBaseRow = {
   id: string;
   full_name: string | null;
   email: string | null;
+  resume_text: string | null;
   phone: string | null;
   linkedin_url: string | null;
   address_city: string | null;
@@ -43,39 +44,166 @@ function isMissingResumeBankTable(error: unknown) {
 }
 
 const SEEKER_SELECT_FIELDS =
-  "id, full_name, email, phone, linkedin_url, address_city, address_state, skills, work_history, education, bio, resume_template_id, target_titles, seniority, preferred_industries";
+  "id, full_name, email, resume_text, phone, linkedin_url, address_city, address_state, skills, work_history, education, bio, resume_template_id, target_titles, seniority, preferred_industries";
+const SEEKER_FALLBACK_SELECT_FIELDS =
+  "id, full_name, email, resume_text, target_titles, skills, seniority";
+const SEEKER_MINIMAL_SELECT_FIELDS = "id, full_name, email";
 
-async function resolveJobSeeker(identifier: string): Promise<SeekerBaseRow | null> {
+function isMissingColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return maybe.code === "42703" || text.includes("column") || text.includes("does not exist");
+}
+
+function toSeekerBaseRow(row: Record<string, unknown>): SeekerBaseRow {
+  return {
+    id: String(row.id ?? ""),
+    full_name: typeof row.full_name === "string" ? row.full_name : null,
+    email: typeof row.email === "string" ? row.email : null,
+    resume_text: typeof row.resume_text === "string" ? row.resume_text : null,
+    phone: typeof row.phone === "string" ? row.phone : null,
+    linkedin_url: typeof row.linkedin_url === "string" ? row.linkedin_url : null,
+    address_city: typeof row.address_city === "string" ? row.address_city : null,
+    address_state: typeof row.address_state === "string" ? row.address_state : null,
+    skills: Array.isArray(row.skills) ? (row.skills as string[]) : null,
+    work_history: row.work_history ?? null,
+    education: row.education ?? null,
+    bio: typeof row.bio === "string" ? row.bio : null,
+    resume_template_id:
+      typeof row.resume_template_id === "string" ? row.resume_template_id : null,
+    target_titles: Array.isArray(row.target_titles)
+      ? (row.target_titles as string[])
+      : null,
+    seniority: typeof row.seniority === "string" ? row.seniority : null,
+    preferred_industries: Array.isArray(row.preferred_industries)
+      ? (row.preferred_industries as string[])
+      : null,
+  };
+}
+
+async function lookupSeekerWithFields(
+  identifier: string,
+  selectFields: string
+): Promise<{ seeker: SeekerBaseRow | null; error: unknown }> {
   const trimmed = identifier.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return { seeker: null, error: null };
 
-  const { data: byId } = await supabaseAdmin
+  const byId = await supabaseAdmin
     .from("job_seekers")
-    .select(SEEKER_SELECT_FIELDS)
+    .select(selectFields)
     .eq("id", trimmed)
     .maybeSingle();
-  if (byId?.id) return byId as SeekerBaseRow;
+  if (byId.error) return { seeker: null, error: byId.error };
+  if (byId.data) {
+    return {
+      seeker: toSeekerBaseRow(byId.data as unknown as Record<string, unknown>),
+      error: null,
+    };
+  }
 
   if (trimmed.includes("@")) {
-    const { data: byEmail } = await supabaseAdmin
+    const byEmail = await supabaseAdmin
       .from("job_seekers")
-      .select(SEEKER_SELECT_FIELDS)
+      .select(selectFields)
       .eq("email", trimmed)
       .maybeSingle();
-    if (byEmail?.id) return byEmail as SeekerBaseRow;
+    if (byEmail.error) return { seeker: null, error: byEmail.error };
+    if (byEmail.data) {
+      return {
+        seeker: toSeekerBaseRow(
+          byEmail.data as unknown as Record<string, unknown>
+        ),
+        error: null,
+      };
+    }
   }
 
-  const { data: byName } = await supabaseAdmin
+  const byName = await supabaseAdmin
     .from("job_seekers")
-    .select(SEEKER_SELECT_FIELDS)
+    .select(selectFields)
     .eq("full_name", trimmed)
     .limit(1);
-
-  if (Array.isArray(byName) && byName.length > 0) {
-    return byName[0] as SeekerBaseRow;
+  if (byName.error) return { seeker: null, error: byName.error };
+  if (Array.isArray(byName.data) && byName.data.length > 0) {
+    return {
+      seeker: toSeekerBaseRow(
+        byName.data[0] as unknown as Record<string, unknown>
+      ),
+      error: null,
+    };
   }
 
+  return { seeker: null, error: null };
+}
+
+async function resolveJobSeeker(identifier: string): Promise<SeekerBaseRow | null> {
+  const attempts = [
+    SEEKER_SELECT_FIELDS,
+    SEEKER_FALLBACK_SELECT_FIELDS,
+    SEEKER_MINIMAL_SELECT_FIELDS,
+  ];
+  let lastError: unknown = null;
+
+  for (const fields of attempts) {
+    const result = await lookupSeekerWithFields(identifier, fields);
+    if (result.seeker?.id) return result.seeker;
+    if (!result.error) return null;
+
+    lastError = result.error;
+    if (!isMissingColumnError(result.error)) return null;
+  }
+
+  console.error("Failed to resolve seeker with schema fallbacks.", {
+    identifier,
+    error: lastError,
+  });
   return null;
+}
+
+async function updateBaseResumeOnSeeker(params: {
+  jobSeekerId: string;
+  tailoredText: string;
+  resumeUrl: string | null;
+  templateId: ResumeTemplateId;
+}) {
+  const payloads = [
+    {
+      resume_text: params.tailoredText,
+      resume_url: params.resumeUrl,
+      resume_template_id: params.templateId,
+    },
+    {
+      resume_text: params.tailoredText,
+      resume_url: params.resumeUrl,
+    },
+    {
+      resume_text: params.tailoredText,
+    },
+  ];
+
+  let usedCompatibilityFallback = false;
+  let lastError: unknown = null;
+
+  for (let idx = 0; idx < payloads.length; idx += 1) {
+    const { error } = await supabaseAdmin
+      .from("job_seekers")
+      .update(payloads[idx])
+      .eq("id", params.jobSeekerId);
+
+    if (!error) {
+      return { error: null as unknown, usedCompatibilityFallback: idx > 0 };
+    }
+
+    lastError = error;
+    if (!isMissingColumnError(error)) {
+      return { error, usedCompatibilityFallback };
+    }
+
+    usedCompatibilityFallback = true;
+  }
+
+  return { error: lastError, usedCompatibilityFallback };
 }
 
 async function uploadBasePdf(params: {
@@ -195,6 +323,7 @@ export async function POST(request: Request) {
   const fallbackEmail =
     sourceVersion?.resume_data?.contact?.email?.trim() ||
     sourceVersion?.resume_text?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ||
+    seeker.resume_text?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ||
     "candidate@jobgenius.local";
   const seekerEmail = seeker.email?.trim() || fallbackEmail;
 
@@ -218,7 +347,7 @@ export async function POST(request: Request) {
       skills: (seeker.skills as string[] | null) ?? null,
       work_history: seeker.work_history,
       education: seeker.education,
-      resume_text: sourceVersion?.resume_text ?? null,
+      resume_text: sourceVersion?.resume_text ?? seeker.resume_text ?? null,
     } satisfies SeekerRow);
 
   const optimized = await optimizeBaseResumeStructured({
@@ -235,19 +364,26 @@ export async function POST(request: Request) {
     templateId,
   });
 
-  const { error: updateSeekerError } = await supabaseAdmin
-    .from("job_seekers")
-    .update({
-      resume_text: optimized.tailoredText,
-      resume_url: resumeUrl,
-      resume_template_id: templateId,
-    })
-    .eq("id", jobSeekerId);
+  const warnings: string[] = [];
+
+  const { error: updateSeekerError, usedCompatibilityFallback } =
+    await updateBaseResumeOnSeeker({
+      jobSeekerId,
+      tailoredText: optimized.tailoredText,
+      resumeUrl,
+      templateId,
+    });
 
   if (updateSeekerError) {
     return NextResponse.json(
       { error: "Failed to update base resume on seeker profile." },
       { status: 500 }
+    );
+  }
+
+  if (usedCompatibilityFallback) {
+    warnings.push(
+      "Base resume was optimized, but some optional profile columns are missing in this environment. Run latest migrations."
     );
   }
 
@@ -262,8 +398,6 @@ export async function POST(request: Request) {
     created_at: string;
     updated_at: string;
   } | null = null;
-  let bankWarning: string | null = null;
-
   try {
     await supabaseAdmin
       .from("resume_bank_versions")
@@ -295,18 +429,21 @@ export async function POST(request: Request) {
 
     if (insertError) {
       if (isMissingResumeBankTable(insertError)) {
-        bankWarning =
-          "Base resume was optimized, but Resume Bank table is unavailable. Run migration 054.";
+        warnings.push(
+          "Base resume was optimized, but Resume Bank table is unavailable. Run migration 054."
+        );
       } else {
-        bankWarning =
-          "Base resume was optimized, but saving default Resume Bank version failed.";
+        warnings.push(
+          "Base resume was optimized, but saving default Resume Bank version failed."
+        );
       }
     } else {
       createdVersion = inserted;
     }
   } catch {
-    bankWarning =
-      "Base resume was optimized, but saving default Resume Bank version failed.";
+    warnings.push(
+      "Base resume was optimized, but saving default Resume Bank version failed."
+    );
   }
 
   return NextResponse.json({
@@ -319,6 +456,6 @@ export async function POST(request: Request) {
       resume_url: resumeUrl,
     },
     version: createdVersion,
-    warning: bankWarning,
+    warning: warnings.length > 0 ? warnings.join(" ") : null,
   });
 }
