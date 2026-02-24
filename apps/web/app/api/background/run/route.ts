@@ -19,6 +19,14 @@ import { interviewPrepReadyEmail } from "@/lib/email-templates/interview-prep-re
 import { scanAllInboxes, scanSeekerInbox } from "@/lib/gmail/inbox-scanner";
 import { findMatchesForContact, findMatchesForJobPost } from "@/lib/network/matching";
 import { maybeUpsertResumeHardeningAlert } from "@/lib/resume-bank-alerts";
+import { createBlandOutboundCall } from "@/lib/voice/bland";
+import {
+  appendVoiceConversationNote,
+  isUpsellOptedOut,
+  normalizePhone,
+  resolveAssignedAccountManagerId,
+} from "@/lib/voice/service";
+import { normalizeVoiceCallType, type VoiceCallType } from "@/lib/voice/types";
 import { randomUUID } from "crypto";
 
 type BackgroundJobRow = {
@@ -92,6 +100,7 @@ const AUTO_OUTREACH_CONTACT_LIMIT = Math.max(
   Number(process.env.AUTO_OUTREACH_CONTACT_LIMIT ?? 1),
   1
 );
+const BLAND_OUTBOUND_ENABLED = resolveFlag("BLAND_OUTBOUND_ENABLED", false);
 const AUTO_APPLY_STALE_RUN_MINUTES = Math.max(
   Number(process.env.AUTO_APPLY_STALE_RUN_MINUTES ?? 60),
   5
@@ -190,6 +199,32 @@ function getPayloadStringArray(payload: Record<string, unknown>, key: string) {
   return value
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter(Boolean);
+}
+
+type ActiveVoicePlaybook = {
+  id: string;
+  assistant_goal: string | null;
+  system_prompt: string;
+  max_retry_attempts: number | null;
+};
+
+async function loadActivePlaybook(
+  callType: VoiceCallType
+): Promise<ActiveVoicePlaybook | null> {
+  const { data } = await supabaseServer
+    .from("voice_playbooks")
+    .select("id, assistant_goal, system_prompt, max_retry_attempts")
+    .eq("call_type", callType)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) {
+    return null;
+  }
+
+  return data as unknown as ActiveVoicePlaybook;
 }
 
 function buildWeights(customWeights: Record<string, number> | null) {
@@ -912,6 +947,24 @@ async function runInterviewPrepReady(payload: Record<string, unknown>) {
     throw new Error("Missing job_seeker_id or job_post_id for interview prep.");
   }
 
+  let interviewMeta: { accountManagerId: string | null; scheduledAt: string | null } | null = null;
+  if (interviewId) {
+    const { data: interview } = await supabaseServer
+      .from("interviews")
+      .select("account_manager_id, scheduled_at")
+      .eq("id", interviewId)
+      .limit(1)
+      .maybeSingle();
+
+    if (interview) {
+      interviewMeta = {
+        accountManagerId:
+          (interview.account_manager_id as string | undefined) ?? null,
+        scheduledAt: (interview.scheduled_at as string | undefined) ?? null,
+      };
+    }
+  }
+
   const { data: jobPost } = await supabaseServer
     .from("job_posts")
     .select("id, title, company, description_text, location")
@@ -924,7 +977,7 @@ async function runInterviewPrepReady(payload: Record<string, unknown>) {
 
   const { data: jobSeeker } = await supabaseServer
     .from("job_seekers")
-    .select("id, full_name, email, seniority, work_type, skills")
+    .select("id, full_name, email, phone, seniority, work_type, skills")
     .eq("id", jobSeekerId)
     .single();
 
@@ -996,6 +1049,86 @@ async function runInterviewPrepReady(payload: Record<string, unknown>) {
       job_post_id: jobPostId,
       interview_id: interviewId ?? undefined,
     });
+  }
+
+  const seekerPhone = normalizePhone((jobSeeker.phone as string | undefined) ?? "");
+  if (!seekerPhone) {
+    return;
+  }
+
+  try {
+    const playbook = await loadActivePlaybook("interview_prep");
+    if (!playbook) {
+      return;
+    }
+
+    const task =
+      String(playbook.assistant_goal ?? "").trim() ||
+      String(playbook.system_prompt ?? "").trim();
+    if (!task) {
+      return;
+    }
+
+    const accountManagerId =
+      interviewMeta?.accountManagerId ?? (await resolveAssignedAccountManagerId(jobSeekerId));
+
+    const requestPayload: Record<string, unknown> = {
+      dispatch_source: "interview_prep_ready",
+      interview_id: interviewId ?? null,
+      job_post_id: jobPostId,
+    };
+
+    const { data: voiceCall } = await supabaseServer
+      .from("voice_calls")
+      .insert({
+        provider: "bland",
+        direction: "outbound",
+        call_type: "interview_prep",
+        status: "queued",
+        job_seeker_id: jobSeekerId,
+        account_manager_id: accountManagerId,
+        playbook_id: playbook.id,
+        from_number: process.env.BLAND_DEFAULT_FROM_NUMBER ?? null,
+        to_number: seekerPhone,
+        contact_name: (jobSeeker.full_name as string | undefined) ?? null,
+        task,
+        max_retries: playbook.max_retry_attempts ?? 2,
+        request_payload: requestPayload,
+        response_payload: {},
+      })
+      .select("id")
+      .single();
+
+    const voiceCallId = (voiceCall?.id as string | undefined) ?? null;
+    if (!voiceCallId) {
+      return;
+    }
+
+    let runAt: Date | undefined;
+    if (interviewMeta?.scheduledAt) {
+      const scheduledAt = new Date(interviewMeta.scheduledAt);
+      if (!Number.isNaN(scheduledAt.getTime())) {
+        const target = new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000);
+        const minDispatchTime = new Date(Date.now() + 2 * 60 * 1000);
+        runAt = target > minDispatchTime ? target : minDispatchTime;
+      }
+    }
+
+    await enqueueBackgroundJob(
+      "VOICE_FOLLOWUP",
+      {
+        voice_call_id: voiceCallId,
+        job_seeker_id: jobSeekerId,
+        interview_id: interviewId ?? undefined,
+        call_type: "interview_prep",
+      },
+      {
+        runAt,
+        maxAttempts: 1,
+      }
+    );
+  } catch (error) {
+    console.error("Failed to queue interview prep voice call:", error);
   }
 }
 
@@ -1341,6 +1474,287 @@ async function runMatchNetworkContacts(payload: Record<string, unknown>) {
   await findMatchesForContact(contactId);
 }
 
+type VoicePlaybookJoin = {
+  id: string;
+  pathway_id: string | null;
+  system_prompt: string;
+  assistant_goal: string | null;
+  max_retry_attempts: number | null;
+  retry_backoff_minutes: number | null;
+  metadata: unknown;
+  escalation_rules: unknown;
+};
+
+type VoiceCallRow = {
+  id: string;
+  status: string;
+  direction: string;
+  call_type: string;
+  job_seeker_id: string | null;
+  lead_submission_id: string | null;
+  account_manager_id: string | null;
+  to_number: string;
+  from_number: string | null;
+  retry_count: number | null;
+  max_retries: number | null;
+  task: string | null;
+  request_payload: unknown;
+  provider_call_id: string | null;
+  voice_playbooks: VoicePlaybookJoin | VoicePlaybookJoin[] | null;
+};
+
+function resolveAppBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured) {
+    return configured.endsWith("/") ? configured.slice(0, -1) : configured;
+  }
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (!vercelUrl) return null;
+  const withProtocol = vercelUrl.startsWith("http")
+    ? vercelUrl
+    : `https://${vercelUrl}`;
+  return withProtocol.endsWith("/") ? withProtocol.slice(0, -1) : withProtocol;
+}
+
+function resolveVoiceWebhookUrl() {
+  const base = resolveAppBaseUrl();
+  if (!base) return null;
+  return `${base}/api/voice/webhook/bland`;
+}
+
+function asRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function normalizePlaybook(value: VoiceCallRow["voice_playbooks"]) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+async function scheduleVoiceRetry(voiceCallId: string, runAt: Date) {
+  await enqueueBackgroundJob(
+    "VOICE_RETRY",
+    { voice_call_id: voiceCallId },
+    { runAt, maxAttempts: 1 }
+  );
+}
+
+async function runVoiceDispatch(payload: Record<string, unknown>) {
+  const voiceCallId = getPayloadString(payload, "voice_call_id");
+  if (!voiceCallId) {
+    throw new Error("Missing voice_call_id.");
+  }
+
+  const { data: row, error } = await supabaseServer
+    .from("voice_calls")
+    .select(`
+      id,
+      status,
+      direction,
+      call_type,
+      job_seeker_id,
+      lead_submission_id,
+      account_manager_id,
+      to_number,
+      from_number,
+      retry_count,
+      max_retries,
+      task,
+      request_payload,
+      provider_call_id,
+      voice_playbooks (
+        id,
+        pathway_id,
+        system_prompt,
+        assistant_goal,
+        max_retry_attempts,
+        retry_backoff_minutes,
+        metadata,
+        escalation_rules
+      )
+    `)
+    .eq("id", voiceCallId)
+    .single();
+
+  if (error || !row) {
+    throw new Error("Voice call row not found.");
+  }
+
+  const voiceCall = row as unknown as VoiceCallRow;
+  const playbook = normalizePlaybook(voiceCall.voice_playbooks);
+  const callType = normalizeVoiceCallType(voiceCall.call_type);
+
+  if (!callType) {
+    throw new Error(`Invalid voice call type: ${voiceCall.call_type}`);
+  }
+
+  if (voiceCall.direction !== "outbound") {
+    return;
+  }
+
+  if (!BLAND_OUTBOUND_ENABLED) {
+    const nowIso = new Date().toISOString();
+    await supabaseServer
+      .from("voice_calls")
+      .update({
+        status: "failed",
+        response_payload: {
+          error: "BLAND outbound calling is disabled. Set BLAND_OUTBOUND_ENABLED=true.",
+          failed_at: nowIso,
+        },
+        updated_at: nowIso,
+      })
+      .eq("id", voiceCall.id);
+
+    if (voiceCall.job_seeker_id && voiceCall.account_manager_id) {
+      await appendVoiceConversationNote({
+        jobSeekerId: voiceCall.job_seeker_id,
+        accountManagerId: voiceCall.account_manager_id,
+        callType: callType as VoiceCallType,
+        status: "failed",
+        summary: "Voice call not sent because BLAND_OUTBOUND_ENABLED is false.",
+      });
+    }
+    return;
+  }
+
+  if (callType === "upsell_retention" && (await isUpsellOptedOut(voiceCall.to_number))) {
+    await supabaseServer
+      .from("voice_calls")
+      .update({
+        status: "opted_out",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", voiceCall.id);
+    return;
+  }
+
+  const requestPayload = asRecord(voiceCall.request_payload);
+  const nowIso = new Date().toISOString();
+  const task =
+    String(voiceCall.task ?? "").trim() ||
+    String(playbook?.assistant_goal ?? "").trim() ||
+    String(playbook?.system_prompt ?? "").trim();
+
+  if (!task) {
+    throw new Error("Voice task/prompt is required before dispatch.");
+  }
+
+  try {
+    const result = await createBlandOutboundCall({
+      toNumber: voiceCall.to_number,
+      fromNumber: voiceCall.from_number,
+      task,
+      pathwayId: playbook?.pathway_id ?? null,
+      webhookUrl: resolveVoiceWebhookUrl(),
+      requestData: {
+        voice_call_id: voiceCall.id,
+        call_type: callType,
+        job_seeker_id: voiceCall.job_seeker_id,
+        lead_submission_id: voiceCall.lead_submission_id,
+        account_manager_id: voiceCall.account_manager_id,
+        ...(requestPayload.request_data && typeof requestPayload.request_data === "object"
+          ? (requestPayload.request_data as Record<string, unknown>)
+          : {}),
+      },
+      metadata: {
+        voice_call_id: voiceCall.id,
+        call_type: callType,
+      },
+    });
+
+    await supabaseServer
+      .from("voice_calls")
+      .update({
+        status: "initiated",
+        provider_call_id: result.providerCallId ?? voiceCall.provider_call_id,
+        request_payload: {
+          ...requestPayload,
+          dispatch_started_at: nowIso,
+        },
+        response_payload: result.raw,
+        call_started_at: nowIso,
+        next_retry_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", voiceCall.id);
+
+    if (voiceCall.job_seeker_id && voiceCall.account_manager_id) {
+      await appendVoiceConversationNote({
+        jobSeekerId: voiceCall.job_seeker_id,
+        accountManagerId: voiceCall.account_manager_id,
+        callType: callType as VoiceCallType,
+        status: "initiated",
+        summary: "Automated voice call initiated.",
+        providerCallId: result.providerCallId,
+      });
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Unknown voice dispatch error.";
+    const currentRetry = voiceCall.retry_count ?? 0;
+    const maxRetries = Math.max(
+      voiceCall.max_retries ?? playbook?.max_retry_attempts ?? 3,
+      0
+    );
+    const nextRetryCount = currentRetry + 1;
+
+    if (nextRetryCount <= maxRetries) {
+      const backoffMinutes = Math.max(playbook?.retry_backoff_minutes ?? 120, 1);
+      const retryAt = new Date(Date.now() + backoffMinutes * 60 * 1000);
+      await supabaseServer
+        .from("voice_calls")
+        .update({
+          status: "queued",
+          retry_count: nextRetryCount,
+          next_retry_at: retryAt.toISOString(),
+          response_payload: {
+            error: detail,
+            failed_at: nowIso,
+            retry_count: nextRetryCount,
+          },
+          updated_at: nowIso,
+        })
+        .eq("id", voiceCall.id);
+      await scheduleVoiceRetry(voiceCall.id, retryAt);
+      return;
+    }
+
+    await supabaseServer
+      .from("voice_calls")
+      .update({
+        status: "failed",
+        retry_count: nextRetryCount,
+        next_retry_at: null,
+        response_payload: {
+          error: detail,
+          failed_at: nowIso,
+          retry_count: nextRetryCount,
+        },
+        updated_at: nowIso,
+      })
+      .eq("id", voiceCall.id);
+
+    if (voiceCall.job_seeker_id && voiceCall.account_manager_id) {
+      await appendVoiceConversationNote({
+        jobSeekerId: voiceCall.job_seeker_id,
+        accountManagerId: voiceCall.account_manager_id,
+        callType: callType as VoiceCallType,
+        status: "failed",
+        summary: `Voice call failed after retries: ${detail}`,
+      });
+    }
+  }
+}
+
+async function runVoiceRetry(payload: Record<string, unknown>) {
+  await runVoiceDispatch(payload);
+}
+
+async function runVoiceFollowup(payload: Record<string, unknown>) {
+  await runVoiceDispatch(payload);
+}
+
 async function handleJob(job: BackgroundJobRow) {
   if (!job.payload || typeof job.payload !== "object" || Array.isArray(job.payload)) {
     throw new Error("Invalid payload.");
@@ -1368,6 +1782,15 @@ async function handleJob(job: BackgroundJobRow) {
       return;
     case "MATCH_NETWORK_CONTACTS":
       await runMatchNetworkContacts(job.payload);
+      return;
+    case "VOICE_DISPATCH":
+      await runVoiceDispatch(job.payload);
+      return;
+    case "VOICE_RETRY":
+      await runVoiceRetry(job.payload);
+      return;
+    case "VOICE_FOLLOWUP":
+      await runVoiceFollowup(job.payload);
       return;
     default:
       throw new Error(`Unknown job type: ${job.type}`);

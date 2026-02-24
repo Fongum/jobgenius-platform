@@ -161,6 +161,12 @@ export default async function AdminPage() {
           >
             Report Prompt Settings
           </Link>
+          <Link
+            href="/dashboard/admin/voice"
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Voice Automation
+          </Link>
         </div>
       </div>
 

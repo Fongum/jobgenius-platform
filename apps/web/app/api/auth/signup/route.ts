@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { signUp, signIn } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/auth";
 import type { UserType } from "@/lib/auth";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
@@ -20,6 +21,18 @@ type SignUpPayload = {
   userType?: UserType;
   inviteToken?: string;
 };
+
+function isLeadIntakeMissingError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: string; message?: string; details?: string };
+  const code = String(row.code ?? "");
+  const text = `${row.message ?? ""} ${row.details ?? ""}`.toLowerCase();
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    text.includes("lead_intake_submissions")
+  );
+}
 
 /**
  * POST /api/auth/signup
@@ -99,6 +112,47 @@ export async function POST(request: Request) {
       httpOnly: false,
       maxAge: 60 * 60 * 24 * 7,
     });
+  }
+
+  if (result.user?.userType === "job_seeker") {
+    const nowIso = new Date().toISOString();
+    try {
+      const { data: existingLead, error: existingLeadError } = await supabaseAdmin
+        .from("lead_intake_submissions")
+        .select("id")
+        .ilike("email", email.toLowerCase())
+        .limit(1)
+        .maybeSingle();
+
+      if (existingLeadError && !isLeadIntakeMissingError(existingLeadError)) {
+        console.error("Lead intake lookup failed:", existingLeadError);
+      } else if (!existingLead?.id) {
+        const { error: insertLeadError } = await supabaseAdmin
+          .from("lead_intake_submissions")
+          .insert({
+            source: "signup",
+            status: "new",
+            full_name: name?.trim() || null,
+            email: email.toLowerCase(),
+            phone: null,
+            consent_voice: false,
+            consent_marketing: false,
+            metadata: {
+              source_route: "/api/auth/signup",
+            },
+            created_at: nowIso,
+            updated_at: nowIso,
+          });
+
+        if (insertLeadError && !isLeadIntakeMissingError(insertLeadError)) {
+          console.error("Lead intake insert failed:", insertLeadError);
+        }
+      }
+    } catch (err) {
+      if (!isLeadIntakeMissingError(err)) {
+        console.error("Lead intake sync on signup failed:", err);
+      }
+    }
   }
 
   return Response.json({

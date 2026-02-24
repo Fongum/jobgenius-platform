@@ -10,6 +10,8 @@ const PUBLIC_API_EXACT = new Set([
   "/api/interview-confirm",
   "/api/portal/gmail/callback",
   "/api/outreach/webhook/resend",
+  "/api/marketing/lead",
+  "/api/voice/webhook/bland",
 ]);
 
 const PUBLIC_API_PREFIXES = ["/api/outreach/track/open/"];

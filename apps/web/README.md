@@ -39,3 +39,32 @@ curl -X POST http://localhost:3000/api/seed/reset
   - `EXTENSION_AUTH_RATE_LIMIT_MAX` (default `8`)
   - `EXTENSION_AUTH_RATE_LIMIT_WINDOW_SEC` (default `900`)
   - `EXTENSION_AUTH_RATE_LIMIT_BLOCK_SEC` (default `900`)
+
+## Voice automation (Bland)
+- Required env:
+  - `BLAND_API_KEY`
+  - `BLAND_BASE_URL` (default `https://api.bland.ai`)
+  - `BLAND_WEBHOOK_SECRET` (recommended)
+  - `BLAND_DEFAULT_FROM_NUMBER`
+  - `BLAND_OUTBOUND_ENABLED=true` to place real outbound calls
+  - `OPS_API_KEY` for ops endpoints
+- Webhook endpoint:
+  - `POST /api/voice/webhook/bland`
+- Admin UI:
+  - `GET /dashboard/admin/voice` (playbooks, lead import, manual dispatch)
+- Ops dispatch endpoint:
+  - `POST /api/ops/voice/dispatch`
+  - `GET /api/ops/voice/dispatch?call_type=lead_qualification&limit=25`
+  - `GET /api/ops/voice/dispatch?call_type=onboarding&limit=25`
+  - `GET /api/ops/voice/dispatch?call_type=interview_prep&limit=25&window_hours=24`
+- Supported call types:
+  - `lead_qualification`
+  - `onboarding`
+  - `follow_up`
+  - `discovery`
+  - `check_in`
+  - `interview_prep`
+  - `upsell_retention`
+- Lead capture/import:
+  - `POST /api/marketing/lead` (public form submission with voice consent)
+  - `POST /api/admin/leads/import` (admin CSV/JSON import pipeline)

@@ -8,7 +8,10 @@ export type BackgroundJobType =
   | "AUTO_OUTREACH"
   | "SCAN_INBOX"
   | "INTERVIEW_PREP_READY"
-  | "MATCH_NETWORK_CONTACTS";
+  | "MATCH_NETWORK_CONTACTS"
+  | "VOICE_DISPATCH"
+  | "VOICE_RETRY"
+  | "VOICE_FOLLOWUP";
 
 export type BackgroundJobPayload = {
   job_post_id?: string;
@@ -19,6 +22,9 @@ export type BackgroundJobPayload = {
   queue_id?: string;
   contact_ids?: string[];
   network_contact_id?: string;
+  voice_call_id?: string;
+  lead_submission_id?: string;
+  call_type?: string;
 };
 
 type EnqueueOptions = {
