@@ -24,7 +24,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/alerts/run"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/alerts/run"
 
   background-jobs:
     name: Background Jobs
@@ -36,7 +36,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run?limit=10"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run?limit=10"
 
   queue-sweeper:
     name: Queue Sweeper
@@ -48,8 +48,8 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/queue/sweep"
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run?limit=10"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/queue/sweep"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run?limit=10"
 
   outreach-scheduler:
     name: Outreach Scheduler
@@ -61,7 +61,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/outreach/scheduler/run"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/outreach/scheduler/run"
 
   retention:
     name: Retention Cleanup
@@ -73,7 +73,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/retention/run"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/retention/run"
 
   gmail-inbox-scan:
     name: Gmail Inbox Scan
@@ -85,7 +85,7 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/gmail/scan"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/gmail/scan"
 
   intelligence-feedback:
     name: Intelligence Feedback Loop
@@ -97,4 +97,4 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/intelligence/run"
+          curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/intelligence/run"

@@ -12,7 +12,17 @@ import { logLine } from "./logger.js";
 import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
 
 const API_BASE_URL = process.env.JOBGENIUS_API_BASE_URL;
-const RUNNER_ID = process.env.RUNNER_ID ?? "cloud-runner";
+const RUNNER_ID = (() => {
+  const configured = String(process.env.RUNNER_ID ?? "").trim();
+  if (configured) {
+    return configured;
+  }
+  const hostname = String(process.env.HOSTNAME ?? "").trim();
+  if (hostname) {
+    return hostname;
+  }
+  return "cloud-runner";
+})();
 const RUNNER_AUTH_TOKEN = process.env.RUNNER_AUTH_TOKEN ?? "";
 const RUNNER_DEFAULT_EMAIL = process.env.RUNNER_DEFAULT_EMAIL ?? "";
 const POLL_INTERVAL_MS = Number(process.env.RUNNER_POLL_INTERVAL_MS ?? 60000);
@@ -777,6 +787,7 @@ async function start() {
     level: "INFO",
     step: "BOOT",
     msg: `Runner started (interval=${POLL_INTERVAL_MS}ms, concurrency=${CONCURRENCY}, dryRun=${RUNNER_DRY_RUN}).`,
+    runner_id: RUNNER_ID,
   });
   if (DISCOVERY_AGENT_ENABLED) {
     if (!OPS_API_KEY) {
