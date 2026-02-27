@@ -1,4 +1,5 @@
 import {
+  clickElementHandle,
   extractRequiredFields,
   fillKnownFields,
   findButtonByText,
@@ -20,7 +21,10 @@ export const greenhouseAdapter = {
   async clickApplyEntry(page) {
     const applyButton = await findButtonByText(page, ["apply", "apply now"]);
     if (applyButton) {
-      await applyButton.click();
+      const clicked = await clickElementHandle(applyButton, 10000);
+      if (!clicked) {
+        return { ok: false, reason: "APPLY_BUTTON_NOT_INTERACTABLE" };
+      }
       await page.waitForTimeout(1200);
     }
     return { ok: true };
@@ -40,7 +44,8 @@ export const greenhouseAdapter = {
     ]);
     if (!submitButton) return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
     if (ctx.dryRun) return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };
-    await submitButton.click();
+    const clicked = await clickElementHandle(submitButton, 10000);
+    if (!clicked) return { ok: false, reason: "SUBMIT_BUTTON_NOT_INTERACTABLE" };
     await page.waitForTimeout(1500);
     return { ok: true };
   },

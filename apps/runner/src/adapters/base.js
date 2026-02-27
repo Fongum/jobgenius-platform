@@ -172,7 +172,49 @@ export async function hasEmailOtp(page) {
   return Boolean(await page.$("input[autocomplete='one-time-code'], input[name*='code']"));
 }
 
-export async function findButtonByText(page, texts) {
+async function readControlState(handle) {
+  return handle
+    .evaluate((el) => {
+      if (!(el instanceof HTMLElement)) {
+        return { label: "", disabled: true, visible: false };
+      }
+
+      const value =
+        "value" in el && typeof (el).value === "string" ? (el).value : "";
+      const label = (
+        el.textContent ||
+        value ||
+        el.getAttribute("aria-label") ||
+        el.getAttribute("title") ||
+        ""
+      )
+        .toLowerCase()
+        .trim();
+
+      const style = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      const hiddenByStyle =
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        Number.parseFloat(style.opacity || "1") === 0;
+
+      const visible =
+        !hiddenByStyle &&
+        !el.hasAttribute("hidden") &&
+        (el.getAttribute("aria-hidden") ?? "").toLowerCase() !== "true" &&
+        rect.width > 0 &&
+        rect.height > 0;
+
+      const disabled =
+        el.hasAttribute("disabled") ||
+        (el.getAttribute("aria-disabled") ?? "").toLowerCase() === "true";
+
+      return { label, disabled, visible };
+    })
+    .catch(() => ({ label: "", disabled: true, visible: false }));
+}
+
+async function findControlByText(page, texts, selector) {
   const targets = (texts ?? [])
     .map((text) => (text ?? "").toString().trim().toLowerCase())
     .filter(Boolean);
@@ -180,43 +222,60 @@ export async function findButtonByText(page, texts) {
     return null;
   }
 
-  const buttons = await page.$$(
-    "button, input[type='submit'], input[type='button'], [role='button']"
-  );
-  for (const button of buttons) {
-    const disabled = await button
-      .evaluate((el) => {
-        if (!(el instanceof HTMLElement)) {
-          return false;
-        }
-        if (el.hasAttribute("disabled")) {
-          return true;
-        }
-        return (el.getAttribute("aria-disabled") ?? "").toLowerCase() === "true";
-      })
-      .catch(() => false);
-
-    if (disabled) {
+  const controls = await page.$$(selector);
+  for (const control of controls) {
+    const state = await readControlState(control);
+    if (state.disabled || !state.visible || !state.label) {
       continue;
     }
 
-    const label = (
-      (await button.textContent()) ??
-      (await button.getAttribute("value")) ??
-      (await button.getAttribute("aria-label")) ??
-      (await button.getAttribute("title")) ??
-      ""
-    )
-      .toLowerCase()
-      .trim();
-
-    if (!label) {
-      continue;
-    }
-
-    if (targets.some((text) => label.includes(text))) {
-      return button;
+    if (targets.some((text) => state.label.includes(text))) {
+      return control;
     }
   }
   return null;
+}
+
+export async function findButtonByText(page, texts) {
+  return findControlByText(
+    page,
+    texts,
+    "button, input[type='submit'], input[type='button'], [role='button']"
+  );
+}
+
+export async function findClickableByText(page, texts) {
+  return findControlByText(
+    page,
+    texts,
+    "button, input[type='submit'], input[type='button'], [role='button'], a[href], a[role='button']"
+  );
+}
+
+export async function clickElementHandle(handle, timeoutMs = 12000) {
+  if (!handle) {
+    return false;
+  }
+
+  try {
+    await handle.scrollIntoViewIfNeeded();
+  } catch {
+    // Best effort.
+  }
+
+  try {
+    await handle.click({ timeout: timeoutMs });
+    return true;
+  } catch {
+    try {
+      await handle.evaluate((el) => {
+        if (el instanceof HTMLElement) {
+          el.click();
+        }
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

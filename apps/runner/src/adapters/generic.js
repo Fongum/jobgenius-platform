@@ -1,6 +1,8 @@
 import {
+  clickElementHandle,
   extractRequiredFields,
   fillKnownFields,
+  findClickableByText,
   findButtonByText,
 } from "./base.js";
 
@@ -32,11 +34,24 @@ export const genericAdapter = {
     return true;
   },
   async clickApplyEntry(page) {
-    const applyButton = await findButtonByText(page, APPLY_ENTRY_BUTTONS);
-    if (applyButton) {
-      await applyButton.click();
-      await page.waitForTimeout(1200);
+    const applyButton = await findClickableByText(page, APPLY_ENTRY_BUTTONS);
+    if (!applyButton) {
+      const alreadyInApplication = Boolean(
+        await page.$(
+          "form input, form textarea, form select, form input[type='file'], input[required], textarea[required], select[required]"
+        )
+      );
+      if (alreadyInApplication) {
+        return { ok: true };
+      }
+      return { ok: false, reason: "APPLY_BUTTON_MISSING" };
     }
+
+    const clicked = await clickElementHandle(applyButton, 10000);
+    if (!clicked) {
+      return { ok: false, reason: "APPLY_BUTTON_NOT_INTERACTABLE" };
+    }
+    await page.waitForTimeout(1200);
     return { ok: true };
   },
   async fillKnownFields(page, ctx) {
@@ -51,7 +66,8 @@ export const genericAdapter = {
     const submitButton = await findButtonByText(page, [...hints, ...SUBMIT_BUTTONS]);
     if (!submitButton) return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
     if (ctx.dryRun) return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };
-    await submitButton.click();
+    const clicked = await clickElementHandle(submitButton, 10000);
+    if (!clicked) return { ok: false, reason: "SUBMIT_BUTTON_NOT_INTERACTABLE" };
     await page.waitForTimeout(1400);
     return { ok: true };
   },
@@ -67,4 +83,3 @@ export const genericAdapter = {
     );
   },
 };
-
