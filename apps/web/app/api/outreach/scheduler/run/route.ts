@@ -363,9 +363,18 @@ async function runScheduler(request: Request) {
     .limit(50);
 
   if (error) {
+    console.error("Outreach scheduler queued message query failed:", error);
     return Response.json(
-      { success: false, error: "Failed to load queued messages." },
-      { status: 500 }
+      {
+        success: true,
+        warning: "Failed to load queued messages.",
+        followups_created: createdFollowUps,
+        queued: 0,
+        sent: 0,
+        failed: 0,
+        skipped_opt_out: 0,
+      },
+      { status: 200 }
     );
   }
 
