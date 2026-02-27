@@ -36,7 +36,20 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run?limit=10"
+
+  queue-sweeper:
+    name: Queue Sweeper
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sweep orphaned queue items and kick background worker
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/queue/sweep"
+          curl -fsS -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/background/run?limit=10"
 
   outreach-scheduler:
     name: Outreach Scheduler

@@ -84,7 +84,8 @@ Workflow:
 
 Schedules:
 - Every 5 minutes: `/api/ops/alerts/run`
-- Every 5 minutes: `/api/background/run`
+- Every 5 minutes: `/api/background/run?limit=10`
+- Every 5 minutes: `/api/ops/queue/sweep` (then kicks `/api/background/run?limit=10`)
 - Every 15 minutes: `/api/outreach/scheduler/run`
 - Daily: `/api/ops/retention/run`
 

@@ -315,6 +315,14 @@ function computeBackoffMs() {
   return delay + jitter;
 }
 
+function summarizeErrorMessage(error, fallback = "Runner error.") {
+  const raw =
+    typeof error?.message === "string" && error.message.trim()
+      ? error.message.trim()
+      : fallback;
+  return raw.length > 300 ? `${raw.slice(0, 297)}...` : raw;
+}
+
 async function executeRun(run) {
   activeRuns.add(run.run_id);
   metrics.claimed += 1;
@@ -610,12 +618,63 @@ async function executeRun(run) {
       );
     }
   } catch (error) {
+    const errorMessage = summarizeErrorMessage(error);
     logLine({
       level: "ERROR",
       runId: run.run_id,
       step: "RUN",
-      msg: error?.message ?? "Runner error",
+      msg: errorMessage,
     });
+    if (!watchdogTriggered) {
+      try {
+        await retryRun(
+          API_BASE_URL,
+          {
+            run_id: run.run_id,
+            note: `Unhandled runner error: ${errorMessage}`,
+          },
+          RUNNER_AUTH_TOKEN,
+          run.claim_token,
+          RUNNER_ID
+        );
+        metrics.retried += 1;
+      } catch (retryError) {
+        logLine({
+          level: "ERROR",
+          runId: run.run_id,
+          step: "RETRY",
+          msg: summarizeErrorMessage(retryError, "Retry request failed."),
+        });
+        try {
+          recordPause("RUNNER_ERROR");
+          await pauseRun(
+            API_BASE_URL,
+            {
+              run_id: run.run_id,
+              reason: "RUNNER_ERROR",
+              message: `Unhandled runner error: ${errorMessage}`,
+              step:
+                runProgress.get(run.run_id)?.lastStepName ??
+                run.current_step ??
+                "RUN",
+            },
+            RUNNER_AUTH_TOKEN,
+            run.claim_token,
+            RUNNER_ID
+          );
+        } catch (pauseError) {
+          logLine({
+            level: "ERROR",
+            runId: run.run_id,
+            step: "PAUSE",
+            msg: summarizeErrorMessage(
+              pauseError,
+              "Failed to pause run after runner error."
+            ),
+          });
+        }
+      }
+    }
   } finally {
     if (watchdogInterval) {
       clearInterval(watchdogInterval);
@@ -780,13 +839,30 @@ async function start() {
           breaker_state: snapshotBreakerState(),
         },
       }),
-    }).catch((error) => {
-      logLine({
-        level: "WARN",
-        step: "HEARTBEAT",
-        msg: error?.message ?? "Heartbeat failed.",
+    })
+      .then(async (response) => {
+        if (response.ok) {
+          return;
+        }
+        let detail = "";
+        try {
+          detail = (await response.text()) ?? "";
+        } catch {
+          detail = "";
+        }
+        logLine({
+          level: "WARN",
+          step: "HEARTBEAT",
+          msg: `Heartbeat failed (${response.status})${detail ? `: ${detail.slice(0, 160)}` : "."}`,
+        });
+      })
+      .catch((error) => {
+        logLine({
+          level: "WARN",
+          step: "HEARTBEAT",
+          msg: error?.message ?? "Heartbeat failed.",
+        });
       });
-    });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
