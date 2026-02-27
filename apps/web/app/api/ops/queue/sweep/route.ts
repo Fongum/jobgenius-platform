@@ -94,7 +94,7 @@ async function runSweep(request: Request) {
   }
 
   // 5. Resolve ATS types so we can filter for allowed platforms.
-  const jobPostIds = [...new Set(orphans.map((q) => q.job_post_id))];
+  const jobPostIds = Array.from(new Set(orphans.map((q) => q.job_post_id)));
   const { data: jobPosts } = await supabaseServer
     .from("job_posts")
     .select("id, source, url")
