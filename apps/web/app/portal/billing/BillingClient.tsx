@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import PaymentRequestModal from "./PaymentRequestModal";
 import ScreenshotUploadModal from "./ScreenshotUploadModal";
 import ReportOfferModal from "./ReportOfferModal";
+import InstallmentPlanStep from "../onboarding/steps/InstallmentPlanStep";
 
 interface Contract {
   id: string;
@@ -159,6 +160,16 @@ export default function BillingClient({
     );
   }
 
+  const normalizedPlanType =
+    contract.plan_type === "premium" || contract.plan_type === "essentials"
+      ? contract.plan_type
+      : null;
+  const canCreatePaymentPlan =
+    Boolean(normalizedPlanType) &&
+    installments.length === 0 &&
+    (registrationPayment == null ||
+      !["complete", "paid"].includes(registrationPayment.status));
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -260,6 +271,15 @@ export default function BillingClient({
       </div>
 
       {/* Registration Payment & Installments */}
+      {canCreatePaymentPlan && normalizedPlanType && (
+        <InstallmentPlanStep
+          planType={normalizedPlanType}
+          onContinue={refresh}
+          onBack={() => {}}
+          showBackButton={false}
+        />
+      )}
+
       {registrationPayment && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">

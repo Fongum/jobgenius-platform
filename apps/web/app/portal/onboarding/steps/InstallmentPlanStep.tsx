@@ -30,6 +30,7 @@ interface InstallmentPlanStepProps {
   planType: "essentials" | "premium";
   onContinue: () => void;
   onBack: () => void;
+  showBackButton?: boolean;
 }
 
 const DEFAULT_MAX_INSTALLMENTS = 3;
@@ -102,6 +103,7 @@ export default function InstallmentPlanStep({
   planType,
   onContinue,
   onBack,
+  showBackButton = true,
 }: InstallmentPlanStepProps) {
   const totalFee = planType === "premium" ? 1000 : 500;
   const today = useMemo(() => startOfToday(), []);
@@ -731,14 +733,16 @@ export default function InstallmentPlanStep({
       )}
 
       <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={saving}
-          className="px-4 py-2 text-sm font-medium text-gray-800 bg-white border border-gray-400 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-        >
-          Back
-        </button>
+        {showBackButton && (
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-medium text-gray-800 bg-white border border-gray-400 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Back
+          </button>
+        )}
         <button
           type="button"
           onClick={handleConfirm}

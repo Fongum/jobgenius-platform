@@ -107,7 +107,7 @@ export async function POST(request: Request) {
 
   const { data: existingPayment, error: existingPaymentError } = await supabaseAdmin
     .from("registration_payments")
-    .select("id")
+    .select("id, amount_paid, work_started")
     .eq("job_seeker_id", auth.user.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -118,10 +118,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create payment record." }, { status: 500 });
   }
 
+  const existingAmountPaid = Number(existingPayment?.amount_paid ?? 0);
+  const preservedAmountPaid = Number.isFinite(existingAmountPaid)
+    ? existingAmountPaid
+    : 0;
+  const nextStatus =
+    preservedAmountPaid >= Number(contract.registration_fee)
+      ? "complete"
+      : preservedAmountPaid > 0
+      ? "partial"
+      : "pending";
+
   const paymentMutation = existingPayment
     ? supabaseAdmin
         .from("registration_payments")
-        .update(paymentPayload)
+        .update({
+          ...paymentPayload,
+          amount_paid: preservedAmountPaid,
+          work_started: Boolean(existingPayment.work_started),
+          status: nextStatus,
+        })
         .eq("id", existingPayment.id)
         .select()
         .single()
