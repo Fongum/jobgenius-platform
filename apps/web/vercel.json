@@ -1,1 +1,8 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/refresh-jobs",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
