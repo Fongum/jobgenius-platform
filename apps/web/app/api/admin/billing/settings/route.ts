@@ -38,7 +38,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Invalid payment method." }, { status: 400 });
   }
 
-  const updates: Record<string, unknown> = { updated_by: auth.user.id };
+  const updates: Record<string, unknown> = {};
   if (displayName !== undefined) updates.display_name = displayName;
   if (details !== undefined) updates.details = details;
   if (isActive !== undefined) updates.is_active = isActive;
