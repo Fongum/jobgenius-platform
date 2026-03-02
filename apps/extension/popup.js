@@ -16,6 +16,8 @@ let amInfo = null;
 let activeSeekerId = null;
 let includeAppliedJobs = false;
 let apiBaseUrl = DEFAULT_API_BASE_URL;
+let cachedSeekers = [];      // for autofill modal profile display
+let pendingApplyJobId = null; // job awaiting modal confirmation
 
 // DOM Elements
 const els = {
@@ -262,6 +264,7 @@ async function loadSeekers() {
 
     const data = await response.json();
     const seekers = data.seekers || [];
+    cachedSeekers = seekers; // cache for autofill modal
 
     els.seekerSelect.innerHTML = '<option value="">-- Select Job Seeker --</option>';
     seekers.forEach((s) => {
@@ -406,11 +409,13 @@ async function loadMatchedJobs() {
       } else if (job.queue_status === "RUNNING") {
         actionHtml = '<span class="queue-badge" style="background:#dbeafe;color:#1e40af">Running</span>';
       } else if (job.queue_status === "QUEUED" || job.queue_status === "READY" || job.queue_status === "RETRYING") {
-        actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">${job.queue_status}</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
+        const eTitle = encodeURIComponent(job.title || ""); const eCo = encodeURIComponent(job.company || ""); const eLoc = encodeURIComponent(job.location || "");
+        actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">${job.queue_status}</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       } else if (job.queue_status) {
         actionHtml = `<span class="queue-badge">${job.queue_status}</span>`;
       } else {
-        actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
+        const eTitle = encodeURIComponent(job.title || ""); const eCo = encodeURIComponent(job.company || ""); const eLoc = encodeURIComponent(job.location || "");
+        actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       }
 
       const attentionReason = job.needs_attention_reason
@@ -591,9 +596,10 @@ async function loadMyJobs() {
           ? `<div style="font-size:9px;color:#92400e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${sanitizeText(item.last_error)}">${sanitizeText(item.last_error)}</div>`
           : "";
 
-        const encodedUrl = encodeURIComponent(item.job?.url || "");
-        const encodedCompany = encodeURIComponent(item.job?.company || "");
-        const encodedTitle = encodeURIComponent(item.job?.title || "");
+        const encodedUrl     = encodeURIComponent(item.job?.url      || "");
+        const encodedCompany = encodeURIComponent(item.job?.company  || "");
+        const encodedTitle   = encodeURIComponent(item.job?.title    || "");
+        const encodedLoc     = encodeURIComponent(item.job?.location || "");
 
         return `
           <div class="job-card ${item.needs_attention ? "score-medium" : "score-low"}">
@@ -609,7 +615,7 @@ async function loadMyJobs() {
             ${errorHtml}
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">
               <button class="btn btn-secondary btn-sm" onclick="openJobLink('${encodedUrl}')" style="width:auto;padding:3px 8px;font-size:9px">Open</button>
-              ${canApply ? `<button class="btn btn-apply btn-sm" onclick="applyJob('${item.job?.id}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button>` : ""}
+              ${canApply ? `<button class="btn btn-apply btn-sm" onclick="applyJob('${item.job?.id}','${encodedTitle}','${encodedCompany}','${encodedLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button>` : ""}
               ${canResume ? `<button class="btn btn-secondary btn-sm" onclick="resumeJob('${item.run_id}', '${encodedUrl}')" style="width:auto;padding:3px 8px;font-size:9px">Resume</button>` : ""}
               ${canMarkApplied ? `<button class="btn btn-secondary btn-sm" onclick="markJobApplied('${item.run_id}')" style="width:auto;padding:3px 8px;font-size:9px">Mark Applied</button>` : ""}
               <button class="btn btn-secondary btn-sm" onclick="findReferrers('${item.job?.id}', '${encodedCompany}', '${encodedTitle}')" style="width:auto;padding:3px 8px;font-size:9px">Find Referrers</button>
@@ -676,21 +682,208 @@ window.queueAllJobs = async function () {
   } catch (error) { console.error("Queue all error:", error); }
 };
 
-window.applyJob = async function (jobPostId) {
+// ─── Autofill Modal ───────────────────────────────────────────
+
+const modalEls = {
+  overlay:        document.getElementById("autofillOverlay"),
+  jobTitle:       document.getElementById("modalJobTitle"),
+  jobMeta:        document.getElementById("modalJobMeta"),
+  avatar:         document.getElementById("modalAvatar"),
+  seekerName:     document.getElementById("modalSeekerName"),
+  seekerEmail:    document.getElementById("modalSeekerEmail"),
+  seekerLocation: document.getElementById("modalSeekerLocation"),
+  confirmBtn:     document.getElementById("autofillConfirmBtn"),
+  cancelBtn:      document.getElementById("autofillCancelBtn"),
+  closeBtn:       document.getElementById("autofillCloseBtn"),
+};
+
+function showAutofillModal(jobPostId, encodedTitle, encodedCompany, encodedLocation) {
+  const title    = encodedTitle    ? decodeURIComponent(encodedTitle)    : "Position";
+  const company  = encodedCompany  ? decodeURIComponent(encodedCompany)  : "";
+  const location = encodedLocation ? decodeURIComponent(encodedLocation) : "";
+
+  pendingApplyJobId = jobPostId;
+
+  // Job details
+  modalEls.jobTitle.textContent = title;
+  const meta = [company, location].filter(Boolean).join(" · ");
+  modalEls.jobMeta.textContent = meta || "—";
+
+  // Seeker profile
+  const seeker = cachedSeekers.find((s) => s.id === activeSeekerId);
+  if (seeker) {
+    const name     = seeker.full_name || seeker.email || "Candidate";
+    const initials = name.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "?";
+    modalEls.avatar.textContent      = initials;
+    modalEls.seekerName.textContent  = name;
+    modalEls.seekerEmail.textContent = seeker.email || "";
+    if (seeker.location) {
+      modalEls.seekerLocation.textContent    = seeker.location;
+      modalEls.seekerLocation.style.display  = "block";
+    } else {
+      modalEls.seekerLocation.style.display  = "none";
+    }
+  } else {
+    modalEls.avatar.textContent      = "?";
+    modalEls.seekerName.textContent  = "Job Seeker";
+    modalEls.seekerEmail.textContent = "";
+    modalEls.seekerLocation.style.display = "none";
+  }
+
+  modalEls.overlay.classList.remove("hidden");
+}
+
+function hideAutofillModal() {
+  modalEls.overlay.classList.add("hidden");
+  pendingApplyJobId = null;
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+async function launchSpecificRun(runId, activateTab = true) {
+  const response = await sendRuntimeMessage({
+    type: "RUNNER_RUN_FOR_RUN_ID",
+    runId,
+    activateTab,
+  });
+
+  if (!response?.success) {
+    throw new Error(response?.error || "Failed to launch autofill.");
+  }
+
+  return response;
+}
+
+async function startRunForQueue(queueId) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}/api/apply/start`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ queue_id: queueId }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || `Failed to start run (${response.status}).`);
+  }
+
+  if (!data?.success) {
+    if (data?.blocked && data?.reason === "MAX_CONCURRENCY") {
+      throw new Error("Runner is at max concurrency. Try again in a moment.");
+    }
+    throw new Error(data?.error || "Failed to start run.");
+  }
+
+  if (!data.run_id) {
+    throw new Error("Run started without a run ID.");
+  }
+
+  return data;
+}
+
+async function queueAndResolveRun(jobPostId) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}/api/extension/queue-job`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ job_post_id: jobPostId }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || `Failed to queue job (${response.status}).`);
+  }
+
+  const status = String(data?.status || "").toUpperCase();
+  if (["APPLIED", "COMPLETED"].includes(status)) {
+    return { runId: null, status };
+  }
+
+  if (data?.run_id) {
+    return { runId: data.run_id, status };
+  }
+
+  if (!data?.queue_id) {
+    throw new Error("Queue item was created without a queue ID.");
+  }
+
+  const started = await startRunForQueue(data.queue_id);
+  return {
+    runId: started.run_id,
+    status: String(started.status || "READY").toUpperCase(),
+  };
+}
+
+async function confirmAutofill() {
+  if (!pendingApplyJobId) return;
+  const jobId = pendingApplyJobId;
+
+  modalEls.confirmBtn.disabled     = true;
+  modalEls.confirmBtn.textContent  = "Starting…";
+
+  hideAutofillModal();
+
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !authToken) return;
 
   try {
-    // Queue the job first if not already queued
-    await fetch(`${apiBaseUrl}/api/extension/queue-job`, {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({ job_post_id: jobPostId }),
-    });
+    const resolved = await queueAndResolveRun(jobId);
+    if (!resolved.runId) {
+      setStatus(els.saveStatus, "This job is already marked applied.", "info");
+      await Promise.all([loadMatchedJobs(), loadMyJobs()]);
+      return;
+    }
 
-    await triggerRunnerNow();
+    if (resolved.status === "RUNNING") {
+      setStatus(els.saveStatus, "This job is already running.", "info");
+      await Promise.all([loadMatchedJobs(), loadMyJobs()]);
+      return;
+    }
+
+    if (resolved.status === "NEEDS_ATTENTION") {
+      setStatus(els.saveStatus, "This job needs attention. Use Resume instead.", "info");
+      await Promise.all([loadMatchedJobs(), loadMyJobs()]);
+      return;
+    }
+
+    await launchSpecificRun(resolved.runId, true);
+    setStatus(els.saveStatus, "Opened tab and launched autofill.", "success");
     await Promise.all([loadMatchedJobs(), loadMyJobs()]);
-  } catch (error) { console.error("Apply error:", error); }
+  } catch (error) {
+    setStatus(els.saveStatus, "Error: " + error.message, "error");
+    console.error("Apply error:", error);
+  } finally {
+    modalEls.confirmBtn.disabled    = false;
+    modalEls.confirmBtn.innerHTML   = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      Autofill &amp; Apply`;
+  }
+}
+
+// Modal event listeners
+modalEls.confirmBtn.addEventListener("click", confirmAutofill);
+modalEls.cancelBtn.addEventListener("click",  hideAutofillModal);
+modalEls.closeBtn.addEventListener("click",   hideAutofillModal);
+modalEls.overlay.addEventListener("click", (e) => {
+  if (e.target === modalEls.overlay) hideAutofillModal();
+});
+
+// ─── Apply (now opens autofill modal) ────────────────────────
+
+window.applyJob = async function (jobPostId, encodedTitle, encodedCompany, encodedLocation) {
+  showAutofillModal(jobPostId, encodedTitle, encodedCompany, encodedLocation);
 };
 
 window.applyAllJobs = async function () {
@@ -743,12 +936,7 @@ window.resumeJob = async function (runId, encodedJobUrl) {
       return;
     }
 
-    const jobUrl = encodedJobUrl ? decodeURIComponent(encodedJobUrl) : "";
-    if (jobUrl && /^https?:\/\//i.test(jobUrl)) {
-      chrome.tabs.create({ url: jobUrl, active: true }).catch(() => {});
-    }
-
-    await triggerRunnerNow();
+    await launchSpecificRun(runId, true);
     await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) {
     console.error("Resume error:", error);

@@ -1,31 +1,37 @@
 (() => {
   const dom = window.JobGeniusDom;
   const registry = window.JobGeniusAdapterRegistry;
+
   const DEFAULT_SUBMIT_BUTTONS = [
     "next",
     "continue",
     "save and continue",
-    "review",
+    "proceed",
     "submit application",
     "submit",
+    "apply",
+    "begin application",
   ];
 
-  registry.registerAdapter("WORKDAY", {
+  registry.registerAdapter("GENERIC", {
     detect() {
-      return window.location.hostname.toLowerCase().includes("workday");
+      return true;
     },
+
     async clickApplyEntry(ctx) {
       const applyButton = dom.findButtonByText([
-        "apply",
         "apply now",
+        "apply",
         "start application",
+        "begin application",
       ]);
       if (applyButton) {
         applyButton.click();
-        await dom.sleep(1500);
+        await dom.sleep(1200);
       }
       return { ok: true };
     },
+
     async fillKnownFields(ctx) {
       const fillSummary = dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
       if (ctx.resumeUrl) {
@@ -36,58 +42,59 @@
       }
       return { ok: true, fillSummary };
     },
+
     extractRequiredFields() {
       return dom.extractRequiredFields();
     },
+
     async submit(ctx) {
       const hints = Array.isArray(ctx?.buttonHints) ? ctx.buttonHints : [];
-      const nextButton = dom.findButtonByText([
+      const submitButton = dom.findButtonByText([
         ...hints,
         ...DEFAULT_SUBMIT_BUTTONS,
       ]);
-      if (!nextButton) {
+      if (!submitButton) {
         return { ok: false, reason: "SUBMIT_BUTTON_MISSING" };
       }
       if (ctx.dryRun) {
         return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };
       }
       const clickedLabel =
-        nextButton.textContent?.trim() ||
-        nextButton.getAttribute("aria-label") ||
-        nextButton.getAttribute("value") ||
+        submitButton.textContent?.trim() ||
+        submitButton.getAttribute("aria-label") ||
+        submitButton.getAttribute("value") ||
         "Continue";
-      nextButton.click();
-      await dom.sleep(1500);
+      submitButton.click();
+      await dom.sleep(1400);
       return { ok: true, clickedLabel };
     },
+
     confirm() {
-      const confirmationText = document.body?.innerText?.toLowerCase() ?? "";
+      const text = document.body?.innerText?.toLowerCase() ?? "";
       return (
-        confirmationText.includes("thank you") ||
-        confirmationText.includes("submitted")
+        text.includes("thank you") ||
+        text.includes("application submitted") ||
+        text.includes("successfully applied") ||
+        text.includes("application received") ||
+        text.includes("we have received") ||
+        text.includes("application complete")
       );
     },
+
     async runFallback(ctx) {
-      if (dom.hasSmsOtp()) {
-        return { status: "NEEDS_ATTENTION", reason: "OTP_SMS" };
-      }
-
       await this.clickApplyEntry(ctx);
-
-      if (document.body?.innerText?.toLowerCase().includes("sign in")) {
-        return { status: "NEEDS_ATTENTION", reason: "LOGIN_REQUIRED" };
-      }
 
       const maxSteps = Number(ctx?.automation?.maxAutoAdvanceSteps ?? 8);
       let noProgressRounds = 0;
 
       for (let step = 0; step < maxSteps; step += 1) {
         if (this.confirm()) return { status: "APPLIED" };
-        if (dom.hasSmsOtp()) return { status: "NEEDS_ATTENTION", reason: "OTP_SMS" };
         if (dom.hasCaptcha()) return { status: "NEEDS_ATTENTION", reason: "CAPTCHA" };
 
         const fillResult = await this.fillKnownFields(ctx);
-        if (!fillResult.ok) return { status: "NEEDS_ATTENTION", reason: fillResult.reason };
+        if (!fillResult.ok) {
+          return { status: "NEEDS_ATTENTION", reason: fillResult.reason };
+        }
 
         const missing = this.extractRequiredFields();
         if (missing.length > 0) {
@@ -98,19 +105,21 @@
           };
         }
 
+        if (ctx.dryRun) {
+          return { status: "NEEDS_ATTENTION", reason: "DRY_RUN_CONFIRM_SUBMIT" };
+        }
+
         const before = dom.captureFlowFingerprint?.() ?? window.location.href;
         const submitResult = await this.submit(ctx);
         if (!submitResult.ok) {
           return { status: "NEEDS_ATTENTION", reason: submitResult.reason };
         }
 
-        await dom.sleep(1400);
+        await dom.sleep(1200);
         const after = dom.captureFlowFingerprint?.() ?? window.location.href;
         if (after === before) {
           noProgressRounds += 1;
-          if (noProgressRounds >= 2) {
-            break;
-          }
+          if (noProgressRounds >= 2) break;
         } else {
           noProgressRounds = 0;
         }

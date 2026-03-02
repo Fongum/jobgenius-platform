@@ -22,14 +22,14 @@
       return { ok: true };
     },
     async fillKnownFields(ctx) {
-      dom.fillTextInputs(ctx.defaultEmail, ctx.profile);
+      const fillSummary = dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
       if (ctx.resumeUrl) {
         const upload = await dom.uploadResume(ctx.resumeUrl);
         if (!upload.ok) {
           return { ok: false, reason: "RESUME_UPLOAD_FAILED" };
         }
       }
-      return { ok: true };
+      return { ok: true, fillSummary };
     },
     extractRequiredFields() {
       return dom.extractRequiredFields();
@@ -46,9 +46,14 @@
       if (ctx.dryRun) {
         return { ok: false, reason: "DRY_RUN_CONFIRM_SUBMIT" };
       }
+      const clickedLabel =
+        submitButton.textContent?.trim() ||
+        submitButton.getAttribute("aria-label") ||
+        submitButton.getAttribute("value") ||
+        "Continue";
       submitButton.click();
       await dom.sleep(1500);
-      return { ok: true };
+      return { ok: true, clickedLabel };
     },
     confirm() {
       const confirmationText = document.body?.innerText?.toLowerCase() ?? "";

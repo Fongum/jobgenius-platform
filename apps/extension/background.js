@@ -8,6 +8,15 @@ const STORAGE_KEYS = {
 
 const RUNNER_ALARM = "jobgenius-runner";
 const activeRuns = new Set();
+const ATTENTION_RESUME_COOLDOWN_MS = 10 * 60 * 1000;
+const attentionResumeHistory = new Map();
+const AUTO_RESUME_REASONS = new Set([
+  "CAPTCHA",
+  "LOGIN_REQUIRED",
+  "REAUTH_REQUIRED",
+  "OTP_SMS",
+  "OTP_EMAIL",
+]);
 
 function getStorage(keys) {
   return new Promise((resolve) => {
@@ -45,6 +54,108 @@ async function fetchNextJob(apiBaseUrl, authToken, activeSeekerId, runId = null)
   return response.json();
 }
 
+function normalizeReason(reason) {
+  return String(reason ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+function shouldAutoResumeAttention(reason) {
+  return AUTO_RESUME_REASONS.has(normalizeReason(reason));
+}
+
+function cleanupAttentionResumeHistory() {
+  const cutoff = Date.now() - ATTENTION_RESUME_COOLDOWN_MS * 3;
+  for (const [runId, ts] of attentionResumeHistory.entries()) {
+    if (ts < cutoff) {
+      attentionResumeHistory.delete(runId);
+    }
+  }
+}
+
+function canResumeRunNow(runId) {
+  const lastAttempt = attentionResumeHistory.get(runId) ?? 0;
+  return Date.now() - lastAttempt >= ATTENTION_RESUME_COOLDOWN_MS;
+}
+
+async function fetchNeedsAttentionJobs(apiBaseUrl, authToken) {
+  const response = await fetch(`${apiBaseUrl}/api/extension/my-jobs?status=NEEDS_ATTENTION`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "x-runner": "extension",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Needs-attention fetch failed (${response.status}).`);
+  }
+
+  return response.json();
+}
+
+function pickAutoResumableAttentionItem(items) {
+  if (!Array.isArray(items)) {
+    return null;
+  }
+
+  for (const item of items) {
+    const runId = item?.run_id;
+    if (!runId) {
+      continue;
+    }
+
+    const reason = normalizeReason(item?.needs_attention_reason ?? item?.last_error_code ?? "");
+    if (!shouldAutoResumeAttention(reason)) {
+      continue;
+    }
+
+    if (!canResumeRunNow(runId)) {
+      continue;
+    }
+
+    return {
+      runId,
+      reason,
+      job: item?.job ?? null,
+    };
+  }
+
+  return null;
+}
+
+async function resumeNeedsAttentionRun(apiBaseUrl, authToken, runId, reason) {
+  const response = await fetch(`${apiBaseUrl}/api/apply/resume`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+      "x-runner": "extension",
+    },
+    body: JSON.stringify({
+      run_id: runId,
+      note: `Auto-resumed by extension for ${reason || "needs attention"}.`,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Resume run failed (${response.status}).`);
+  }
+
+  return response.json();
+}
+
+function shouldOpenInteractiveTab(reason) {
+  const normalized = normalizeReason(reason);
+  return (
+    normalized === "CAPTCHA" ||
+    normalized === "LOGIN_REQUIRED" ||
+    normalized === "REAUTH_REQUIRED" ||
+    normalized === "OTP_SMS" ||
+    normalized === "OTP_EMAIL"
+  );
+}
+
 async function runJobInTab(
   job,
   runId,
@@ -72,11 +183,14 @@ async function runJobInTab(
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: [
+      "runner/captcha-overlay.js",
+      "runner/sidebar.js",
       "runner/dom.js",
       "runner/adapters/base.js",
       "runner/adapters/linkedin_easy_apply.js",
       "runner/adapters/greenhouse.js",
       "runner/adapters/workday.js",
+      "runner/adapters/generic.js",
       "runner/engine.js",
       "runner/index.js",
     ],
@@ -95,6 +209,84 @@ async function runJobInTab(
     profile,
     dryRun: Boolean(dryRun),
   });
+}
+
+async function launchPayloadRun(payload, context, activeTab = false) {
+  const { apiBaseUrl, authToken, activeSeekerId, dryRun } = context;
+  if (!payload?.run_id || !payload?.job?.url) {
+    return false;
+  }
+
+  activeRuns.add(payload.run_id);
+  await runJobInTab(
+    payload.job,
+    payload.run_id,
+    apiBaseUrl,
+    authToken,
+    payload.resume?.url ?? null,
+    payload.claim_token ?? null,
+    payload.job_seeker_id ?? activeSeekerId,
+    dryRun,
+    payload.profile ?? null,
+    Boolean(activeTab)
+  );
+  return true;
+}
+
+async function tryResumeNeedsAttention(context) {
+  cleanupAttentionResumeHistory();
+
+  const { apiBaseUrl, authToken, activeSeekerId } = context;
+  let attentionPayload;
+
+  try {
+    attentionPayload = await fetchNeedsAttentionJobs(apiBaseUrl, authToken);
+  } catch (error) {
+    console.warn("Needs-attention polling failed:", error);
+    return false;
+  }
+
+  const candidate = pickAutoResumableAttentionItem(attentionPayload?.items ?? []);
+  if (!candidate?.runId) {
+    return false;
+  }
+
+  attentionResumeHistory.set(candidate.runId, Date.now());
+
+  try {
+    await resumeNeedsAttentionRun(
+      apiBaseUrl,
+      authToken,
+      candidate.runId,
+      candidate.reason
+    );
+  } catch (error) {
+    console.warn("Needs-attention resume failed:", error);
+    return false;
+  }
+
+  let resumedRun;
+  try {
+    resumedRun = await fetchNextJob(
+      apiBaseUrl,
+      authToken,
+      activeSeekerId,
+      candidate.runId
+    );
+  } catch (error) {
+    console.warn("Needs-attention claim failed:", error);
+    return false;
+  }
+
+  if (!resumedRun?.success || resumedRun.status === "IDLE" || resumedRun.blocked) {
+    return false;
+  }
+
+  return launchPayloadRun(
+    resumedRun,
+    context,
+    shouldOpenInteractiveTab(candidate.reason)
+  );
 }
 
 async function pollRunner() {
@@ -118,6 +310,13 @@ async function pollRunner() {
     return;
   }
 
+  const context = {
+    apiBaseUrl,
+    authToken,
+    activeSeekerId,
+    dryRun,
+  };
+
   let payload;
   try {
     payload = await fetchNextJob(apiBaseUrl, authToken, activeSeekerId);
@@ -130,25 +329,16 @@ async function pollRunner() {
     return;
   }
 
-  if (payload.status === "IDLE" || payload.blocked) {
+  if (payload.blocked) {
     return;
   }
 
-  if (payload.run_id && payload.job?.url) {
-    activeRuns.add(payload.run_id);
-    await runJobInTab(
-      payload.job,
-      payload.run_id,
-      apiBaseUrl,
-      authToken,
-      payload.resume?.url ?? null,
-      payload.claim_token ?? null,
-      payload.job_seeker_id ?? activeSeekerId,
-      dryRun,
-      payload.profile ?? null,
-      false
-    );
+  if (payload.status === "IDLE") {
+    await tryResumeNeedsAttention(context);
+    return;
   }
+
+  await launchPayloadRun(payload, context, false);
 }
 
 async function runSpecificRun(runId, activateTab = true) {
@@ -198,17 +388,9 @@ async function runSpecificRun(runId, activateTab = true) {
     return { success: false, error: "Runner payload is incomplete." };
   }
 
-  activeRuns.add(payload.run_id);
-  await runJobInTab(
-    payload.job,
-    payload.run_id,
-    apiBaseUrl,
-    authToken,
-    payload.resume?.url ?? null,
-    payload.claim_token ?? null,
-    payload.job_seeker_id ?? activeSeekerId,
-    dryRun,
-    payload.profile ?? null,
+  await launchPayloadRun(
+    payload,
+    { apiBaseUrl, authToken, activeSeekerId, dryRun },
     Boolean(activateTab)
   );
 
@@ -256,6 +438,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "RUN_COMPLETE" && message.runId) {
     activeRuns.delete(message.runId);
+    attentionResumeHistory.delete(message.runId);
     return false;
   }
 

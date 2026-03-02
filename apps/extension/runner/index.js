@@ -2,6 +2,7 @@
   const dom = window.JobGeniusDom;
   const registry = window.JobGeniusAdapterRegistry;
   const engine = window.JobGeniusEngine;
+  const sidebar = window.JobGeniusRunnerSidebar;
   const MIN_PLAN_VERSION = 2;
 
   function detectAtsType() {
@@ -9,7 +10,13 @@
     if (host.includes("linkedin")) return "LINKEDIN";
     if (host.includes("greenhouse")) return "GREENHOUSE";
     if (host.includes("workday") || host.includes("myworkdayjobs")) return "WORKDAY";
-    return "UNKNOWN";
+    if (host.includes("lever.co")) return "LEVER";
+    if (host.includes("smartrecruiters")) return "SMARTRECRUITERS";
+    if (host.includes("icims.com")) return "ICIMS";
+    if (host.includes("jobvite.com")) return "JOBVITE";
+    if (host.includes("breezy.hr")) return "BREEZY";
+    if (host.includes("ashbyhq.com")) return "ASHBY";
+    return "GENERIC";
   }
 
   async function fetchPlan(ctx) {
@@ -63,13 +70,46 @@
     return response.json();
   }
 
+  async function handleCaptchaAtStart(ctx) {
+    const overlay = window.JobGeniusCaptchaOverlay;
+    if (!overlay) {
+      await engine.pauseRun(ctx, "CAPTCHA", {
+        step: "DETECT_ATS",
+        ats: ctx.atsType,
+        message: "Captcha detected.",
+      });
+      sidebar?.finish?.("Needs Attention", "CAPTCHA requires manual action.");
+      return false;
+    }
+    overlay.inject();
+    const result = await overlay.waitForUser();
+    if (result === "STOP") {
+      await engine.pauseRun(ctx, "CAPTCHA", {
+        step: "DETECT_ATS",
+        ats: ctx.atsType,
+        message: "Captcha detected.",
+      });
+      sidebar?.finish?.("Needs Attention", "CAPTCHA requires manual action.");
+      return false;
+    }
+    return true;
+  }
+
   async function runFallback(ctx, adapter) {
+    sidebar?.show?.({
+      atsType: ctx.atsType,
+      jobTitle: ctx.job?.title ?? null,
+      step: "FALLBACK",
+    });
+    sidebar?.setStatus?.("Running fallback");
+
     if (!adapter?.runFallback) {
       await engine.pauseRun(ctx, "UNKNOWN_ATS", {
         step: "DETECT_ATS",
         ats: ctx.atsType,
         message: "Adapter missing fallback.",
       });
+      sidebar?.finish?.("Needs Attention", "Adapter missing fallback.");
       chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
       return;
     }
@@ -77,6 +117,7 @@
     const result = await adapter.runFallback(ctx);
     if (result.status === "APPLIED") {
       await engine.completeRun(ctx, "Application submitted by runner.");
+      sidebar?.finish?.("Applied", "Application submitted by fallback.");
       chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
       return;
     }
@@ -87,18 +128,21 @@
         ats: ctx.atsType,
         missing_fields: result.missing_fields ?? null,
       });
+      sidebar?.finish?.("Needs Attention", "Human intervention required.");
       chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
       return;
     }
 
     await engine.retryRun(ctx, "Runner retry.");
+    sidebar?.finish?.("Retry queued", "Fallback completed without confirmation.");
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
   }
 
   async function runAutomation(message) {
     const atsType = detectAtsType();
-    const adapter =
-      registry.getAdapter(atsType) || registry.getAdapter(message.atsType);
+    const adapter = registry.resolveAdapter
+      ? registry.resolveAdapter(atsType)
+      : registry.getAdapter(atsType) || registry.getAdapter("GENERIC");
 
     const ctx = {
       runId: message.runId,
@@ -109,19 +153,25 @@
       activeSeekerId: message.activeSeekerId,
       resumeUrl: message.resumeUrl,
       profile: message.profile ?? null,
+      job: message.job ?? null,
       defaultEmail: message.profile?.email ?? "",
       dryRun: Boolean(message.dryRun),
       atsType,
     };
 
+    sidebar?.show?.({
+      atsType: ctx.atsType,
+      jobTitle: ctx.job?.title ?? null,
+      step: "INIT",
+    });
+    sidebar?.setStatus?.("Initializing");
+
     if (dom.hasCaptcha()) {
-      await engine.pauseRun(ctx, "CAPTCHA", {
-        step: "DETECT_ATS",
-        ats: ctx.atsType,
-        message: "Captcha detected.",
-      });
-      chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
-      return;
+      const ok = await handleCaptchaAtStart(ctx);
+      if (!ok) {
+        chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
+        return;
+      }
     }
 
     let plan = null;
@@ -160,6 +210,7 @@
     if (message?.type !== "START_RUN") return;
     runAutomation(message).catch(async (error) => {
       console.error("Runner error:", error);
+      sidebar?.finish?.("Error", error?.message ?? "Runner failed.");
       chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: message.runId });
     });
   });

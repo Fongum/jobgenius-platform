@@ -63,17 +63,25 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingQueue) {
+      const { data: existingQueuedRun } = await supabaseAdmin
+        .from("application_runs")
+        .select("id, status")
+        .eq("queue_id", existingQueue.id)
+        .maybeSingle();
+
       return NextResponse.json({
         success: true,
         already_queued: true,
-        status: existingQueue.status,
+        queue_id: existingQueue.id,
+        run_id: existingQueuedRun?.id ?? null,
+        status: existingQueuedRun?.status ?? existingQueue.status,
       });
     }
 
     // Also check application_runs
     const { data: existingRun } = await supabaseAdmin
       .from("application_runs")
-      .select("id, status")
+      .select("id, status, queue_id")
       .eq("job_post_id", job_post_id)
       .eq("job_seeker_id", job_seeker_id)
       .maybeSingle();
@@ -82,6 +90,8 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         already_applied: true,
+        queue_id: existingRun.queue_id ?? null,
+        run_id: existingRun.id,
         status: existingRun.status,
       });
     }
@@ -118,7 +128,12 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      queue_id: queuedItem?.id ?? null,
+      run_id: null,
+      status: "QUEUED",
+    });
   } catch (error) {
     console.error("Extension queue-job error:", error);
     return NextResponse.json(

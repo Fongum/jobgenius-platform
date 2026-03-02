@@ -1,5 +1,42 @@
 (() => {
   const dom = window.JobGeniusDom;
+  const sidebar = window.JobGeniusRunnerSidebar;
+
+  function setSidebarStatus(status) {
+    sidebar?.setStatus?.(status);
+  }
+
+  function setSidebarStep(step) {
+    sidebar?.setStep?.(step);
+  }
+
+  function setSidebarAction(action) {
+    sidebar?.setAction?.(action);
+  }
+
+  function sidebarLog(message, level = "info") {
+    sidebar?.log?.(message, level);
+  }
+
+  function sidebarReportFill(fillSummary) {
+    if (!fillSummary || typeof fillSummary !== "object") return;
+    sidebar?.reportFill?.(fillSummary);
+  }
+
+  function sidebarReportMissing(missingFields) {
+    const count = Array.isArray(missingFields) ? missingFields.length : 0;
+    if (count > 0) {
+      sidebar?.reportMissing?.(count);
+    }
+  }
+
+  function sidebarReportClick(buttonLabel) {
+    sidebar?.reportClick?.(buttonLabel);
+  }
+
+  function isStopRequested() {
+    return Boolean(window.__JG_RUNNER_STOP_REQUESTED);
+  }
 
   function toBoundedInt(value, fallback, min = 1, max = 15) {
     const parsed = Number(value);
@@ -121,6 +158,8 @@
 
   async function ensureOtp(ctx) {
     if (dom.hasSmsOtp()) {
+      setSidebarStatus("Waiting for SMS OTP");
+      sidebarLog("SMS OTP detected. Human intervention required.", "warn");
       await pauseRun(ctx, "OTP_SMS", {
         step: ctx.currentStep,
         ats: ctx.atsType,
@@ -130,8 +169,12 @@
     }
 
     if (dom.hasEmailOtp()) {
+      setSidebarStatus("Looking for email OTP");
+      sidebarLog("Email OTP detected. Fetching code...");
       const otp = await waitForEmailOtp(ctx);
       if (!otp?.code) {
+        setSidebarStatus("Waiting for email OTP");
+        sidebarLog("Email OTP not available yet. Human intervention required.", "warn");
         await pauseRun(ctx, "OTP_EMAIL", {
           step: ctx.currentStep,
           ats: ctx.atsType,
@@ -140,12 +183,16 @@
         return false;
       }
 
-      const otpInput =
-        document.querySelector("input[autocomplete='one-time-code']") ||
-        document.querySelector("input[name*='code']") ||
-        document.querySelector("input[type='text']");
+      const otpInput = dom.findOtpInput
+        ? dom.findOtpInput()
+        : (
+          document.querySelector("input[autocomplete='one-time-code']") ||
+          document.querySelector("input[name*='code']")
+        );
 
       if (!otpInput) {
+        setSidebarStatus("OTP input missing");
+        sidebarLog("OTP input field not found.", "warn");
         await pauseRun(ctx, "OTP_EMAIL", {
           step: ctx.currentStep,
           ats: ctx.atsType,
@@ -157,7 +204,10 @@
       otpInput.focus();
       otpInput.value = otp.code;
       otpInput.dispatchEvent(new Event("input", { bubbles: true }));
+      otpInput.dispatchEvent(new Event("change", { bubbles: true }));
       await markOtpUsed(ctx, otp.id);
+      setSidebarAction("Filled email OTP");
+      sidebarLog("Filled email OTP automatically.", "success");
     }
 
     return true;
@@ -169,6 +219,7 @@
       : dom.extractRequiredFields();
 
     if (missingFields.length > 0) {
+      sidebarReportMissing(missingFields);
       await pauseRun(ctx, "REQUIRED_FIELDS", {
         step: stepName,
         ats: ctx.atsType,
@@ -211,21 +262,48 @@
     return { maxIterations, maxNoProgressRounds };
   }
 
+  function injectCaptchaOverlay() {
+    window.JobGeniusCaptchaOverlay?.inject();
+  }
+
+  function waitForCaptcha() {
+    if (window.JobGeniusCaptchaOverlay?.waitForUser) {
+      return window.JobGeniusCaptchaOverlay.waitForUser();
+    }
+    return Promise.resolve("STOP");
+  }
+
   async function runAutoAdvance(ctx, step, adapter) {
     const { maxIterations, maxNoProgressRounds } = getAutomationConfig(ctx, step);
     let noProgressRounds = 0;
 
     for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
+      if (isStopRequested()) {
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: "MANUAL_STOP",
+          meta: { attempt, message: "Runner stopped from sidebar." },
+        };
+      }
+
+      setSidebarStatus(`Auto-advancing (${attempt}/${maxIterations})`);
       if (adapter.confirm ? adapter.confirm(ctx) : false) {
         return { status: "APPLIED" };
       }
 
       if (dom.hasCaptcha()) {
-        return {
-          status: "NEEDS_ATTENTION",
-          reason: "CAPTCHA",
-          meta: { attempt },
-        };
+        setSidebarStatus("Waiting for CAPTCHA solve");
+        sidebarLog("CAPTCHA detected. Waiting for your action.", "warn");
+        injectCaptchaOverlay();
+        const captchaResult = await waitForCaptcha();
+        if (captchaResult === "STOP") {
+          return {
+            status: "NEEDS_ATTENTION",
+            reason: "CAPTCHA",
+            meta: { attempt },
+          };
+        }
+        continue;
       }
 
       const otpReady = await ensureOtp(ctx);
@@ -242,8 +320,10 @@
             meta: { attempt },
           };
         }
+        sidebarReportFill(fillResult?.fillSummary);
       } else {
-        dom.fillTextInputs(ctx.defaultEmail, ctx.profile);
+        const fillSummary = dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
+        sidebarReportFill(fillSummary);
       }
 
       const missingFields = adapter.extractRequiredFields
@@ -251,6 +331,7 @@
         : dom.extractRequiredFields();
 
       if (missingFields.length > 0) {
+        sidebarReportMissing(missingFields);
         return {
           status: "NEEDS_ATTENTION",
           reason: "REQUIRED_FIELDS",
@@ -283,6 +364,7 @@
           meta: { attempt },
         };
       }
+      sidebarReportClick(submitResult?.clickedLabel || "Continue");
 
       await dom.sleep(1300);
       const afterFingerprint =
@@ -302,6 +384,10 @@
       if (!progressed) {
         noProgressRounds += 1;
         if (noProgressRounds >= maxNoProgressRounds) {
+          sidebarLog(
+            `No progress after ${noProgressRounds} attempts. Human review required.`,
+            "warn"
+          );
           return {
             status: "NEEDS_ATTENTION",
             reason: "NO_PROGRESS",
@@ -324,6 +410,12 @@
   }
 
   async function runPlan(ctx, plan, adapter) {
+    sidebar?.show?.({
+      atsType: ctx.atsType,
+      jobTitle: ctx.job?.title ?? null,
+      step: "INIT",
+    });
+    setSidebarStatus("Running");
     ctx.currentStep = "INIT";
     ctx.buttonHints = Array.isArray(ctx.buttonHints) ? ctx.buttonHints : [];
     await logEvent(ctx, {
@@ -339,23 +431,46 @@
         ats: ctx.atsType,
         message: "ATS type not recognized.",
       });
+      sidebar?.finish?.("Needs Attention", "ATS type not recognized.");
       return;
     }
 
     if (dom.hasCaptcha()) {
-      await pauseRun(ctx, "CAPTCHA", {
-        step: "DETECT_ATS",
-        ats: ctx.atsType,
-        message: "Captcha detected.",
-      });
-      return;
+      setSidebarStatus("Waiting for CAPTCHA solve");
+      sidebarLog("CAPTCHA detected before run start.", "warn");
+      injectCaptchaOverlay();
+      const captchaResult = await waitForCaptcha();
+      if (captchaResult === "STOP") {
+        await pauseRun(ctx, "CAPTCHA", {
+          step: "DETECT_ATS",
+          ats: ctx.atsType,
+          message: "Captcha detected.",
+        });
+        sidebar?.finish?.("Needs Attention", "CAPTCHA requires manual action.");
+        return;
+      }
     }
 
     const otpReady = await ensureOtp(ctx);
-    if (!otpReady) return;
+    if (!otpReady) {
+      sidebar?.finish?.("Needs Attention", "OTP verification requires manual action.");
+      return;
+    }
 
     for (const step of plan.steps ?? []) {
+      if (isStopRequested()) {
+        await pauseRun(ctx, "MANUAL_STOP", {
+          step: ctx.currentStep,
+          ats: ctx.atsType,
+          message: "Runner stopped from sidebar.",
+        });
+        sidebar?.finish?.("Stopped", "Runner stopped manually.");
+        return;
+      }
+
       ctx.currentStep = step.name;
+      setSidebarStep(step.name);
+      setSidebarAction(`Processing ${step.name}`);
       await logEvent(ctx, {
         run_id: ctx.runId,
         event_type: "STEP_STARTED",
@@ -374,6 +489,7 @@
             step: step.name,
             ats: ctx.atsType,
           });
+          sidebar?.finish?.("Needs Attention", "ATS detection failed.");
           return;
         }
         continue;
@@ -387,8 +503,11 @@
               step: step.name,
               ats: ctx.atsType,
             });
+            sidebar?.finish?.("Needs Attention", result.reason ?? "Apply button missing.");
             return;
           }
+          setSidebarAction("Clicked Apply");
+          sidebarLog("Clicked Apply entry.");
         }
         continue;
       }
@@ -408,17 +527,23 @@
               step: step.name,
               ats: ctx.atsType,
             });
+            sidebar?.finish?.("Needs Attention", result.reason ?? "Failed to fill fields.");
             return;
           }
+          sidebarReportFill(result?.fillSummary);
         } else {
-          dom.fillTextInputs(ctx.defaultEmail, ctx.profile);
+          const fillSummary = dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
+          sidebarReportFill(fillSummary);
         }
         continue;
       }
 
       if (step.name === "CHECK_REQUIRED") {
         const ok = await handleMissingFields(ctx, adapter, step.name);
-        if (!ok) return;
+        if (!ok) {
+          sidebar?.finish?.("Needs Attention", "Required fields need manual input.");
+          return;
+        }
         continue;
       }
 
@@ -429,6 +554,7 @@
             ats: ctx.atsType,
             message: "Dry run enabled.",
           });
+          sidebar?.finish?.("Needs Attention", "Dry run mode paused before submit.");
           return;
         }
         if (adapter.submit) {
@@ -438,8 +564,10 @@
               step: step.name,
               ats: ctx.atsType,
             });
+            sidebar?.finish?.("Needs Attention", result.reason ?? "Submit button missing.");
             return;
           }
+          sidebarReportClick(result?.clickedLabel || "Continue");
         }
         continue;
       }
@@ -448,11 +576,13 @@
         const advanceResult = await runAutoAdvance(ctx, step, adapter);
 
         if (advanceResult.status === "STOPPED") {
+          sidebar?.finish?.("Needs Attention", "Runner paused for manual verification.");
           return;
         }
 
         if (advanceResult.status === "APPLIED") {
           await completeRun(ctx, "Application submitted by autofill agent.");
+          sidebar?.finish?.("Applied", "Application submitted by autofill agent.");
           chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
           return;
         }
@@ -463,6 +593,12 @@
             ats: ctx.atsType,
             ...(advanceResult.meta ?? {}),
           });
+          sidebar?.finish?.(
+            "Needs Attention",
+            advanceResult.reason === "MANUAL_STOP"
+              ? "Runner stopped manually."
+              : "Human intervention required."
+          );
           return;
         }
 
@@ -473,6 +609,7 @@
         const confirmed = adapter.confirm ? adapter.confirm(ctx) : false;
         if (confirmed) {
           await completeRun(ctx, "Application submitted by runner.");
+          sidebar?.finish?.("Applied", "Application submitted.");
           chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
           return;
         }
@@ -480,11 +617,13 @@
           step: step.name,
           ats: ctx.atsType,
         });
+        sidebar?.finish?.("Needs Attention", "Final confirmation requires review.");
         return;
       }
     }
 
     await retryRun(ctx, "Plan exhausted without confirmation.");
+    sidebar?.finish?.("Retry queued", "Plan exhausted without confirmation.");
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
   }
 
