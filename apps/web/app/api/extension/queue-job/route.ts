@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 /**
  * POST /api/extension/queue-job
@@ -94,6 +95,30 @@ export async function POST(request: Request) {
         run_id: existingRun.id,
         status: existingRun.status,
       });
+    }
+
+    const { data: matchScore } = await supabaseAdmin
+      .from("job_match_scores")
+      .select("score, confidence, recommendation, reasons")
+      .eq("job_seeker_id", job_seeker_id)
+      .eq("job_post_id", job_post_id)
+      .maybeSingle();
+
+    const explanation = buildMatchExplanation(matchScore?.reasons, {
+      score: matchScore?.score ?? null,
+      confidence: matchScore?.confidence ?? null,
+      recommendation: matchScore?.recommendation ?? null,
+    });
+
+    if (explanation.queueBlocked) {
+      return NextResponse.json(
+        {
+          error: explanation.queueBlockReason || "This match is blocked from queueing.",
+          queue_blocked: true,
+          reason: explanation.queueBlockCode,
+        },
+        { status: 400 }
+      );
     }
 
     // Insert into application_queue

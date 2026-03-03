@@ -1,4 +1,8 @@
 import { supabaseServer } from "@/lib/supabase/server";
+import {
+  resolveHostAutomationRule,
+  type ResolvedHostAutomationRule,
+} from "@/lib/apply-host-rules";
 
 type BuildAutomationHintsArgs = {
   atsType: string | null;
@@ -17,10 +21,14 @@ type BlockerSummary = {
 
 export type ApplyAutomationHints = {
   ats: string;
+  rule_id: string | null;
   url_host: string | null;
   max_auto_advance_steps: number;
   max_no_progress_rounds: number;
   button_hints: string[];
+  apply_entry_hints: string[];
+  requires_apply_entry: boolean;
+  prefer_popup_handoff: boolean;
   blockers: BlockerSummary[];
   generated_at: string;
 };
@@ -54,17 +62,6 @@ function normalizeAtsType(atsType: string | null) {
   return value || "UNKNOWN";
 }
 
-function getUrlHost(rawUrl: string | null) {
-  if (!rawUrl) {
-    return null;
-  }
-  try {
-    return new URL(rawUrl).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
 function uniqueTexts(values: string[]) {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -96,9 +93,13 @@ function summarizeBlockers(rows: ErrorSignatureRow[]) {
   return { blockers, counts };
 }
 
-function deriveButtonHints(ats: string, counts: Map<string, number>) {
+function deriveButtonHints(
+  ats: string,
+  counts: Map<string, number>,
+  hostRule: ResolvedHostAutomationRule
+) {
   const defaults = BASE_BUTTON_HINTS[ats] ?? BASE_BUTTON_HINTS.UNKNOWN;
-  const hints = [...defaults];
+  const hints = [...defaults, ...hostRule.submit_hints];
 
   const submitMissingCount = counts.get("SUBMIT_BUTTON_MISSING") ?? 0;
   const reviewMissingCount = counts.get("REQUIRES_REVIEW") ?? 0;
@@ -166,16 +167,21 @@ export async function buildApplyAutomationHints(
   args: BuildAutomationHintsArgs
 ): Promise<ApplyAutomationHints> {
   const ats = normalizeAtsType(args.atsType);
-  const urlHost = getUrlHost(args.jobUrl);
+  const hostRule = resolveHostAutomationRule(args.jobUrl);
+  const urlHost = hostRule.url_host;
   const signatures = await loadSignatures(ats, urlHost);
   const { blockers, counts } = summarizeBlockers(signatures);
 
   return {
     ats,
+    rule_id: hostRule.rule_id,
     url_host: urlHost,
     max_auto_advance_steps: deriveMaxAdvance(counts),
     max_no_progress_rounds: deriveNoProgressRounds(counts),
-    button_hints: deriveButtonHints(ats, counts),
+    button_hints: deriveButtonHints(ats, counts, hostRule),
+    apply_entry_hints: hostRule.apply_entry_hints,
+    requires_apply_entry: hostRule.requires_apply_entry,
+    prefer_popup_handoff: hostRule.prefer_popup_handoff,
     blockers: blockers.slice(0, 5),
     generated_at: new Date().toISOString(),
   };

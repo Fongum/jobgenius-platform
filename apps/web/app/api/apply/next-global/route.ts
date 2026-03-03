@@ -1,6 +1,7 @@
 import { getAccountManagerFromRequest, isRunnerAccountManager } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseAdmin } from "@/lib/auth";
+import { resolveJobTargetUrl } from "@/lib/job-url";
 import { supabaseServer } from "@/lib/supabase/server";
 import { randomUUID } from "crypto";
 
@@ -163,6 +164,7 @@ export async function GET(request: Request) {
   const tailoredResumeUrl = tailoredResume?.resume_url ?? null;
   const resumeUrl = tailoredResumeUrl ?? jobSeeker?.resume_url ?? null;
   const resumeSource = tailoredResumeUrl ? "TAILORED" : resumeUrl ? "BASE" : null;
+  const jobUrl = resolveJobTargetUrl(jobPost.url ?? "") || jobPost.url;
 
   if (resumeUrl && !lockedRun.resume_url_used) {
     await supabaseServer
@@ -211,7 +213,8 @@ export async function GET(request: Request) {
       : null,
     job: {
       id: jobPost.id,
-      url: jobPost.url,
+      url: jobUrl,
+      source_url: jobPost.url,
       title: jobPost.title,
       company: jobPost.company,
       source: jobPost.source,

@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
+import { loadHostAnalytics } from "@/lib/ops-host-analytics";
 import { redirect } from "next/navigation";
 import AlertsList from "./AlertsList";
 
@@ -63,6 +64,13 @@ export default async function OpsDashboardPage() {
     .select("id, severity, type, message, created_at")
     .is("resolved_at", null)
     .order("created_at", { ascending: false });
+
+  let hostAnalytics = [] as Awaited<ReturnType<typeof loadHostAnalytics>>;
+  try {
+    hostAnalytics = await loadHostAnalytics(7 * 24, 10);
+  } catch {
+    hostAnalytics = [];
+  }
 
   const totals = (kpis ?? []).reduce(
     (acc, row) => {
@@ -132,6 +140,49 @@ export default async function OpsDashboardPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section>
+        <h2>Host Conversion (7 Days)</h2>
+        {hostAnalytics.length === 0 ? (
+          <p>No host analytics yet.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Host</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Source</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Runs</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Converted</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Conversion</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Attention</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>Top Blocker</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hostAnalytics.map((row) => (
+                <tr key={row.host}>
+                  <td style={{ padding: "6px 4px" }}>
+                    <div>{row.host}</div>
+                    <div style={{ color: "#6b7280", fontSize: "12px" }}>
+                      {row.ats_types.join(", ") || "UNKNOWN"}
+                    </div>
+                  </td>
+                  <td style={{ padding: "6px 4px" }}>{row.source ?? "-"}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.total_runs}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.converted_runs}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.conversion_rate.toFixed(1)}%</td>
+                  <td style={{ padding: "6px 4px" }}>{row.attention_rate.toFixed(1)}%</td>
+                  <td style={{ padding: "6px 4px" }}>
+                    {row.top_pause_reason
+                      ? `${row.top_pause_reason} (${row.top_pause_count})`
+                      : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </section>
 

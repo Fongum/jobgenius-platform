@@ -1,7 +1,10 @@
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
-import { detectAtsType } from "@/lib/apply";
+import {
+  evaluateAutoApplyPreflight,
+  loadSavedRunnerStorageState,
+} from "@/lib/auto-apply-preflight";
 
 const AUTO_APPLY_ALLOWED_ATS = new Set(
   (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,GENERIC")
@@ -95,27 +98,89 @@ async function runSweep(request: Request) {
 
   // 5. Resolve ATS types so we can filter for allowed platforms.
   const jobPostIds = Array.from(new Set(orphans.map((q) => q.job_post_id)));
+  const seekerIds = Array.from(new Set(orphans.map((q) => q.job_seeker_id)));
   const { data: jobPosts } = await supabaseServer
     .from("job_posts")
     .select("id, source, url")
     .in("id", jobPostIds);
+  const { data: matchScores } = await supabaseServer
+    .from("job_match_scores")
+    .select("job_seeker_id, job_post_id, score, confidence, recommendation, reasons")
+    .in("job_post_id", jobPostIds)
+    .in("job_seeker_id", seekerIds);
 
   const jobPostMap = new Map(
     (jobPosts ?? []).map((jp) => [jp.id, jp])
   );
+  const matchScoreMap = new Map(
+    (matchScores ?? []).map((row) => [
+      `${row.job_seeker_id}:${row.job_post_id}`,
+      row,
+    ])
+  );
+  const storageStateCache = new Map<string, Awaited<ReturnType<typeof loadSavedRunnerStorageState>>>();
+
+  async function getStorageState(jobSeekerId: string) {
+    if (!storageStateCache.has(jobSeekerId)) {
+      storageStateCache.set(
+        jobSeekerId,
+        await loadSavedRunnerStorageState(jobSeekerId)
+      );
+    }
+    return storageStateCache.get(jobSeekerId) ?? null;
+  }
+
+  async function flagQueueAttention(queueId: string, reason: string, message: string) {
+    const nowIso = new Date().toISOString();
+    await supabaseServer
+      .from("application_queue")
+      .update({
+        status: "NEEDS_ATTENTION",
+        category: "needs_attention",
+        last_error: message,
+        updated_at: nowIso,
+      })
+      .eq("id", queueId);
+
+    await supabaseServer.from("attention_items").insert({
+      queue_id: queueId,
+      status: "OPEN",
+      reason,
+    });
+  }
 
   let enqueued = 0;
   let skipped = 0;
+  let attentionFlagged = 0;
 
   for (const item of orphans) {
     const jp = jobPostMap.get(item.job_post_id);
     if (!jp) {
-      skipped++;
+      await flagQueueAttention(
+        item.id,
+        "JOB_POST_MISSING",
+        "Job post not found for autonomous apply preflight."
+      );
+      attentionFlagged++;
       continue;
     }
 
-    const atsType = detectAtsType(jp.source, jp.url);
-    if (!AUTO_APPLY_ALLOWED_ATS.has(atsType)) {
+    const preflight = evaluateAutoApplyPreflight({
+      source: jp.source,
+      url: jp.url,
+      matchScore:
+        matchScoreMap.get(`${item.job_seeker_id}:${item.job_post_id}`) ?? null,
+      storageState: await getStorageState(item.job_seeker_id),
+      allowedAts: AUTO_APPLY_ALLOWED_ATS,
+    });
+
+    if (!preflight.eligible) {
+      await flagQueueAttention(
+        item.id,
+        preflight.reasonCode || "AUTO_APPLY_PREFLIGHT_FAILED",
+        preflight.message || "Autonomous apply preflight failed."
+      );
+      attentionFlagged++;
       skipped++;
       continue;
     }
@@ -136,6 +201,7 @@ async function runSweep(request: Request) {
     success: true,
     enqueued,
     skipped,
+    attention_flagged: attentionFlagged,
     candidates: queuedItems.length,
     run_covered: runCoveredIds.size,
     job_covered: jobCoveredIds.size,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
+import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 type JobPostRow = {
   id: string;
@@ -20,6 +21,7 @@ type MatchRow = {
   score: number | null;
   confidence: string | null;
   recommendation: string | null;
+  reasons: Record<string, unknown> | null;
   job_posts: JobPostRow | JobPostRow[] | null;
 };
 
@@ -47,6 +49,7 @@ type MatchScoreRow = {
   score: number | null;
   confidence: string | null;
   recommendation: string | null;
+  reasons: Record<string, unknown> | null;
 };
 
 type JobCard = {
@@ -63,6 +66,7 @@ type JobCard = {
   score: number | null;
   confidence: string | null;
   recommendation: string | null;
+  reasons: Record<string, unknown> | null;
 };
 
 function resolveSingle<T>(value: T | T[] | null | undefined): T | null {
@@ -130,6 +134,7 @@ export async function GET(request: Request) {
         score,
         confidence,
         recommendation,
+        reasons,
         job_posts!inner (
           id,
           title,
@@ -180,6 +185,7 @@ export async function GET(request: Request) {
         score: matchRow.score,
         confidence: matchRow.confidence,
         recommendation: matchRow.recommendation,
+        reasons: matchRow.reasons,
       });
     }
 
@@ -226,7 +232,7 @@ export async function GET(request: Request) {
             .in("id", missingAttentionJobIds),
           supabaseAdmin
             .from("job_match_scores")
-            .select("job_post_id, score, confidence, recommendation")
+            .select("job_post_id, score, confidence, recommendation, reasons")
             .eq("job_seeker_id", session.active_job_seeker_id)
             .in("job_post_id", missingAttentionJobIds),
         ]);
@@ -254,6 +260,7 @@ export async function GET(request: Request) {
           score: score?.score ?? null,
           confidence: score?.confidence ?? null,
           recommendation: score?.recommendation ?? null,
+          reasons: score?.reasons ?? null,
         });
       }
     }
@@ -302,9 +309,15 @@ export async function GET(request: Request) {
         const run = runByJobId.get(job.id) ?? attentionByJobId.get(job.id) ?? null;
         const queueStatus = queue?.status ?? run?.status ?? null;
         const needsAttention = queueStatus === "NEEDS_ATTENTION";
+        const explanation = buildMatchExplanation(job.reasons, {
+          score: job.score ?? null,
+          confidence: job.confidence ?? null,
+          recommendation: job.recommendation ?? null,
+        });
+        const { reasons: _reasons, ...jobCard } = job;
 
         return {
-          ...job,
+          ...jobCard,
           queue_status: queueStatus,
           queue_id: queue?.id ?? null,
           run_id: run?.id ?? null,
@@ -315,6 +328,10 @@ export async function GET(request: Request) {
           needs_attention_reason: run?.needs_attention_reason ?? null,
           needs_attention: needsAttention,
           updated_at: run?.updated_at ?? queue?.updated_at ?? null,
+          score_summary: explanation.highlights,
+          score_blockers: [...explanation.blockers, ...explanation.cautions],
+          queue_blocked: explanation.queueBlocked,
+          queue_block_reason: explanation.queueBlockReason,
         };
       })
       .sort((a, b) => {

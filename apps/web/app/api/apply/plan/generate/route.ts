@@ -1,8 +1,9 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { buildApplyAutomationHints } from "@/lib/apply-learning";
+import { resolveJobTargetUrl } from "@/lib/job-url";
 import { supabaseServer } from "@/lib/supabase/server";
 
-const PLAN_VERSION = 2;
+const PLAN_VERSION = 4;
 
 type GeneratePayload = {
   run_id?: string;
@@ -17,6 +18,10 @@ function buildPlan(args: {
     max_auto_advance_steps: number;
     max_no_progress_rounds: number;
     button_hints: string[];
+    apply_entry_hints: string[];
+    rule_id: string | null;
+    requires_apply_entry: boolean;
+    prefer_popup_handoff: boolean;
     blockers: { error_code: string; count: number }[];
     generated_at: string;
     url_host: string | null;
@@ -136,16 +141,19 @@ export async function POST(request: Request) {
     .eq("id", run.job_post_id)
     .maybeSingle();
 
+  const resolvedTargetUrl = resolveJobTargetUrl(jobPost?.url ?? "");
+  const targetUrl = resolvedTargetUrl || jobPost?.url || null;
+
   const automation = await buildApplyAutomationHints({
     atsType: run.ats_type,
-    jobUrl: jobPost?.url ?? null,
+    jobUrl: targetUrl,
   });
 
   const plan = buildPlan({
     runId: run.id,
     jobSeekerId: run.job_seeker_id,
     ats: run.ats_type,
-    targetUrl: jobPost?.url ?? null,
+    targetUrl,
     automation,
   });
 

@@ -1,7 +1,6 @@
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import { computeMatchScore, parseJobPost } from "@/lib/matching";
-import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { tailorResume } from "@/lib/resume-tailor";
 import {
   tailorResumeStructured,
@@ -20,6 +19,10 @@ import { scanAllInboxes, scanSeekerInbox } from "@/lib/gmail/inbox-scanner";
 import { findMatchesForContact, findMatchesForJobPost } from "@/lib/network/matching";
 import { maybeUpsertResumeHardeningAlert } from "@/lib/resume-bank-alerts";
 import { createBlandOutboundCall } from "@/lib/voice/bland";
+import {
+  evaluateAutoApplyPreflight,
+  loadSavedRunnerStorageState,
+} from "@/lib/auto-apply-preflight";
 import {
   appendVoiceConversationNote,
   isUpsellOptedOut,
@@ -89,7 +92,7 @@ const AUTO_TAILOR_ENABLED = resolveFlag(
 const AUTO_TAILOR_REQUIRED = resolveFlag("AUTO_TAILOR_REQUIRED", false);
 const AUTO_APPLY_ENABLED = resolveFlag("AUTO_APPLY_ENABLED", IS_PROD);
 const AUTO_APPLY_ALLOWED_ATS = new Set(
-  (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY")
+  (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,GENERIC")
     .split(",")
     .map((entry) => entry.trim().toUpperCase())
     .filter(Boolean)
@@ -1245,13 +1248,35 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
     return;
   }
 
-  const atsType = detectAtsType(jobPost.source, jobPost.url);
-  if (!AUTO_APPLY_ALLOWED_ATS.has(atsType)) {
-    await flagQueueAttention(queueItem.id, "ATS_UNSUPPORTED", `ATS not allowed: ${atsType}`);
+  const [{ data: matchScore }, storageState] = await Promise.all([
+    supabaseServer
+      .from("job_match_scores")
+      .select("score, confidence, recommendation, reasons")
+      .eq("job_seeker_id", queueItem.job_seeker_id)
+      .eq("job_post_id", queueItem.job_post_id)
+      .maybeSingle(),
+    loadSavedRunnerStorageState(queueItem.job_seeker_id),
+  ]);
+
+  const preflight = evaluateAutoApplyPreflight({
+    source: jobPost.source,
+    url: jobPost.url,
+    matchScore,
+    storageState,
+    allowedAts: AUTO_APPLY_ALLOWED_ATS,
+  });
+
+  if (!preflight.eligible) {
+    await flagQueueAttention(
+      queueItem.id,
+      preflight.reasonCode || "AUTO_APPLY_PREFLIGHT_FAILED",
+      preflight.message || "Autonomous apply preflight failed."
+    );
     return;
   }
 
-  const initialStep = getInitialStep(atsType);
+  const atsType = preflight.atsType;
+  const initialStep = preflight.initialStep ?? "OPEN_JOB";
   const nowIso = new Date().toISOString();
   const maxRetries = Number.isFinite(AUTO_APPLY_MAX_RETRIES) ? AUTO_APPLY_MAX_RETRIES : 2;
 

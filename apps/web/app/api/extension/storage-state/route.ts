@@ -7,6 +7,27 @@ type StorageStatePayload = {
   storage_state?: Record<string, unknown> | null;
 };
 
+type StorageCookie = {
+  name?: string;
+  value?: string;
+  domain?: string;
+  path?: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: string;
+};
+
+type StorageOrigin = {
+  origin?: string;
+  localStorage?: Array<{ name?: string; value?: string }>;
+};
+
+type PlaywrightStorageState = {
+  cookies?: StorageCookie[];
+  origins?: StorageOrigin[];
+};
+
 const BUCKET_ID = "runner_state";
 
 async function ensureBucket() {
@@ -14,6 +35,123 @@ async function ensureBucket() {
   const exists = buckets?.some((bucket) => bucket.id === BUCKET_ID);
   if (!exists) {
     await supabaseAdmin.storage.createBucket(BUCKET_ID, { public: false });
+  }
+}
+
+function normalizeStorageState(input: unknown): PlaywrightStorageState {
+  const state =
+    input && typeof input === "object" ? (input as PlaywrightStorageState) : {};
+
+  const cookies = Array.isArray(state.cookies)
+    ? state.cookies.filter(
+        (cookie) =>
+          cookie &&
+          typeof cookie.name === "string" &&
+          typeof cookie.value === "string" &&
+          typeof cookie.domain === "string"
+      )
+    : [];
+
+  const origins = Array.isArray(state.origins)
+    ? state.origins
+        .filter((origin) => origin && typeof origin.origin === "string")
+        .map((origin) => ({
+          origin: origin.origin,
+          localStorage: Array.isArray(origin.localStorage)
+            ? origin.localStorage.filter(
+                (entry) =>
+                  entry &&
+                  typeof entry.name === "string" &&
+                  typeof entry.value === "string"
+              )
+            : [],
+        }))
+    : [];
+
+  return { cookies, origins };
+}
+
+function mergeCookies(
+  existing: StorageCookie[] = [],
+  incoming: StorageCookie[] = []
+) {
+  const merged = new Map<string, StorageCookie>();
+
+  for (const cookie of existing) {
+    const key = `${cookie.name ?? ""}::${cookie.domain ?? ""}::${cookie.path ?? "/"}`;
+    merged.set(key, cookie);
+  }
+
+  for (const cookie of incoming) {
+    const key = `${cookie.name ?? ""}::${cookie.domain ?? ""}::${cookie.path ?? "/"}`;
+    merged.set(key, cookie);
+  }
+
+  return Array.from(merged.values());
+}
+
+function mergeOrigins(
+  existing: StorageOrigin[] = [],
+  incoming: StorageOrigin[] = []
+) {
+  const merged = new Map<string, StorageOrigin>();
+
+  for (const origin of existing) {
+    const localStorage = new Map<string, string>();
+    for (const entry of origin.localStorage ?? []) {
+      if (typeof entry?.name === "string") {
+        localStorage.set(entry.name, typeof entry.value === "string" ? entry.value : "");
+      }
+    }
+    merged.set(origin.origin ?? "", {
+      origin: origin.origin,
+      localStorage: Array.from(localStorage.entries()).map(([name, value]) => ({
+        name,
+        value,
+      })),
+    });
+  }
+
+  for (const origin of incoming) {
+    const key = origin.origin ?? "";
+    const existingOrigin = merged.get(key);
+    const localStorage = new Map<string, string>();
+
+    for (const entry of existingOrigin?.localStorage ?? []) {
+      if (typeof entry?.name === "string") {
+        localStorage.set(entry.name, typeof entry.value === "string" ? entry.value : "");
+      }
+    }
+
+    for (const entry of origin.localStorage ?? []) {
+      if (typeof entry?.name === "string") {
+        localStorage.set(entry.name, typeof entry.value === "string" ? entry.value : "");
+      }
+    }
+
+    merged.set(key, {
+      origin: origin.origin,
+      localStorage: Array.from(localStorage.entries()).map(([name, value]) => ({
+        name,
+        value,
+      })),
+    });
+  }
+
+  return Array.from(merged.values());
+}
+
+async function loadExistingStorageState(storagePath: string) {
+  const { data, error } = await supabaseAdmin.storage.from(BUCKET_ID).download(storagePath);
+  if (error || !data) {
+    return null;
+  }
+
+  try {
+    const raw = await data.text();
+    return normalizeStorageState(JSON.parse(raw));
+  } catch {
+    return null;
   }
 }
 
@@ -63,7 +201,14 @@ export async function POST(request: Request) {
     await ensureBucket();
 
     const storagePath = `${jobSeekerId}/storage-state.json`;
-    const body = Buffer.from(JSON.stringify(payload.storage_state));
+    const existingState = await loadExistingStorageState(storagePath);
+    const incomingState = normalizeStorageState(payload.storage_state);
+    const mergedState: PlaywrightStorageState = {
+      cookies: mergeCookies(existingState?.cookies, incomingState.cookies),
+      origins: mergeOrigins(existingState?.origins, incomingState.origins),
+    };
+
+    const body = Buffer.from(JSON.stringify(mergedState));
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET_ID)
       .upload(storagePath, body, {
@@ -78,7 +223,12 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true, path: storagePath });
+    return NextResponse.json({
+      success: true,
+      path: storagePath,
+      cookies: mergedState.cookies?.length ?? 0,
+      origins: mergedState.origins?.length ?? 0,
+    });
   } catch (error) {
     console.error("Extension storage state error:", error);
     return NextResponse.json(

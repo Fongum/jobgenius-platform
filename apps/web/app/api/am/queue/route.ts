@@ -1,16 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
-
-// Check if AM has access to this seeker
-async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", amId)
-    .eq("job_seeker_id", seekerId)
-    .maybeSingle();
-  return !!data;
-}
+import { hasJobSeekerAccess } from "@/lib/am-access";
+import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 // GET: Get queue items for a seeker
 export async function GET(request: Request) {
@@ -27,7 +18,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "job_seeker_id is required." }, { status: 400 });
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -70,7 +61,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -84,6 +75,30 @@ export async function POST(request: Request) {
 
   if (existing) {
     return NextResponse.json({ error: "Job already in queue." }, { status: 400 });
+  }
+
+  const { data: matchScore } = await supabaseAdmin
+    .from("job_match_scores")
+    .select("score, confidence, recommendation, reasons")
+    .eq("job_seeker_id", job_seeker_id)
+    .eq("job_post_id", job_post_id)
+    .maybeSingle();
+
+  const explanation = buildMatchExplanation(matchScore?.reasons, {
+    score: matchScore?.score ?? null,
+    confidence: matchScore?.confidence ?? null,
+    recommendation: matchScore?.recommendation ?? null,
+  });
+
+  if (explanation.queueBlocked) {
+    return NextResponse.json(
+      {
+        error: explanation.queueBlockReason || "This match is blocked from queueing.",
+        queue_blocked: true,
+        reason: explanation.queueBlockCode,
+      },
+      { status: 400 }
+    );
   }
 
   const { data, error } = await supabaseAdmin
@@ -119,7 +134,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "id and job_seeker_id are required." }, { status: 400 });
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

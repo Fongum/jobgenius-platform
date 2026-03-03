@@ -138,6 +138,36 @@ const poorMatchJob: JobPost = {
   parsed_at: new Date().toISOString(),
 };
 
+const obviousMismatchJob: JobPost = {
+  id: "job-4",
+  url: "https://example.com/job/4",
+  title: "Brand & Content Manager",
+  company: "MarketingCo",
+  location: "Remote",
+  description_text: `
+    We're hiring a Brand & Content Manager to lead campaigns, brand voice, and content planning.
+
+    Requirements:
+    - Content marketing experience
+    - Brand strategy
+    - Campaign planning
+    - Social media coordination
+  `,
+  salary_min: null,
+  salary_max: null,
+  seniority_level: "mid",
+  work_type: "remote",
+  years_experience_min: null,
+  years_experience_max: null,
+  required_skills: [],
+  preferred_skills: [],
+  industry: null,
+  company_size: null,
+  offers_visa_sponsorship: null,
+  employment_type: "full-time",
+  parsed_at: new Date().toISOString(),
+};
+
 // ============================================================================
 // TEST RUNNER
 // ============================================================================
@@ -169,8 +199,15 @@ function runTests() {
   printResult(poorResult);
   console.log("");
 
-  // Test 4: Job Post Parsing
-  console.log("TEST 4: Job Description Parsing");
+  // Test 4: Obvious title mismatch
+  console.log("TEST 4: Obvious Title Mismatch (Brand & Content Manager)");
+  console.log("-".repeat(50));
+  const mismatchResult = computeMatchScore(sampleSeeker, obviousMismatchJob);
+  printResult(mismatchResult);
+  console.log("");
+
+  // Test 5: Job Post Parsing
+  console.log("TEST 5: Job Description Parsing");
   console.log("-".repeat(50));
   const rawDescription = `
     Senior Full Stack Engineer - $150k-$180k
@@ -223,6 +260,7 @@ function runTests() {
   console.log(`Good Match:     Score ${goodResult.score}/100 (${goodResult.recommendation})`);
   console.log(`Marginal Match: Score ${marginalResult.score}/100 (${marginalResult.recommendation})`);
   console.log(`Poor Match:     Score ${poorResult.score}/100 (${poorResult.recommendation})`);
+  console.log(`Title Mismatch: Score ${mismatchResult.score}/100 (${mismatchResult.recommendation})`);
   console.log("");
 
   // Assertions
@@ -245,6 +283,12 @@ function runTests() {
     passed.push("Poor match scores < 40");
   } else {
     failed.push(`Poor match should score < 40, got ${poorResult.score}`);
+  }
+
+  if (mismatchResult.score < 50) {
+    passed.push("Obvious title mismatch stays below 50");
+  } else {
+    failed.push(`Obvious title mismatch should score < 50, got ${mismatchResult.score}`);
   }
 
   if (goodResult.recommendation === "strong_match" || goodResult.recommendation === "good_match") {

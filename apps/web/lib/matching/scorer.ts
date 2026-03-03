@@ -30,6 +30,211 @@ function normalizeArray(arr: string[] | null | undefined): string[] {
   return arr.map(normalizeString).filter((s) => s.length > 0);
 }
 
+const TITLE_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "the",
+  "for",
+  "of",
+  "to",
+  "in",
+  "with",
+  "at",
+  "on",
+  "sr",
+  "jr",
+  "senior",
+  "junior",
+  "lead",
+  "principal",
+  "staff",
+  "mid",
+  "level",
+  "manager",
+  "management",
+  "specialist",
+  "analyst",
+  "associate",
+  "coordinator",
+  "consultant",
+  "representative",
+  "administrator",
+  "officer",
+  "executive",
+  "intern",
+  "trainee",
+  "apprentice",
+  "engineer",
+  "developer",
+]);
+
+const TITLE_TOKEN_NORMALIZATIONS: Record<string, string> = {
+  cybersecurity: "security",
+  cyber: "security",
+  infosec: "security",
+  secops: "security",
+  frontend: "front-end",
+  frontendend: "front-end",
+  backend: "back-end",
+  fullstack: "full-stack",
+  productowner: "product",
+  presales: "pre-sales",
+};
+
+type TitleAlignment = {
+  exact: boolean;
+  partial: boolean;
+  matchedTitles: string[];
+  partialMatches: string[];
+  bestTokenOverlap: number;
+  sharedFamilies: string[];
+  hardMismatch: boolean;
+};
+
+function canonicalizeTitleToken(token: string): string {
+  const base = normalizeString(token).replace(/[^a-z0-9+#]+/g, "");
+  if (!base) return "";
+  return TITLE_TOKEN_NORMALIZATIONS[base] ?? base;
+}
+
+function tokenizeTitle(title: string): string[] {
+  return normalizeString(title)
+    .replace(/[^a-z0-9+#/ -]+/g, " ")
+    .split(/[\s/()-]+/)
+    .map(canonicalizeTitleToken)
+    .filter((token) => token.length > 0 && !TITLE_STOP_WORDS.has(token));
+}
+
+function detectTitleFamilies(title: string): Set<string> {
+  const normalizedTitle = normalizeString(title);
+  const tokens = tokenizeTitle(title);
+  const combined = new Set<string>([normalizedTitle, ...tokens]);
+  const families = new Set<string>();
+
+  const familyRules: Array<[string, string[]]> = [
+    [
+      "security",
+      ["security", "threat", "soc", "siem", "iam", "incident", "infosec", "cyber"],
+    ],
+    [
+      "software",
+      ["software", "platform", "devops", "sre", "qa", "automation", "front-end", "back-end", "full-stack"],
+    ],
+    [
+      "data",
+      ["data", "analytics", "bi", "reporting", "insights", "machinelearning", "ml"],
+    ],
+    [
+      "product",
+      ["product", "roadmap", "owner"],
+    ],
+    [
+      "marketing",
+      ["marketing", "brand", "content", "seo", "sem", "communications", "copywriter", "growth"],
+    ],
+    [
+      "sales_customer",
+      ["sales", "account", "customer", "solution", "support", "success", "revenue", "partnership"],
+    ],
+    [
+      "people_hr",
+      ["recruit", "recruiting", "recruiter", "talent", "people", "hr", "humanresources"],
+    ],
+    [
+      "design",
+      ["design", "designer", "ux", "ui", "creative", "visual"],
+    ],
+    [
+      "finance",
+      ["finance", "financial", "accounting", "controller", "audit", "fp&a", "bookkeeping"],
+    ],
+    [
+      "operations",
+      ["operations", "ops", "logistics", "supply", "program", "project", "delivery"],
+    ],
+  ];
+
+  for (const [family, keywords] of familyRules) {
+    if (
+      keywords.some((keyword) => {
+        const canonicalKeyword = canonicalizeTitleToken(keyword);
+        return (
+          combined.has(canonicalKeyword) ||
+          normalizedTitle.includes(keyword)
+        );
+      })
+    ) {
+      families.add(family);
+    }
+  }
+
+  return families;
+}
+
+function analyzeTitleAlignment(
+  targetTitles: string[] | null | undefined,
+  rawJobTitle: string
+): TitleAlignment {
+  const normalizedTargets = normalizeArray(targetTitles);
+  const jobTitle = normalizeString(rawJobTitle);
+  const jobTokens = new Set(tokenizeTitle(rawJobTitle));
+  const jobFamilies = detectTitleFamilies(rawJobTitle);
+
+  const matchedTitles: string[] = [];
+  const partialMatches: string[] = [];
+  let bestTokenOverlap = 0;
+  const sharedFamilies = new Set<string>();
+
+  for (const target of normalizedTargets) {
+    if (jobTitle.includes(target)) {
+      matchedTitles.push(target);
+      continue;
+    }
+
+    const targetTokens = tokenizeTitle(target);
+    const matchedTokenCount = targetTokens.filter((token) => jobTokens.has(token)).length;
+    const tokenOverlap =
+      targetTokens.length > 0 ? matchedTokenCount / targetTokens.length : 0;
+    bestTokenOverlap = Math.max(bestTokenOverlap, tokenOverlap);
+
+    const targetFamilies = detectTitleFamilies(target);
+    for (const family of Array.from(targetFamilies)) {
+      if (jobFamilies.has(family)) {
+        sharedFamilies.add(family);
+      }
+    }
+
+    if (
+      tokenOverlap >= 0.6 ||
+      (matchedTokenCount >= 2 && targetTokens.length >= 2)
+    ) {
+      partialMatches.push(target);
+    } else if (tokenOverlap >= 0.4 && targetFamilies.size > 0) {
+      partialMatches.push(target);
+    }
+  }
+
+  const hasFamilies = normalizedTargets.some((target) => detectTitleFamilies(target).size > 0);
+  const hardMismatch =
+    matchedTitles.length === 0 &&
+    partialMatches.length === 0 &&
+    hasFamilies &&
+    jobFamilies.size > 0 &&
+    sharedFamilies.size === 0 &&
+    bestTokenOverlap < 0.25;
+
+  return {
+    exact: matchedTitles.length > 0,
+    partial: partialMatches.length > 0,
+    matchedTitles,
+    partialMatches,
+    bestTokenOverlap,
+    sharedFamilies: Array.from(sharedFamilies),
+    hardMismatch,
+  };
+}
+
 /**
  * Calculate overlap percentage between two ranges
  */
@@ -181,42 +386,24 @@ function scoreTitle(
   job: JobPost,
   maxScore: number
 ): MatchScoreBreakdown["title"] {
-  const targetTitles = normalizeArray(seeker.target_titles);
-  const jobTitle = normalizeString(job.title);
-
-  const matchedTitles: string[] = [];
-  const partialMatches: string[] = [];
-
-  for (const target of targetTitles) {
-    if (jobTitle.includes(target)) {
-      matchedTitles.push(target);
-    } else {
-      // Check for partial matches (e.g., "software engineer" matches "senior software engineer")
-      const targetWords = target.split(/\s+/);
-      const titleWords = jobTitle.split(/\s+/);
-      const matchedWords = targetWords.filter((tw) =>
-        titleWords.some((jw) => jw.includes(tw) || tw.includes(jw))
-      );
-
-      if (matchedWords.length >= Math.ceil(targetWords.length * 0.6)) {
-        partialMatches.push(target);
-      }
-    }
-  }
+  const alignment = analyzeTitleAlignment(seeker.target_titles, job.title);
 
   let score = 0;
-  if (matchedTitles.length > 0) {
+  if (alignment.exact) {
     score = maxScore;
-  } else if (partialMatches.length > 0) {
-    score = Math.round(maxScore * 0.6);
+  } else if (alignment.partial) {
+    const overlapBoost = Math.min(0.2, alignment.bestTokenOverlap * 0.2);
+    score = Math.round(maxScore * (0.5 + overlapBoost));
+  } else if (alignment.sharedFamilies.length > 0) {
+    score = Math.round(maxScore * 0.25);
   }
 
   return {
     score,
     max: maxScore,
     details: {
-      matched_titles: matchedTitles,
-      partial_matches: partialMatches,
+      matched_titles: alignment.matchedTitles,
+      partial_matches: alignment.partialMatches,
     },
   };
 }
@@ -234,8 +421,8 @@ function scoreExperience(
   let matchType: "exact" | "close" | "over" | "under" | "unknown" = "unknown";
 
   if (seekerYears === null || (jobMin === null && jobMax === null)) {
-    // Can't determine, give partial credit
-    score = Math.round(maxScore * 0.5);
+    // Can't determine, give only light neutral credit
+    score = Math.round(maxScore * 0.2);
     matchType = "unknown";
   } else {
     const effectiveJobMin = jobMin ?? 0;
@@ -291,7 +478,7 @@ function scoreSalary(
     (seekerMin === null && seekerMax === null) ||
     (jobMin === null && jobMax === null)
   ) {
-    score = Math.round(maxScore * 0.5);
+    score = Math.round(maxScore * 0.15);
     matchType = "unknown";
   } else {
     const effectiveSeekerMin = seekerMin ?? 0;
@@ -491,33 +678,37 @@ function scoreCompanyFit(
   const jobIndustry = job.industry ? normalizeString(job.industry) : null;
   const jobSize = job.company_size ? normalizeString(job.company_size) : null;
 
-  let industryMatch = false;
-  let sizeMatch = false;
+  const industryScore =
+    seekerIndustries.length === 0
+      ? 0.75
+      : !jobIndustry
+        ? 0.35
+        : seekerIndustries.some(
+            (industry) =>
+              industry === jobIndustry ||
+              industry.includes(jobIndustry) ||
+              jobIndustry.includes(industry)
+          )
+          ? 1
+          : 0;
 
-  // Industry matching
-  if (seekerIndustries.length === 0) {
-    industryMatch = true; // No preference means any industry is fine
-  } else if (jobIndustry) {
-    industryMatch = seekerIndustries.includes(jobIndustry);
-  } else {
-    industryMatch = true; // Unknown industry, give benefit of doubt
-  }
+  const sizeScore =
+    seekerSizes.length === 0
+      ? 0.75
+      : !jobSize
+        ? 0.35
+        : seekerSizes.some(
+            (size) =>
+              size === jobSize ||
+              size.includes(jobSize) ||
+              jobSize.includes(size)
+          )
+          ? 1
+          : 0;
 
-  // Size matching
-  if (seekerSizes.length === 0) {
-    sizeMatch = true;
-  } else if (jobSize) {
-    sizeMatch = seekerSizes.includes(jobSize);
-  } else {
-    sizeMatch = true;
-  }
-
-  let score = 0;
-  if (industryMatch && sizeMatch) {
-    score = maxScore;
-  } else if (industryMatch || sizeMatch) {
-    score = Math.round(maxScore * 0.5);
-  }
+  const score = Math.round(maxScore * ((industryScore + sizeScore) / 2));
+  const industryMatch = industryScore >= 1;
+  const sizeMatch = sizeScore >= 1;
 
   return {
     score,
@@ -538,6 +729,7 @@ function scorePenalties(
 ): MatchScoreBreakdown["penalties"] {
   const excludeKeywords = normalizeArray(seeker.exclude_keywords);
   const combinedText = `${job.title} ${job.description_text ?? ""}`.toLowerCase();
+  const titleAlignment = analyzeTitleAlignment(seeker.target_titles, job.title);
 
   const excludedFound: string[] = [];
   const reasons: string[] = [];
@@ -557,10 +749,25 @@ function scorePenalties(
     reasons.push("visa_sponsorship_not_offered");
   }
 
+  let titleMismatchPenalty = 0;
+  if (titleAlignment.hardMismatch) {
+    titleMismatchPenalty = 10;
+    reasons.push("title_mismatch");
+  } else if (
+    seeker.target_titles.length > 0 &&
+    !titleAlignment.exact &&
+    !titleAlignment.partial &&
+    titleAlignment.bestTokenOverlap === 0
+  ) {
+    titleMismatchPenalty = 4;
+    reasons.push("weak_title_alignment");
+  }
+
   // Calculate penalty
   let penalty = 0;
   penalty += excludedFound.length * 5;
   if (visaMismatch) penalty += 10;
+  penalty += titleMismatchPenalty;
   penalty = Math.min(maxPenalty, penalty);
 
   return {
@@ -651,9 +858,10 @@ export function computeMatchScore(
   const locationResult = scoreLocation(seeker, job, weights.location);
   const companyFitResult = scoreCompanyFit(seeker, job, weights.company_fit);
   const penaltiesResult = scorePenalties(seeker, job, weights.max_penalty);
+  const titleAlignment = analyzeTitleAlignment(seeker.target_titles, job.title);
 
   // Calculate total score
-  const rawScore =
+  let rawScore =
     skillsResult.score +
     titleResult.score +
     experienceResult.score +
@@ -661,6 +869,17 @@ export function computeMatchScore(
     locationResult.score +
     companyFitResult.score +
     penaltiesResult.score; // penalties are negative
+
+  const hasStructuredSkills =
+    job.required_skills.length > 0 || job.preferred_skills.length > 0;
+
+  if (titleAlignment.hardMismatch) {
+    const mismatchCap =
+      hasStructuredSkills && skillsResult.score >= Math.round(weights.skills * 0.5)
+        ? 54
+        : 49;
+    rawScore = Math.min(rawScore, mismatchCap);
+  }
 
   const score = Math.max(0, Math.min(100, rawScore));
 

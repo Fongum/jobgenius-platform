@@ -1,3 +1,5 @@
+import { resolveJobTargetUrl } from "@/lib/job-url";
+
 type AtsType = "LINKEDIN" | "GREENHOUSE" | "WORKDAY" | "GENERIC";
 
 const STEP_SETS: Record<AtsType, string[]> = {
@@ -42,8 +44,9 @@ function hasValue(value: string | null | undefined) {
 
 export function detectAtsType(source?: string | null, url?: string | null): AtsType {
   const sourceValue = (source ?? "").toLowerCase();
-  const urlValue = (url ?? "").toLowerCase();
-  const combined = `${sourceValue} ${urlValue}`;
+  const rawUrlValue = (url ?? "").toLowerCase();
+  const resolvedUrlValue = resolveJobTargetUrl(url ?? "").toLowerCase();
+  const combined = `${sourceValue} ${rawUrlValue} ${resolvedUrlValue}`;
 
   if (combined.includes("greenhouse")) {
     return "GREENHOUSE";

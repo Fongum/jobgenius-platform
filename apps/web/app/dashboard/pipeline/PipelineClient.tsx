@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import ResumePreview from "./ResumePreview";
 import type { StructuredResume, ResumeTemplateId } from "@/lib/resume-templates/types";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates/types";
+import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -560,6 +561,13 @@ function DiscoverTab({
       const matchId = ids[i];
       const match = matchScores.find((m) => m.id === matchId);
       if (match?.job_posts) {
+        const explanation = buildMatchExplanation(match.reasons, {
+          score: match.score,
+          recommendation: match.recommendation,
+        });
+        if (explanation.queueBlocked) {
+          continue;
+        }
         await queueJob(match.job_seeker_id, match.job_posts.id, matchId);
       }
     }
@@ -682,7 +690,9 @@ function DiscoverTab({
       </div>
 
       <p className="text-sm text-gray-500">{filtered.length} matches</p>
-      <p className="text-xs text-gray-400">Jobs above threshold with strong/good match are auto-queued when matching runs.</p>
+      <p className="text-xs text-gray-400">
+        Jobs above threshold with strong/good match are auto-queued when matching runs. Hard-blocked matches stay visible for review but cannot be queued.
+      </p>
 
       {/* Job cards */}
       <div className="space-y-3">
@@ -693,6 +703,10 @@ function DiscoverTab({
           const isQueued = queuedSet.has(key);
           const isApplied = appliedSet.has(key);
           const routing = routingMap.get(key);
+          const explanation = buildMatchExplanation(m.reasons, {
+            score: m.score,
+            recommendation: m.recommendation,
+          });
 
           return (
             <div key={m.id} className="border rounded-lg p-4 hover:shadow-sm transition-shadow">
@@ -708,7 +722,7 @@ function DiscoverTab({
                     });
                   }}
                   className="mt-1"
-                  disabled={isQueued || isApplied}
+                  disabled={isQueued || isApplied || explanation.queueBlocked}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -745,12 +759,44 @@ function DiscoverTab({
                       )}
                     </div>
                   )}
+                  <div className="mt-3 space-y-1">
+                    {explanation.highlights.map((line) => (
+                      <div key={`highlight-${m.id}-${line}`} className="text-xs text-gray-600">
+                        {line}
+                      </div>
+                    ))}
+                    {explanation.cautions.map((line) => (
+                      <div key={`caution-${m.id}-${line}`} className="text-xs text-amber-700">
+                        {line}
+                      </div>
+                    ))}
+                    {explanation.blockers.map((line) => (
+                      <div key={`blocker-${m.id}-${line}`} className="text-xs text-red-700">
+                        {line}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2 shrink-0">
                   {isApplied ? (
                     <StatusBadge status="APPLIED" />
                   ) : isQueued ? (
                     <StatusBadge status="QUEUED" />
+                  ) : explanation.queueBlocked ? (
+                    <>
+                      <span
+                        className="px-3 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-lg text-center"
+                        title={explanation.queueBlockReason || undefined}
+                      >
+                        Blocked
+                      </span>
+                      <button
+                        onClick={() => excludeJob(m.job_seeker_id, job.id)}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200"
+                      >
+                        Exclude
+                      </button>
+                    </>
                   ) : (
                     <>
                       <button

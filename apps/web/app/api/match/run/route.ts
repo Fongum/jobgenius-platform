@@ -7,6 +7,7 @@ import {
   type JobSeekerProfile,
   type JobPost,
 } from "@/lib/matching";
+import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 type MatchPayload = {
   job_seeker_id?: string;
@@ -291,18 +292,37 @@ export async function POST(request: Request) {
 
   // Auto-queue strong/good matches above threshold
   let autoQueuedCount = 0;
+  let autoBlockedCount = 0;
   const threshold = seekerData.match_threshold ?? 60;
 
   // Gather all scored jobs for this seeker that are above threshold
   const { data: highScores } = await supabaseServer
     .from("job_match_scores")
-    .select("job_post_id, score, recommendation")
+    .select("job_post_id, score, confidence, recommendation, reasons")
     .eq("job_seeker_id", seeker.id)
     .gte("score", threshold);
 
-  const qualifiedJobs = (highScores ?? []).filter(
-    (s) => s.recommendation === "strong_match" || s.recommendation === "good_match"
-  );
+  const qualifiedJobs = (highScores ?? []).filter((row) => {
+    if (
+      row.recommendation !== "strong_match" &&
+      row.recommendation !== "good_match"
+    ) {
+      return false;
+    }
+
+    const explanation = buildMatchExplanation(row.reasons, {
+      score: row.score ?? null,
+      confidence: row.confidence ?? null,
+      recommendation: row.recommendation ?? null,
+    });
+
+    if (explanation.queueBlocked) {
+      autoBlockedCount += 1;
+      return false;
+    }
+
+    return true;
+  });
 
   if (qualifiedJobs.length > 0) {
     const qualifiedJobIds = qualifiedJobs.map((j) => j.job_post_id);
@@ -352,6 +372,7 @@ export async function POST(request: Request) {
     matched: matchedCount,
     parsed: parsedCount,
     auto_queued: autoQueuedCount,
+    auto_blocked: autoBlockedCount,
     errors: errors.length > 0 ? errors : undefined,
   });
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
+import { resolveJobTargetUrl } from "@/lib/job-url";
 
 type JobPostRow = {
   id: string;
@@ -204,6 +205,7 @@ export async function GET(request: Request) {
         const match = matchByJobPostId.get(queue.job_post_id);
         const effectiveStatus = run?.status ?? queue.status;
         const effectiveUpdatedAt = run?.updated_at ?? queue.updated_at ?? queue.created_at;
+        const jobUrl = resolveJobTargetUrl(job.url ?? "") || job.url;
 
         return {
           queue_id: queue.id,
@@ -229,7 +231,8 @@ export async function GET(request: Request) {
             title: job.title,
             company: job.company,
             location: job.location,
-            url: job.url,
+            url: jobUrl,
+            source_url: job.url,
             source: job.source,
             source_type: job.source_type,
             created_at: job.created_at,
