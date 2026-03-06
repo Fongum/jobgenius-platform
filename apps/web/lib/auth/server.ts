@@ -14,6 +14,7 @@ import type {
   AccountManager,
   JobSeeker,
 } from "./types";
+import { normalizeAMRole } from "./roles";
 
 // Supabase clients
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -145,7 +146,7 @@ export async function getUserByAuthId(
         email: am.email,
         name: am.name ?? undefined,
         userType: "am",
-        role: am.role,
+        role: normalizeAMRole(am.role),
         status: am.status,
         amCode: am.am_code ?? undefined,
       };
@@ -172,7 +173,7 @@ export async function getUserByAuthId(
       email: am.email,
       name: am.name ?? undefined,
       userType: "am",
-      role: am.role,
+      role: normalizeAMRole(am.role),
       status: am.status,
       amCode: am.am_code ?? undefined,
     };
@@ -694,6 +695,17 @@ export async function hasJobSeekerAccess(
   // Job seekers can only access themselves
   if (userType === "job_seeker") {
     return userId === jobSeekerId;
+  }
+
+  // Admins and super admins can access all job seekers
+  const { data: am } = await supabaseAdmin
+    .from("account_managers")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (am?.role === "admin" || am?.role === "superadmin") {
+    return true;
   }
 
   // Account managers can access their assigned job seekers

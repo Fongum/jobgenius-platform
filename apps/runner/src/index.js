@@ -46,7 +46,7 @@ const REQUIRED_FIELDS_THRESHOLD = Number(process.env.RUNNER_REQUIRED_FIELDS_THRE
 const DISCOVERY_AGENT_ENABLED = ["1", "true", "yes", "on"].includes(
   String(process.env.DISCOVERY_AGENT_ENABLED ?? "").toLowerCase()
 );
-const MIN_PLAN_VERSION = Number(process.env.RUNNER_MIN_PLAN_VERSION ?? 2);
+const MIN_PLAN_VERSION = Number(process.env.RUNNER_MIN_PLAN_VERSION ?? 4);
 const STATE_DIR =
   process.env.STORAGE_STATE_PATH ??
   path.join(process.cwd(), ".state");

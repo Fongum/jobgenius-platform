@@ -55,6 +55,24 @@
     });
   }
 
+  function findClickableByText(texts) {
+    const targets = normalizeButtonTexts(texts);
+    if (targets.length === 0) return null;
+
+    const controls = Array.from(
+      document.querySelectorAll(
+        "button, input[type='submit'], input[type='button'], [role='button'], a[href], a[role='button']"
+      )
+    );
+
+    return controls.find((control) => {
+      if (isDisabled(control) || isHidden(control)) return false;
+      const label = getButtonLabel(control);
+      if (!label) return false;
+      return targets.some((text) => label.includes(text));
+    });
+  }
+
   function isElementVisible(element) {
     if (!element) return false;
     const style = window.getComputedStyle(element);
@@ -762,6 +780,7 @@
   window.JobGeniusDom = {
     sleep,
     findButtonByText,
+    findClickableByText,
     hasCaptcha,
     hasSmsOtp,
     hasEmailOtp,

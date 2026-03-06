@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
+import { hasJobSeekerAccess } from "@/lib/am-access";
 import { renderResumePdf } from "@/lib/resume-templates";
 import type { StructuredResume, ResumeTemplateId } from "@/lib/resume-templates";
-
-async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", amId)
-    .eq("job_seeker_id", seekerId)
-    .maybeSingle();
-  return !!data;
-}
 
 export async function PUT(request: Request) {
   const auth = await requireAM(request);
@@ -29,7 +20,7 @@ export async function PUT(request: Request) {
     );
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

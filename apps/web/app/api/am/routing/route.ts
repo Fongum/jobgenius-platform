@@ -1,16 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
-
-// Check if AM has access to this seeker
-async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", amId)
-    .eq("job_seeker_id", seekerId)
-    .maybeSingle();
-  return !!data;
-}
+import { hasJobSeekerAccess } from "@/lib/am-access";
 
 // POST: Create or update a routing decision
 export async function POST(request: Request) {
@@ -36,7 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -81,7 +71,7 @@ export async function DELETE(request: Request) {
     );
   }
 
-  if (!(await hasAccess(auth.user.id, job_seeker_id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, job_seeker_id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

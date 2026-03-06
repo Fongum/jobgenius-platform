@@ -3,7 +3,7 @@
   const registry = window.JobGeniusAdapterRegistry;
   const engine = window.JobGeniusEngine;
   const sidebar = window.JobGeniusRunnerSidebar;
-  const MIN_PLAN_VERSION = 2;
+  const MIN_PLAN_VERSION = 4;
 
   function detectAtsType() {
     const host = window.location.hostname.toLowerCase();
@@ -115,6 +115,10 @@
     }
 
     const result = await adapter.runFallback(ctx);
+    if (result.status === "HANDOFF") {
+      sidebar?.finish?.("Transferred", "Continuing in the application tab.");
+      return;
+    }
     if (result.status === "APPLIED") {
       await engine.completeRun(ctx, "Application submitted by runner.");
       sidebar?.finish?.("Applied", "Application submitted by fallback.");
@@ -157,6 +161,25 @@
       defaultEmail: message.profile?.email ?? "",
       dryRun: Boolean(message.dryRun),
       atsType,
+      handoffToNewTab: () =>
+        new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            {
+              type: "RUNNER_HANDOFF_TO_CHILD_TAB",
+              runId: message.runId,
+              claimToken: message.claimToken,
+              apiBaseUrl: message.apiBaseUrl,
+              authToken: message.authToken,
+              jobSeekerId: message.jobSeekerId ?? message.activeSeekerId ?? null,
+              activeSeekerId: message.activeSeekerId,
+              job: message.job ?? null,
+              resumeUrl: message.resumeUrl ?? null,
+              profile: message.profile ?? null,
+              dryRun: Boolean(message.dryRun),
+            },
+            (response) => resolve(Boolean(response?.success))
+          );
+        }),
     };
 
     sidebar?.show?.({
@@ -199,8 +222,18 @@
       buttonHints: Array.isArray(automation.button_hints)
         ? automation.button_hints
         : [],
+      applyEntryHints: Array.isArray(automation.apply_entry_hints)
+        ? automation.apply_entry_hints
+        : [],
+      requiresApplyEntry: Boolean(automation.requires_apply_entry),
+      preferPopupHandoff: Boolean(automation.prefer_popup_handoff),
+      hostRuleId:
+        typeof automation.rule_id === "string" ? automation.rule_id : null,
+      urlHost:
+        typeof automation.url_host === "string" ? automation.url_host : null,
     };
     ctx.buttonHints = ctx.automation.buttonHints;
+    ctx.applyEntryHints = ctx.automation.applyEntryHints;
 
     await engine.runPlan(ctx, plan, adapter);
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });

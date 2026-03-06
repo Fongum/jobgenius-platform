@@ -13,22 +13,63 @@
     "begin application",
   ];
 
+  const APPLY_ENTRY_BUTTONS = [
+    "easy apply",
+    "apply now",
+    "apply on company site",
+    "apply on company website",
+    "apply",
+    "start application",
+    "begin application",
+    "continue application",
+    "continue applying",
+    "continue to application",
+    "go to application",
+    "view application",
+    "external apply",
+    "visit employer site",
+  ];
+
   registry.registerAdapter("GENERIC", {
     detect() {
       return true;
     },
 
     async clickApplyEntry(ctx) {
-      const applyButton = dom.findButtonByText([
-        "apply now",
-        "apply",
-        "start application",
-        "begin application",
-      ]);
-      if (applyButton) {
-        applyButton.click();
-        await dom.sleep(1200);
+      const entryHints =
+        Array.isArray(ctx?.applyEntryHints) && ctx.applyEntryHints.length > 0
+          ? ctx.applyEntryHints
+          : APPLY_ENTRY_BUTTONS;
+      const applyButton = dom.findClickableByText
+        ? dom.findClickableByText(entryHints)
+        : dom.findButtonByText(entryHints);
+      if (!applyButton) {
+        const alreadyInApplication = Boolean(
+          document.querySelector(
+            "form input, form textarea, form select, form input[type='file'], input[required], textarea[required], select[required], input[aria-required='true'], textarea[aria-required='true'], select[aria-required='true']"
+          )
+        );
+        if (alreadyInApplication) {
+          return { ok: true };
+        }
+        return { ok: false, reason: "APPLY_BUTTON_MISSING" };
       }
+
+      const beforeUrl = window.location.href;
+      applyButton.click();
+      await dom.sleep(1200);
+
+      if (window.location.href !== beforeUrl) {
+        return { ok: true };
+      }
+
+      if (ctx?.handoffToNewTab) {
+        const handoff = await ctx.handoffToNewTab();
+        if (handoff) {
+          return { ok: true, handoff: true };
+        }
+      }
+
       return { ok: true };
     },
 
@@ -82,7 +123,16 @@
     },
 
     async runFallback(ctx) {
-      await this.clickApplyEntry(ctx);
+      const entryResult = await this.clickApplyEntry(ctx);
+      if (entryResult?.ok === false) {
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: entryResult.reason ?? "APPLY_BUTTON_MISSING",
+        };
+      }
+      if (entryResult?.handoff) {
+        return { status: "HANDOFF" };
+      }
 
       const maxSteps = Number(ctx?.automation?.maxAutoAdvanceSteps ?? 8);
       let noProgressRounds = 0;

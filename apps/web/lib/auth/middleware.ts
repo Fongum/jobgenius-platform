@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import crypto from "crypto";
 import { getCurrentUser, getUserByAuthId, supabaseAdmin, refreshSession } from "./server";
 import type { AuthUser, UserType } from "./types";
+import { isAdminRole } from "./roles";
 
 // Cookie names
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
@@ -253,7 +254,7 @@ export async function requireAdmin(request: Request): Promise<AuthCheckResult> {
     return result;
   }
 
-  if (result.user.userType !== "am" || !["admin", "superadmin"].includes(result.user.role ?? "")) {
+  if (result.user.userType !== "am" || !isAdminRole(result.user.role)) {
     return {
       authenticated: false,
       error: "Admin access required.",
@@ -309,6 +310,11 @@ export async function requireJobSeekerAccess(
         status: 403,
       };
     }
+    return result;
+  }
+
+  // Admins and super admins can access any job seeker
+  if (isAdminRole(user.role)) {
     return result;
   }
 

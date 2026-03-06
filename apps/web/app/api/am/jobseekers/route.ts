@@ -7,11 +7,33 @@ export async function GET(request: Request) {
     return Response.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
+  const isAdmin = auth.user.role === "admin" || auth.user.role === "superadmin";
+
   const accountManager = {
     id: auth.user.id,
     name: auth.user.name ?? null,
     email: auth.user.email,
   };
+
+  if (isAdmin) {
+    const { data: seekers, error } = await supabaseServer
+      .from("job_seekers")
+      .select("id, full_name, location, seniority, target_titles, work_type")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return Response.json(
+        { success: false, error: "Failed to load job seekers." },
+        { status: 500 }
+      );
+    }
+
+    return Response.json({
+      success: true,
+      account_manager: accountManager,
+      job_seekers: seekers ?? [],
+    });
+  }
 
   const { data: assignments, error: assignmentsError } = await supabaseServer
     .from("job_seeker_assignments")

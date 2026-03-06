@@ -399,10 +399,20 @@ export async function runPlan({
       buttonHints: Array.isArray(automation.button_hints)
         ? automation.button_hints
         : [],
+      applyEntryHints: Array.isArray(automation.apply_entry_hints)
+        ? automation.apply_entry_hints
+        : [],
+      requiresApplyEntry: Boolean(automation.requires_apply_entry),
+      preferPopupHandoff: Boolean(automation.prefer_popup_handoff),
+      hostRuleId:
+        typeof automation.rule_id === "string" ? automation.rule_id : null,
+      urlHost:
+        typeof automation.url_host === "string" ? automation.url_host : null,
     },
   };
 
   ctx.buttonHints = ctx.automation.buttonHints;
+  ctx.applyEntryHints = ctx.automation.applyEntryHints;
   let activeAdapter = adapter ?? null;
   const genericFallback =
     fallbackAdapter && fallbackAdapter.name !== activeAdapter?.name
@@ -592,6 +602,22 @@ export async function runPlan({
           step: step.name,
         });
         return;
+      }
+      if (result?.nextPage) {
+        page = result.nextPage;
+        await sendEvent(
+          apiBaseUrl,
+          {
+            run_id: ctx.runId,
+            event_type: "INFO",
+            step: step.name,
+            message: "Switched to application tab after apply entry click.",
+            last_seen_url: page.url(),
+          },
+          authToken,
+          claimToken,
+          runnerId
+        );
       }
       continue;
     }

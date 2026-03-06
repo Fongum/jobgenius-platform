@@ -9,10 +9,18 @@ import {
 const APPLY_ENTRY_BUTTONS = [
   "easy apply",
   "apply now",
+  "apply on company site",
+  "apply on company website",
   "apply",
   "start application",
   "begin application",
   "continue application",
+  "continue applying",
+  "continue to application",
+  "go to application",
+  "view application",
+  "external apply",
+  "visit employer site",
 ];
 
 const SUBMIT_BUTTONS = [
@@ -33,8 +41,12 @@ export const genericAdapter = {
   async detect() {
     return true;
   },
-  async clickApplyEntry(page) {
-    const applyButton = await findClickableByText(page, APPLY_ENTRY_BUTTONS);
+  async clickApplyEntry(page, ctx) {
+    const entryHints =
+      Array.isArray(ctx?.applyEntryHints) && ctx.applyEntryHints.length > 0
+        ? ctx.applyEntryHints
+        : APPLY_ENTRY_BUTTONS;
+    const applyButton = await findClickableByText(page, entryHints);
     if (!applyButton) {
       const alreadyInApplication = Boolean(
         await page.$(
@@ -47,10 +59,26 @@ export const genericAdapter = {
       return { ok: false, reason: "APPLY_BUTTON_MISSING" };
     }
 
+    const existingPages = new Set(page.context().pages());
+    const popupPromise = page
+      .context()
+      .waitForEvent("page", {
+        timeout: 3000,
+        predicate: (candidate) => !existingPages.has(candidate),
+      })
+      .catch(() => null);
+
     const clicked = await clickElementHandle(applyButton, 10000);
     if (!clicked) {
       return { ok: false, reason: "APPLY_BUTTON_NOT_INTERACTABLE" };
     }
+
+    const popupPage = await popupPromise;
+    if (popupPage) {
+      await popupPage.waitForLoadState("domcontentloaded").catch(() => null);
+      return { ok: true, nextPage: popupPage, handoff: "NEW_PAGE" };
+    }
+
     await page.waitForTimeout(1200);
     return { ok: true };
   },

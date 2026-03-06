@@ -1,0 +1,30 @@
+name: Refresh Remote Jobs
+
+on:
+  schedule:
+    # 18:00 UTC daily — 12 hours offset from the Vercel cron (06:00 UTC)
+    # This acts as a secondary scheduler / fallback
+    - cron: '0 18 * * *'
+  workflow_dispatch: # Allow manual runs from the GitHub Actions UI
+
+jobs:
+  refresh:
+    name: Trigger job refresh
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Call refresh-jobs endpoint
+        run: |
+          echo "Triggering job refresh on ${{ secrets.NEXT_PUBLIC_APP_URL }}..."
+          curl -s -f -L -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.NEXT_PUBLIC_APP_URL }}/api/cron/refresh-jobs" \
+            | jq .
+        env:
+          # Secrets to configure in GitHub repo settings:
+          # Settings → Secrets and variables → Actions → New repository secret
+          #   CRON_SECRET          — same value as your Vercel CRON_SECRET env var
+          #   NEXT_PUBLIC_APP_URL  — e.g. https://yourapp.vercel.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}

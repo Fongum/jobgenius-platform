@@ -2,6 +2,21 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import {
+  formatTaskStatusLabel,
+  getTaskAttachmentFromAttachments,
+  type TaskStatus,
+} from "@/lib/conversations/tasks";
+
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
 
 type Message = {
   id: string;
@@ -11,11 +26,12 @@ type Message = {
   is_answer: boolean;
   created_at: string;
   read_at: string | null;
+  attachments?: unknown;
 };
 
 type Conversation = {
   id: string;
-  conversation_type: "general" | "application_question";
+  conversation_type: "general" | "application_question" | "task";
   subject: string;
   status: string;
   account_managers: { name: string; email: string } | null;
@@ -35,11 +51,43 @@ export default function ConversationThread({
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [saveAsAnswer, setSaveAsAnswer] = useState(false);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Poll for new messages every 10s; pauses when tab is hidden
+  useEffect(() => {
+    if (conversation.status !== "open") return;
+
+    const poll = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const res = await fetch(
+          `/api/portal/conversations/${conversation.id}/messages`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const { messages: serverMessages } = await res.json() as { messages: Message[] };
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const incoming = serverMessages.filter((m) => !existingIds.has(m.id));
+          if (incoming.length === 0) return prev;
+          return [...prev, ...incoming].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
+      } catch {
+        // Ignore transient failures.
+      }
+    };
+
+    const id = setInterval(poll, 10000);
+    return () => clearInterval(id);
+  }, [conversation.id, conversation.status]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -96,8 +144,50 @@ export default function ConversationThread({
     }
   }
 
+  async function handleTaskStatusUpdate(messageId: string, status: TaskStatus) {
+    if (updatingTaskId) return;
+    setUpdatingTaskId(messageId);
+    try {
+      const res = await fetch(
+        `/api/portal/conversations/${conversation.id}/messages`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message_id: messageId,
+            task_status: status,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json();
+      setMessages((prev) => {
+        const next = prev.map((message) =>
+          message.id === messageId ? (data.message as Message) : message
+        );
+
+        if (data.status_message) {
+          next.push(data.status_message as Message);
+          next.sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        }
+
+        return next;
+      });
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  }
+
   const isApplicationQuestion =
     conversation.conversation_type === "application_question";
+  const isTaskConversation = conversation.conversation_type === "task";
 
   return (
     <div className="flex flex-col h-[calc(100dvh-220px)]">
@@ -119,10 +209,16 @@ export default function ConversationThread({
                 className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                   isApplicationQuestion
                     ? "bg-purple-100 text-purple-700"
+                    : isTaskConversation
+                    ? "bg-amber-100 text-amber-700"
                     : "bg-blue-100 text-blue-700"
                 }`}
               >
-                {isApplicationQuestion ? "Application Question" : "General"}
+                {isApplicationQuestion
+                  ? "Application Question"
+                  : isTaskConversation
+                  ? "Task"
+                  : "General"}
               </span>
               {conversation.job_posts && (
                 <span className="text-xs text-gray-500">
@@ -160,6 +256,8 @@ export default function ConversationThread({
         ) : (
           messages.map((msg) => {
             const isMe = msg.sender_type === "job_seeker";
+            const task = getTaskAttachmentFromAttachments(msg.attachments);
+            const hasTask = Boolean(task);
             return (
               <div
                 key={msg.id}
@@ -169,6 +267,8 @@ export default function ConversationThread({
                   className={`max-w-[85%] sm:max-w-[70%] rounded-lg px-4 py-3 ${
                     isMe
                       ? "bg-blue-600 text-white"
+                      : hasTask
+                      ? "bg-amber-50 text-amber-900 border border-amber-200"
                       : "bg-gray-100 text-gray-900"
                   }`}
                 >
@@ -186,14 +286,65 @@ export default function ConversationThread({
                       className={`text-xs ${
                         isMe ? "text-blue-200" : "text-gray-400"
                       }`}
+                      title={new Date(msg.created_at).toLocaleString()}
                     >
-                      {new Date(msg.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {isToday(msg.created_at)
+                        ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        : new Date(msg.created_at).toLocaleDateString([], { month: "short", day: "numeric" }) +
+                          " " +
+                          new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  {task && (
+                    <div className="mt-3 p-3 rounded-md bg-white/80 border border-amber-200">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-amber-900">
+                          {task.title}
+                        </p>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                          {formatTaskStatusLabel(task.status)}
+                        </span>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-amber-800 mt-1 whitespace-pre-wrap">
+                          {task.description}
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-amber-800">
+                        <span className="px-2 py-0.5 rounded bg-amber-100 capitalize">
+                          {task.priority} priority
+                        </span>
+                        {task.due_date && (
+                          <span>
+                            Due: {new Date(task.due_date).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {!isMe && (
+                        <div className="mt-3">
+                          <label className="text-xs text-amber-900 font-medium">
+                            Update task status
+                          </label>
+                          <select
+                            value={task.status}
+                            onChange={(event) =>
+                              handleTaskStatusUpdate(
+                                msg.id,
+                                event.target.value as TaskStatus
+                              )
+                            }
+                            disabled={updatingTaskId === msg.id}
+                            className="mt-1 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-sm text-amber-900 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                          >
+                            <option value="todo">To Do</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {msg.is_answer && (
                     <span className="inline-block mt-2 px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
                       Saved as profile answer
@@ -240,7 +391,11 @@ export default function ConversationThread({
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type your message..."
+              placeholder={
+                isTaskConversation
+                  ? "Share a task update..."
+                  : "Type your message..."
+              }
               className="flex-1 min-w-0 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
             <button

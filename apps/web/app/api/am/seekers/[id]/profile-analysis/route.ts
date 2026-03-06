@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
+import { hasJobSeekerAccess } from "@/lib/am-access";
 import { getOpenAIClient, OPENAI_MODEL, isOpenAIConfigured } from "@/lib/openai";
 
 interface RouteParams {
   params: { id: string };
-}
-
-async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", amId)
-    .eq("job_seeker_id", seekerId)
-    .maybeSingle();
-  return !!data;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -24,7 +15,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const { id } = params;
 
-  if (!(await hasAccess(auth.user.id, id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

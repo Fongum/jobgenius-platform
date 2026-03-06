@@ -506,6 +506,12 @@
             sidebar?.finish?.("Needs Attention", result.reason ?? "Apply button missing.");
             return;
           }
+          if (result?.handoff) {
+            setSidebarAction("Transferred to application tab");
+            sidebarLog("Continuing in the newly opened application tab.");
+            sidebar?.finish?.("Transferred", "Continuing in the application tab.");
+            return;
+          }
           setSidebarAction("Clicked Apply");
           sidebarLog("Clicked Apply entry.");
         }

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
+import { hasOpenTask } from "@/lib/conversations/tasks";
 
 type AccountManagerSummary = {
   name: string | null;
@@ -75,11 +76,23 @@ export default async function PortalPage() {
   }
 
   // Get application stats
-  const { count: completedApplications } = await supabaseAdmin
-    .from("application_runs")
-    .select("id", { count: "exact", head: true })
-    .eq("job_seeker_id", user.id)
-    .eq("status", "COMPLETED");
+  const [{ count: completedApplications }, { count: matchedJobsCount }, { data: offerInterview }] = await Promise.all([
+    supabaseAdmin
+      .from("application_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("job_seeker_id", user.id)
+      .eq("status", "COMPLETED"),
+    supabaseAdmin
+      .from("job_match_scores")
+      .select("id", { count: "exact", head: true })
+      .eq("job_seeker_id", user.id),
+    supabaseAdmin
+      .from("interviews")
+      .select("id")
+      .eq("job_seeker_id", user.id)
+      .in("outcome", ["offer_extended", "hired"])
+      .limit(1),
+  ]);
 
   const { count: pendingApplications } = await supabaseAdmin
     .from("application_queue")
@@ -96,8 +109,9 @@ export default async function PortalPage() {
     .order("scheduled_at", { ascending: true })
     .limit(5);
 
-  // Get unread conversation count
+  // Get unread conversation and task counts
   let unreadConversations = 0;
+  let openTasks = 0;
   const { data: myConvos } = await supabaseAdmin
     .from("conversations")
     .select("id")
@@ -105,17 +119,48 @@ export default async function PortalPage() {
 
   if (myConvos && myConvos.length > 0) {
     const convoIds = myConvos.map((c: { id: string }) => c.id);
-    const { count } = await supabaseAdmin
-      .from("conversation_messages")
-      .select("id", { count: "exact", head: true })
-      .is("read_at", null)
-      .eq("sender_type", "account_manager")
-      .in("conversation_id", convoIds);
+    const [{ count }, { data: taskMessages }] = await Promise.all([
+      supabaseAdmin
+        .from("conversation_messages")
+        .select("id", { count: "exact", head: true })
+        .is("read_at", null)
+        .eq("sender_type", "account_manager")
+        .in("conversation_id", convoIds),
+      supabaseAdmin
+        .from("conversation_messages")
+        .select("attachments")
+        .eq("sender_type", "account_manager")
+        .in("conversation_id", convoIds),
+    ]);
     unreadConversations = count ?? 0;
+    openTasks = (taskMessages ?? []).filter((message: { attachments: unknown }) =>
+      hasOpenTask(message.attachments)
+    ).length;
   }
 
   const accountManager = await getAssignedAccountManager(user.id);
   const profileCompletion = jobSeeker?.profile_completion ?? 0;
+
+  // Determine pipeline stage
+  type PipelineStage = "profile" | "matched" | "applying" | "interviewing" | "offer" | "placed";
+  function getPipelineStage(): PipelineStage {
+    if (jobSeeker?.placed_at) return "placed";
+    if (offerInterview && offerInterview.length > 0) return "offer";
+    if (interviews && interviews.length > 0) return "interviewing";
+    if ((completedApplications ?? 0) > 0 || (pendingApplications ?? 0) > 0) return "applying";
+    if ((matchedJobsCount ?? 0) > 0) return "matched";
+    return "profile";
+  }
+  const pipelineStage = getPipelineStage();
+  const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = [
+    { key: "profile", label: "Profile Setup" },
+    { key: "matched", label: "Matched" },
+    { key: "applying", label: "Applying" },
+    { key: "interviewing", label: "Interviewing" },
+    { key: "offer", label: "Offer" },
+    { key: "placed", label: "Placed!" },
+  ];
+  const stageIndex = PIPELINE_STAGES.findIndex((s) => s.key === pipelineStage);
 
   // Determine action items
   const actions: { label: string; href: string }[] = [];
@@ -184,6 +229,40 @@ export default async function PortalPage() {
         </div>
       </div>
 
+      {/* Journey Pipeline */}
+      <div className="bg-white rounded-lg shadow p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Your Journey</h3>
+        <div className="flex items-center gap-0">
+          {PIPELINE_STAGES.map((stage, idx) => {
+            const isCompleted = idx < stageIndex;
+            const isActive = idx === stageIndex;
+            return (
+              <div key={stage.key} className="flex-1 flex items-center">
+                <div className="flex flex-col items-center w-full">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
+                    isCompleted ? "bg-blue-600 border-blue-600 text-white" :
+                    isActive ? "bg-white border-blue-600 text-blue-600" :
+                    "bg-white border-gray-200 text-gray-400"
+                  }`}>
+                    {isCompleted ? "✓" : idx + 1}
+                  </div>
+                  <span className={`mt-1 text-xs text-center leading-tight ${
+                    isActive ? "text-blue-700 font-semibold" :
+                    isCompleted ? "text-blue-600" :
+                    "text-gray-400"
+                  }`}>
+                    {stage.label}
+                  </span>
+                </div>
+                {idx < PIPELINE_STAGES.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-1 mb-4 ${idx < stageIndex ? "bg-blue-600" : "bg-gray-200"}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-5">
@@ -201,6 +280,7 @@ export default async function PortalPage() {
         <div className="bg-white rounded-lg shadow p-5">
           <div className="text-sm font-medium text-gray-500">Unread Messages</div>
           <div className="mt-1 text-3xl font-bold text-purple-600">{unreadConversations}</div>
+          <p className="text-xs text-amber-700 mt-1">{openTasks} open tasks</p>
           <Link href="/portal/conversations" className="text-xs text-purple-600 hover:text-purple-800">
             View conversations →
           </Link>

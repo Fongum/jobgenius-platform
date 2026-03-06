@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdminRole } from "@/lib/auth/roles";
 
 export default async function AdminLayout({
   children,
@@ -12,7 +13,7 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  if (user.userType !== "am" || !["admin", "superadmin"].includes(user.role || "")) {
+  if (user.userType !== "am" || !isAdminRole(user.role)) {
     redirect("/dashboard");
   }
 

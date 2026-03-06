@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Conversation = {
   id: string;
-  conversation_type: "general" | "application_question";
+  conversation_type: "general" | "application_question" | "task";
   subject: string;
   status: string;
   created_at: string;
@@ -13,6 +13,7 @@ type Conversation = {
   account_managers: { name: string; email: string } | null;
   job_posts: { title: string; company: string | null } | null;
   unread_count: number;
+  open_task_count: number;
   last_message: {
     content: string;
     sender_type: string;
@@ -22,6 +23,7 @@ type Conversation = {
 
 const TABS = [
   { key: "all", label: "All" },
+  { key: "task", label: "Tasks" },
   { key: "general", label: "Information & Chat" },
   { key: "application_question", label: "Application Questions" },
 ] as const;
@@ -98,13 +100,22 @@ export default function ConversationsClient({
                       className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                         conv.conversation_type === "application_question"
                           ? "bg-purple-100 text-purple-700"
+                          : conv.conversation_type === "task"
+                          ? "bg-amber-100 text-amber-700"
                           : "bg-blue-100 text-blue-700"
                       }`}
                     >
                       {conv.conversation_type === "application_question"
                         ? "Application Question"
+                        : conv.conversation_type === "task"
+                        ? "Task"
                         : "General"}
                     </span>
+                    {conv.open_task_count > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                        {conv.open_task_count} open
+                      </span>
+                    )}
                     {conv.job_posts && (
                       <span className="text-xs text-gray-500">
                         {conv.job_posts.title}

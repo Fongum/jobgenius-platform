@@ -11,6 +11,7 @@ import {
   buildJobGeniusReportMessage,
   type JobGeniusReport,
 } from "@/lib/jobgenius/report";
+import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 interface ScoringWeights {
   skills: number;
@@ -160,6 +161,12 @@ interface Interview {
   notes_for_candidate: string | null;
   notes_internal: string | null;
   job_posts: { id: string; title: string; company: string } | null;
+  outcome?: string | null;
+  offer_amount?: number | null;
+  hire_date?: string | null;
+  rejection_reason?: string | null;
+  outcome_notes?: string | null;
+  outcome_recorded_at?: string | null;
 }
 
 interface InterviewPrep {
@@ -541,7 +548,7 @@ export default function SeekerDetailClient({
             <OutreachTab drafts={outreachDrafts} threads={recruiterThreads} />
           )}
           {activeTab === "interviews" && (
-            <InterviewsTab interviews={interviews} />
+            <InterviewsTab interviews={interviews} seekerId={seeker.id} />
           )}
           {activeTab === "prep" && (
             <PrepTab prep={interviewPrep} seekerId={seeker.id} />
@@ -1974,6 +1981,49 @@ function FinancialTab({ financial }: { financial: FinancialData }) {
   );
 }
 
+function MatchExplanationPanel({
+  reasons,
+  score,
+  routingDecision,
+}: {
+  reasons: unknown;
+  score: number;
+  routingDecision: string | null;
+}) {
+  if (!reasons) return null;
+  const explanation = buildMatchExplanation(reasons, {
+    score,
+    recommendation: routingDecision ?? undefined,
+  });
+  const hasContent =
+    explanation.highlights.length > 0 ||
+    explanation.cautions.length > 0 ||
+    explanation.blockers.length > 0;
+  if (!hasContent) return null;
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+      {explanation.highlights.map((h, i) => (
+        <div key={i} className="flex items-start gap-1.5 text-xs text-green-700">
+          <span className="mt-0.5 text-green-500">✓</span>
+          <span>{h}</span>
+        </div>
+      ))}
+      {explanation.cautions.map((c, i) => (
+        <div key={i} className="flex items-start gap-1.5 text-xs text-yellow-700">
+          <span className="mt-0.5">⚠</span>
+          <span>{c}</span>
+        </div>
+      ))}
+      {explanation.blockers.map((b, i) => (
+        <div key={i} className="flex items-start gap-1.5 text-xs text-red-700">
+          <span className="mt-0.5">✗</span>
+          <span>{b}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function JobsTab({
   matchedJobs,
   threshold,
@@ -2302,6 +2352,8 @@ function JobsTab({
                   )}
                 </div>
               </div>
+              {/* Match explanation */}
+              <MatchExplanationPanel reasons={m.reasons} score={m.score} routingDecision={m.routingDecision} />
               {m.routingDecision && (
                 <div className="mt-2 flex items-center gap-2">
                   <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-800 rounded">
@@ -2505,6 +2557,38 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
       return;
     }
     fetchMessages(selectedConversationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId, seekerId]);
+
+  // Poll for new messages every 15s when a conversation is open; pause when tab hidden
+  useEffect(() => {
+    if (!selectedConversationId) return;
+
+    const poll = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const res = await fetch(
+          `/api/am/seekers/${seekerId}/conversations/${selectedConversationId}/messages`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverMessages = (data.messages ?? []) as SeekerConversationMessage[];
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m: SeekerConversationMessage) => m.id));
+          const incoming = serverMessages.filter((m) => !existingIds.has(m.id));
+          if (incoming.length === 0) return prev;
+          return [...prev, ...incoming].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
+      } catch {
+        // Ignore transient failures.
+      }
+    };
+
+    const id = setInterval(poll, 15000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversationId, seekerId]);
 
@@ -3057,10 +3141,26 @@ function OutreachTab({
   );
 }
 
-function InterviewsTab({ interviews }: { interviews: Interview[] }) {
+const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
+  pending: { label: "Pending", color: "bg-gray-100 text-gray-600" },
+  offer_extended: { label: "Offer Extended", color: "bg-yellow-100 text-yellow-800" },
+  hired: { label: "Hired!", color: "bg-green-100 text-green-800" },
+  rejected: { label: "Rejected", color: "bg-red-100 text-red-800" },
+  ghosted: { label: "Ghosted", color: "bg-orange-100 text-orange-800" },
+  declined: { label: "Declined", color: "bg-purple-100 text-purple-800" },
+};
+
+function InterviewsTab({ interviews, seekerId }: { interviews: Interview[]; seekerId: string }) {
+  const [localInterviews, setLocalInterviews] = useState<Interview[]>(interviews);
   const now = new Date();
-  const upcoming = interviews.filter((i) => new Date(i.scheduled_at) >= now && i.status === "confirmed");
-  const past = interviews.filter((i) => new Date(i.scheduled_at) < now || i.status !== "confirmed");
+  const upcoming = localInterviews.filter((i) => new Date(i.scheduled_at) >= now && i.status === "confirmed");
+  const past = localInterviews.filter((i) => new Date(i.scheduled_at) < now || i.status !== "confirmed");
+
+  function handleOutcomeRecorded(interviewId: string, updates: Partial<Interview>) {
+    setLocalInterviews((prev) =>
+      prev.map((iv) => (iv.id === interviewId ? { ...iv, ...updates } : iv))
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -3069,7 +3169,7 @@ function InterviewsTab({ interviews }: { interviews: Interview[] }) {
           <h3 className="font-semibold text-gray-900 mb-3">Upcoming Interviews</h3>
           <div className="space-y-2">
             {upcoming.map((interview) => (
-              <InterviewCard key={interview.id} interview={interview} />
+              <InterviewCard key={interview.id} interview={interview} seekerId={seekerId} onOutcomeRecorded={handleOutcomeRecorded} />
             ))}
           </div>
         </div>
@@ -3080,34 +3180,97 @@ function InterviewsTab({ interviews }: { interviews: Interview[] }) {
           <h3 className="font-semibold text-gray-900 mb-3">Past Interviews</h3>
           <div className="space-y-2">
             {past.map((interview) => (
-              <InterviewCard key={interview.id} interview={interview} />
+              <InterviewCard key={interview.id} interview={interview} seekerId={seekerId} onOutcomeRecorded={handleOutcomeRecorded} />
             ))}
           </div>
         </div>
       )}
 
-      {interviews.length === 0 && (
+      {localInterviews.length === 0 && (
         <p className="text-gray-500 text-center py-8">No interviews scheduled</p>
       )}
     </div>
   );
 }
 
-function InterviewCard({ interview }: { interview: Interview }) {
+function InterviewCard({
+  interview,
+  seekerId,
+  onOutcomeRecorded,
+}: {
+  interview: Interview;
+  seekerId: string;
+  onOutcomeRecorded: (id: string, updates: Partial<Interview>) => void;
+}) {
   const date = new Date(interview.scheduled_at);
+  const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const [outcomeForm, setOutcomeForm] = useState({
+    outcome: interview.outcome || "pending",
+    offer_amount: interview.offer_amount?.toString() || "",
+    hire_date: interview.hire_date || "",
+    rejection_reason: interview.rejection_reason || "",
+    outcome_notes: interview.outcome_notes || "",
+  });
+  const [savingOutcome, setSavingOutcome] = useState(false);
+  const [outcomeError, setOutcomeError] = useState<string | null>(null);
+
+  async function submitOutcome() {
+    setSavingOutcome(true);
+    setOutcomeError(null);
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}/interviews/${interview.id}/outcome`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outcome: outcomeForm.outcome,
+          offer_amount: outcomeForm.offer_amount ? parseFloat(outcomeForm.offer_amount) : null,
+          hire_date: outcomeForm.hire_date || null,
+          rejection_reason: outcomeForm.rejection_reason || null,
+          outcome_notes: outcomeForm.outcome_notes || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOutcomeError(data.error ?? "Failed to record outcome");
+        return;
+      }
+      onOutcomeRecorded(interview.id, {
+        outcome: outcomeForm.outcome,
+        offer_amount: outcomeForm.offer_amount ? parseFloat(outcomeForm.offer_amount) : null,
+        hire_date: outcomeForm.hire_date || null,
+        rejection_reason: outcomeForm.rejection_reason || null,
+        outcome_notes: outcomeForm.outcome_notes || null,
+        outcome_recorded_at: data.interview?.outcome_recorded_at,
+      });
+      setOutcomeOpen(false);
+    } catch {
+      setOutcomeError("Network error");
+    } finally {
+      setSavingOutcome(false);
+    }
+  }
+
+  const currentOutcome = interview.outcome || "pending";
+  const outcomeLabel = OUTCOME_LABELS[currentOutcome];
+
   return (
     <div className="p-4 border rounded-lg">
       <div className="flex items-start justify-between">
         <div>
           <h4 className="font-medium text-gray-900">{interview.job_posts?.company}</h4>
           <p className="text-sm text-gray-600">{interview.job_posts?.title}</p>
-          <div className="flex gap-2 mt-2">
+          <div className="flex gap-2 mt-2 flex-wrap">
             <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-800 rounded capitalize">
               {interview.interview_type}
             </span>
             <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
               {interview.duration_min} min
             </span>
+            {currentOutcome !== "pending" && outcomeLabel && (
+              <span className={`px-2 py-0.5 text-xs rounded font-medium ${outcomeLabel.color}`}>
+                {outcomeLabel.label}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right">
@@ -3125,15 +3288,118 @@ function InterviewCard({ interview }: { interview: Interview }) {
           </span>
         </div>
       </div>
-      {interview.meeting_link && (
-        <a
-          href={interview.meeting_link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-blue-600 hover:text-blue-800 mt-3 inline-block"
+
+      <div className="flex items-center gap-3 mt-3">
+        {interview.meeting_link && (
+          <a
+            href={interview.meeting_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            Join Meeting →
+          </a>
+        )}
+        <button
+          onClick={() => setOutcomeOpen(true)}
+          className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-2 py-0.5 rounded"
         >
-          Join Meeting →
-        </a>
+          {currentOutcome === "pending" ? "Record Outcome" : "Edit Outcome"}
+        </button>
+      </div>
+
+      {/* Outcome Modal */}
+      {outcomeOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-lg font-bold text-gray-900">Record Interview Outcome</h3>
+            <p className="text-sm text-gray-500">
+              {interview.job_posts?.company} — {interview.job_posts?.title}
+            </p>
+
+            {outcomeError && (
+              <div className="bg-red-50 border border-red-200 rounded p-2 text-sm text-red-700">{outcomeError}</div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
+              <select
+                value={outcomeForm.outcome}
+                onChange={(e) => setOutcomeForm((f) => ({ ...f, outcome: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {Object.entries(OUTCOME_LABELS).map(([val, { label }]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {(outcomeForm.outcome === "offer_extended" || outcomeForm.outcome === "hired") && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Offer Amount (£)</label>
+                <input
+                  type="number"
+                  value={outcomeForm.offer_amount}
+                  onChange={(e) => setOutcomeForm((f) => ({ ...f, offer_amount: e.target.value }))}
+                  placeholder="e.g. 55000"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {outcomeForm.outcome === "hired" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={outcomeForm.hire_date}
+                  onChange={(e) => setOutcomeForm((f) => ({ ...f, hire_date: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {outcomeForm.outcome === "rejected" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rejection Reason</label>
+                <input
+                  type="text"
+                  value={outcomeForm.rejection_reason}
+                  onChange={(e) => setOutcomeForm((f) => ({ ...f, rejection_reason: e.target.value }))}
+                  placeholder="e.g. Overqualified, salary mismatch..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+              <textarea
+                value={outcomeForm.outcome_notes}
+                onChange={(e) => setOutcomeForm((f) => ({ ...f, outcome_notes: e.target.value }))}
+                rows={3}
+                placeholder="Internal notes about this outcome..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setOutcomeOpen(false)}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitOutcome}
+                disabled={savingOutcome}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg"
+              >
+                {savingOutcome ? "Saving…" : "Save Outcome"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

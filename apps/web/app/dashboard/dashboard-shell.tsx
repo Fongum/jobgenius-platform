@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { isAdminRole, normalizeAMRole } from "@/lib/auth/roles";
@@ -54,6 +54,18 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Messaging",
+    items: [
+      { href: "/dashboard/inbox", label: "Inbox", icon: "inbox" },
+    ],
+  },
+  {
+    title: "Performance",
+    items: [
+      { href: "/dashboard/performance", label: "My Performance", icon: "chart" },
+    ],
+  },
+  {
     title: "Learning",
     items: [
       { href: "/dashboard/learning", label: "Learning Tracks", icon: "academic" },
@@ -69,11 +81,46 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/accounts", label: "Account Managers", icon: "user-cog" },
     { href: "/dashboard/admin/job-seekers", label: "All Job Seekers", icon: "users-all" },
     { href: "/dashboard/admin/assignments", label: "Assignments", icon: "link" },
+    { href: "/dashboard/admin/broadcast", label: "Broadcast", icon: "megaphone" },
+    { href: "/dashboard/admin/analytics", label: "Analytics", icon: "analytics" },
     { href: "/dashboard/admin/voice", label: "Voice Automation", icon: "phone" },
     { href: "/dashboard/admin/reports", label: "Report Settings", icon: "document" },
     { href: "/dashboard/billing", label: "Billing", icon: "credit-card" },
   ],
 };
+
+type AMRecentUnread = {
+  conversation_id: string;
+  seeker_id: string;
+  subject: string;
+  seeker_name: string | null;
+  preview: string;
+  conversation_type: string;
+  updated_at: string;
+};
+
+type AnnouncementItem = {
+  id: string;
+  subject: string;
+  body: string;
+  sent_at: string;
+};
+
+type AMNotificationState = {
+  unread_messages: number;
+  recent_unread: AMRecentUnread[];
+  unread_announcements: AnnouncementItem[];
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 function NavIcon({ icon, className }: { icon: string; className?: string }) {
   const cls = className || "w-5 h-5";
@@ -199,6 +246,30 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h5l5 5v9a2 2 0 01-2 2z" />
         </svg>
       );
+    case "megaphone":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+        </svg>
+      );
+    case "inbox":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+        </svg>
+      );
+    case "chart":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      );
+    case "analytics":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -216,8 +287,51 @@ export default function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [amNotifications, setAmNotifications] = useState<AMNotificationState | null>(null);
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = isAdminRole(userRole);
+
+  // Close bell panel on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setBellOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Poll for unread seeker messages every 20s
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNotifications() {
+      try {
+        const res = await fetch("/api/am/notifications", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setAmNotifications({
+            unread_messages: Number(data.unread_messages ?? 0),
+            recent_unread: (data.recent_unread ?? []) as AMRecentUnread[],
+            unread_announcements: (data.unread_announcements ?? []) as AnnouncementItem[],
+          });
+        }
+      } catch {
+        // Ignore transient failures.
+      }
+    }
+
+    loadNotifications();
+    const id = setInterval(loadNotifications, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const navSections = useMemo(() => {
     if (isAdmin) {
@@ -226,6 +340,19 @@ export default function DashboardShell({
     }
     return BASE_NAV_SECTIONS;
   }, [isAdmin]);
+
+  async function dismissAnnouncement(id: string) {
+    setAmNotifications((prev) =>
+      prev
+        ? { ...prev, unread_announcements: prev.unread_announcements.filter((a) => a.id !== id) }
+        : prev
+    );
+    await fetch("/api/am/announcements/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ announcement_id: id }),
+    }).catch(() => {});
+  }
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -301,7 +428,12 @@ export default function DashboardShell({
                       }`}
                     >
                       <NavIcon icon={item.icon} />
-                      {item.label}
+                      <span className="flex-1">{item.label}</span>
+                      {item.href === "/dashboard/inbox" && (amNotifications?.unread_messages ?? 0) > 0 && (
+                        <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-red-500 text-white rounded-full">
+                          {(amNotifications?.unread_messages ?? 0) > 9 ? "9+" : amNotifications?.unread_messages}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -324,7 +456,76 @@ export default function DashboardShell({
             </svg>
           </button>
 
-          <div className="flex items-center gap-4 ml-auto">
+          <div className="flex items-center gap-3 ml-auto">
+            {/* Notification bell */}
+            <div ref={bellRef} className="relative">
+              <button
+                onClick={() => setBellOpen((o) => !o)}
+                className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                aria-label="Notifications"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {(amNotifications?.unread_messages ?? 0) > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                    {(amNotifications?.unread_messages ?? 0) > 9 ? "9+" : amNotifications?.unread_messages}
+                  </span>
+                )}
+              </button>
+
+              {bellOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <span className="text-sm font-semibold text-gray-900">Seeker Replies</span>
+                    {(amNotifications?.unread_messages ?? 0) > 0 && (
+                      <span className="text-xs text-gray-500">
+                        {amNotifications?.unread_messages} unread
+                      </span>
+                    )}
+                  </div>
+
+                  {(amNotifications?.recent_unread ?? []).length === 0 ? (
+                    <div className="px-4 py-6 text-center text-sm text-gray-400">
+                      No unread replies
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-50">
+                      {(amNotifications?.recent_unread ?? []).map((item) => (
+                        <Link
+                          key={item.conversation_id}
+                          href={`/dashboard/seekers/${item.seeker_id}?tab=messages&conversation=${item.conversation_id}`}
+                          onClick={() => setBellOpen(false)}
+                          className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              {item.seeker_name && (
+                                <p className="text-xs font-semibold text-blue-600 truncate">{item.seeker_name}</p>
+                              )}
+                              <p className="text-sm font-medium text-gray-900 truncate">{item.subject}</p>
+                            </div>
+                            <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">{timeAgo(item.updated_at)}</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-gray-500 line-clamp-2">{item.preview}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="px-4 py-2.5 border-t border-gray-100">
+                    <Link
+                      href="/dashboard/seekers"
+                      onClick={() => setBellOpen(false)}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      View all seekers →
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="text-right hidden sm:block">
               <p className="text-sm font-medium text-gray-900">{userName}</p>
               <p className={`text-xs ${isAdmin ? "text-purple-600 font-medium" : "text-gray-500"}`}>
@@ -342,6 +543,32 @@ export default function DashboardShell({
 
         {/* Page content */}
         <main className="flex-1 p-4 sm:p-6 overflow-auto">
+          {/* Announcement banners */}
+          {(amNotifications?.unread_announcements ?? []).map((ann) => (
+            <div
+              key={ann.id}
+              className="mb-4 bg-blue-600 text-white rounded-xl px-5 py-4 flex items-start justify-between gap-4 shadow-sm"
+            >
+              <div className="flex items-start gap-3 min-w-0">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{ann.subject}</p>
+                  <p className="text-sm text-blue-100 mt-0.5 whitespace-pre-line">{ann.body}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => dismissAnnouncement(ann.id)}
+                className="flex-shrink-0 p-1 rounded hover:bg-blue-500 transition-colors"
+                aria-label="Dismiss"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
           {children}
         </main>
       </div>

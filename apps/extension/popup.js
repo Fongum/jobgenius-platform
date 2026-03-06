@@ -358,9 +358,11 @@ async function loadMatchedJobs() {
       return;
     }
 
-    const queueableJobs = jobs.filter((j) => !j.queue_status);
+    const queueableJobs = jobs.filter((j) => !j.queue_status && !j.queue_blocked);
     const applyableJobs = jobs.filter(
-      (j) => !j.queue_status || ["QUEUED", "READY", "RETRYING"].includes(j.queue_status)
+      (j) =>
+        (!j.queue_status && !j.queue_blocked) ||
+        ["QUEUED", "READY", "RETRYING"].includes(j.queue_status)
     );
     const resumableAttentionJobs = attentionJobs.filter((j) => !!j.run_id);
 
@@ -396,6 +398,8 @@ async function loadMatchedJobs() {
           ? "#1e40af"
           : "#92400e";
       const scoreLabel = hasScore ? `${Math.round(numericScore)}%` : "--";
+      const summaryItems = Array.isArray(job.score_summary) ? job.score_summary.slice(0, 2) : [];
+      const blockerItems = Array.isArray(job.score_blockers) ? job.score_blockers.slice(0, 2) : [];
 
       let actionHtml;
       if (job.queue_status === "NEEDS_ATTENTION") {
@@ -413,6 +417,8 @@ async function loadMatchedJobs() {
         actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">${job.queue_status}</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
       } else if (job.queue_status) {
         actionHtml = `<span class="queue-badge">${job.queue_status}</span>`;
+      } else if (job.queue_blocked) {
+        actionHtml = `<span class="queue-badge" style="background:#fee2e2;color:#991b1b" title="${sanitizeText(job.queue_block_reason || "Blocked from queueing")}">Blocked</span>`;
       } else {
         const eTitle = encodeURIComponent(job.title || ""); const eCo = encodeURIComponent(job.company || ""); const eLoc = encodeURIComponent(job.location || "");
         actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
@@ -423,6 +429,15 @@ async function loadMatchedJobs() {
         : "";
       const attentionError = job.last_error
         ? `<div style="font-size:9px;color:#92400e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${sanitizeText(job.last_error)}">${sanitizeText(job.last_error)}</div>`
+        : "";
+      const summaryHtml = summaryItems.length > 0
+        ? `<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${summaryItems.map((item) => `<div style="font-size:9px;color:#4b5563">${sanitizeText(item)}</div>`).join("")}</div>`
+        : "";
+      const blockerHtml = blockerItems.length > 0
+        ? `<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${blockerItems.map((item) => `<div style="font-size:9px;color:#b45309">${sanitizeText(item)}</div>`).join("")}</div>`
+        : "";
+      const queueBlockHtml = job.queue_blocked && !job.queue_status && job.queue_block_reason
+        ? `<div style="font-size:9px;color:#991b1b;margin-top:4px">${sanitizeText(job.queue_block_reason)}</div>`
         : "";
 
       return `
@@ -436,6 +451,9 @@ async function loadMatchedJobs() {
             <span style="font-size:8px;padding:1px 4px;background:#ede9fe;border-radius:3px;color:${recColor}">${recLabel}</span>
             ${job.confidence === "high" ? '<span style="font-size:8px;padding:1px 4px;background:#dbeafe;border-radius:3px;color:#1e40af">High Conf.</span>' : ""}
           </div>
+          ${summaryHtml}
+          ${blockerHtml}
+          ${queueBlockHtml}
           ${job.queue_status === "NEEDS_ATTENTION" ? attentionReason + attentionError : ""}
           <div class="bottom">
             <span class="score-badge ${scoreClass}">${scoreLabel}</span>
@@ -647,9 +665,12 @@ window.queueJob = async function (jobPostId) {
       headers: getHeaders(),
       body: JSON.stringify({ job_post_id: jobPostId }),
     });
-    if (response.ok) {
-      await Promise.all([loadMatchedJobs(), loadMyJobs()]);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setStatus(els.saveStatus, data.error || "Failed to queue job.", "error");
+      return;
     }
+    await Promise.all([loadMatchedJobs(), loadMyJobs()]);
   } catch (error) { console.error("Queue error:", error); }
 };
 
@@ -664,7 +685,7 @@ window.queueAllJobs = async function () {
     });
     if (!response.ok) return;
     const data = await response.json();
-    const jobs = (data.jobs || []).filter((j) => !j.queue_status);
+    const jobs = (data.jobs || []).filter((j) => !j.queue_status && !j.queue_blocked);
 
     let queued = 0;
     for (const job of jobs) {
@@ -897,7 +918,9 @@ window.applyAllJobs = async function () {
     if (!response.ok) return;
     const data = await response.json();
     const jobs = (data.jobs || []).filter(
-      (j) => !j.queue_status || ["QUEUED", "READY", "RETRYING"].includes(j.queue_status)
+      (j) =>
+        (!j.queue_status && !j.queue_blocked) ||
+        ["QUEUED", "READY", "RETRYING"].includes(j.queue_status)
     );
 
     // Queue all unqueued jobs

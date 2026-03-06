@@ -1,19 +1,44 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
+import { hasJobSeekerAccess } from "@/lib/am-access";
 
 interface RouteParams {
   params: { id: string };
 }
 
-// Check if AM has access to this seeker
-async function hasAccess(amId: string, seekerId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", amId)
-    .eq("job_seeker_id", seekerId)
-    .maybeSingle();
-  return !!data;
+type AuditFieldChange = {
+  field: string;
+  from: unknown;
+  to: unknown;
+};
+
+function normalizeForCompare(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeForCompare);
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = normalizeForCompare(
+          (value as Record<string, unknown>)[key]
+        );
+        return acc;
+      }, {});
+  }
+  return value ?? null;
+}
+
+function isSameValue(a: unknown, b: unknown) {
+  return JSON.stringify(normalizeForCompare(a)) === JSON.stringify(normalizeForCompare(b));
+}
+
+function getRequestIp(request: Request): string | null {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() ?? null;
+  }
+  return request.headers.get("x-real-ip");
 }
 
 export async function GET(request: Request, { params }: RouteParams) {
@@ -24,7 +49,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
   const { id } = params;
 
-  if (!(await hasAccess(auth.user.id, id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -49,7 +74,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   const { id } = params;
 
-  if (!(await hasAccess(auth.user.id, id))) {
+  if (!(await hasJobSeekerAccess(auth.user.id, id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -65,6 +90,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     "preferred_industries", "preferred_company_sizes", "exclude_keywords",
     "years_experience", "preferred_locations", "open_to_relocation",
     "requires_visa_sponsorship",
+    "bio", "work_type_preferences", "employment_type_preferences", "location_preferences",
+    "authorized_to_work", "visa_status", "citizenship_status", "requires_h1b_transfer",
+    "needs_employer_sponsorship", "start_date", "notice_period", "available_for_relocation",
+    "available_for_travel", "willing_to_work_overtime", "willing_to_work_weekends",
+    "preferred_shift", "open_to_contract",
   ];
 
   const updates: Record<string, unknown> = {};
@@ -78,6 +108,28 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "No valid fields to update." }, { status: 400 });
   }
 
+  const { data: existingSeeker, error: existingError } = await supabaseAdmin
+    .from("job_seekers")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (existingError || !existingSeeker) {
+    return NextResponse.json({ error: "Job seeker not found." }, { status: 404 });
+  }
+
+  const changedFields: AuditFieldChange[] = Object.entries(updates)
+    .filter(([key, value]) => !isSameValue(existingSeeker[key], value))
+    .map(([key, value]) => ({
+      field: key,
+      from: existingSeeker[key] ?? null,
+      to: value ?? null,
+    }));
+
+  if (changedFields.length === 0) {
+    return NextResponse.json({ seeker: existingSeeker, message: "No changes detected." });
+  }
+
   const { data: seeker, error } = await supabaseAdmin
     .from("job_seekers")
     .update(updates)
@@ -87,6 +139,27 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   if (error) {
     return NextResponse.json({ error: "Failed to update job seeker." }, { status: 500 });
+  }
+
+  const { error: auditError } = await supabaseAdmin
+    .from("job_seeker_profile_audit_logs")
+    .insert({
+      job_seeker_id: id,
+      actor_account_manager_id: auth.user.id,
+      actor_email: auth.user.email,
+      actor_role: auth.user.role ?? "am",
+      action: "profile_update",
+      changed_fields: changedFields,
+      request_ip: getRequestIp(request),
+      request_user_agent: request.headers.get("user-agent"),
+    });
+
+  if (auditError) {
+    console.error("Failed to write profile audit log", {
+      jobSeekerId: id,
+      actorAccountManagerId: auth.user.id,
+      auditError: auditError.message,
+    });
   }
 
   return NextResponse.json({ seeker });

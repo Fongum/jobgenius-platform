@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+import { isAdminRole } from "@/lib/auth/roles";
 import SeekerDetailClient from "./SeekerDetailClient";
 
 interface PageProps {
@@ -11,17 +12,22 @@ export default async function SeekerDetailPage({ params }: PageProps) {
   if (!user) return null;
 
   const { id } = params;
+  const isAdmin =
+    user.userType === "am" &&
+    isAdminRole(user.role);
 
-  // Verify access
-  const { data: assignment } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", user.id)
-    .eq("job_seeker_id", id)
-    .maybeSingle();
+  if (!isAdmin) {
+    // Verify assignment for non-admin AM users
+    const { data: assignment } = await supabaseAdmin
+      .from("job_seeker_assignments")
+      .select("id")
+      .eq("account_manager_id", user.id)
+      .eq("job_seeker_id", id)
+      .maybeSingle();
 
-  if (!assignment) {
-    notFound();
+    if (!assignment) {
+      notFound();
+    }
   }
 
   // Load job seeker
@@ -147,6 +153,65 @@ export default async function SeekerDetailPage({ params }: PageProps) {
     .order("received_at", { ascending: false })
     .limit(50);
 
+  const { data: auditLogs } = await supabaseAdmin
+    .from("job_seeker_profile_audit_logs")
+    .select("id, actor_account_manager_id, actor_email, actor_role, action, changed_fields, created_at")
+    .eq("job_seeker_id", id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const [
+    contractsRes,
+    registrationPaymentsRes,
+    installmentsRes,
+    paymentRequestsRes,
+    screenshotsRes,
+    offersRes,
+    commissionPaymentsRes,
+    escalationsRes,
+  ] = await Promise.all([
+    supabaseAdmin
+      .from("job_seeker_contracts")
+      .select("id, plan_type, registration_fee, commission_rate, agreed_at, created_at, updated_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("registration_payments")
+      .select("id, total_amount, amount_paid, status, payment_deadline, work_started, created_at, updated_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("payment_installments")
+      .select("id, registration_payment_id, installment_number, amount, proposed_date, status, paid_at, created_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("payment_requests")
+      .select("id, installment_id, offer_id, method, status, details_sent_at, note, created_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("payment_screenshots")
+      .select("id, payment_request_id, installment_id, offer_id, file_url, uploaded_at, acknowledged_at, note")
+      .eq("job_seeker_id", id)
+      .order("uploaded_at", { ascending: false }),
+    supabaseAdmin
+      .from("job_offers")
+      .select("id, company, role, base_salary, status, commission_status, commission_amount, commission_due_date, reported_by, seeker_confirmed_at, am_confirmed_at, created_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("commission_payments")
+      .select("id, offer_id, amount, paid_at, method, notes, created_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("termination_escalations")
+      .select("id, reason, context_notes, decision, decision_at, decision_notes, created_at")
+      .eq("job_seeker_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
+
   // Process matches with routing decisions
   const matchedJobs = (matchScores || []).map((m) => {
     const job = m.job_posts as unknown as { id: string; title: string; company: string; location: string; url: string } | null;
@@ -159,8 +224,11 @@ export default async function SeekerDetailPage({ params }: PageProps) {
     };
   });
 
+  type FinancialProp = NonNullable<Parameters<typeof SeekerDetailClient>[0]["financial"]>;
+
   return (
     <SeekerDetailClient
+      backHref={isAdmin ? "/dashboard/admin/job-seekers" : "/dashboard/seekers"}
       seeker={seeker}
       matchedJobs={matchedJobs as unknown as Parameters<typeof SeekerDetailClient>[0]["matchedJobs"]}
       queueItems={(queueItems || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["queueItems"]}
@@ -173,6 +241,17 @@ export default async function SeekerDetailPage({ params }: PageProps) {
       documents={(documents || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["documents"]}
       gmailConnection={gmailConnection ? { email: gmailConnection.gmail_email, connectedAt: gmailConnection.created_at } : null}
       inboundEmails={(inboundEmails || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["inboundEmails"]}
+      auditLogs={(auditLogs || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["auditLogs"]}
+      financial={{
+        contracts: (contractsRes.data || []) as unknown as FinancialProp["contracts"],
+        registrationPayments: (registrationPaymentsRes.data || []) as unknown as FinancialProp["registrationPayments"],
+        installments: (installmentsRes.data || []) as unknown as FinancialProp["installments"],
+        paymentRequests: (paymentRequestsRes.data || []) as unknown as FinancialProp["paymentRequests"],
+        screenshots: (screenshotsRes.data || []) as unknown as FinancialProp["screenshots"],
+        offers: (offersRes.data || []) as unknown as FinancialProp["offers"],
+        commissionPayments: (commissionPaymentsRes.data || []) as unknown as FinancialProp["commissionPayments"],
+        escalations: (escalationsRes.data || []) as unknown as FinancialProp["escalations"],
+      }}
     />
   );
 }

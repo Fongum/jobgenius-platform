@@ -16,6 +16,7 @@
     "tabs"
   ],
   "host_permissions": [
+    "https://*/*",
     "https://*.vercel.app/*",
     "https://job-genius.com/*",
     "https://www.job-genius.com/*",

@@ -52,3 +52,15 @@ a {
 .animate-slide-up {
   animation: slide-up 0.2s ease-out;
 }
+
+/* Scroll reveal */
+.sr-hidden {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.sr-visible {
+  opacity: 1;
+  transform: translateY(0);
+}

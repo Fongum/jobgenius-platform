@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+import { hasOpenTask } from "@/lib/conversations/tasks";
 import ConversationsClient from "./ConversationsClient";
 
 export default async function ConversationsPage() {
@@ -13,14 +14,14 @@ export default async function ConversationsPage() {
       *,
       account_managers ( name, email ),
       job_posts ( title, company ),
-      conversation_messages ( id, content, sender_type, read_at, created_at )
+      conversation_messages ( id, content, sender_type, read_at, created_at, attachments )
     `)
     .eq("job_seeker_id", user.id)
     .order("updated_at", { ascending: false });
 
   type Conversation = {
     id: string;
-    conversation_type: "general" | "application_question";
+    conversation_type: "general" | "application_question" | "task";
     subject: string;
     status: string;
     created_at: string;
@@ -28,6 +29,7 @@ export default async function ConversationsPage() {
     account_managers: { name: string; email: string } | null;
     job_posts: { title: string; company: string | null } | null;
     unread_count: number;
+    open_task_count: number;
     last_message: {
       content: string;
       sender_type: string;
@@ -42,6 +44,9 @@ export default async function ConversationsPage() {
       const unreadCount = messages.filter(
         (m) => m.sender_type === "account_manager" && m.read_at === null
       ).length;
+      const openTaskCount = messages.filter(
+        (m) => m.sender_type === "account_manager" && hasOpenTask(m.attachments)
+      ).length;
       const sorted = [...messages].sort(
         (a, b) =>
           new Date(b.created_at as string).getTime() -
@@ -51,7 +56,7 @@ export default async function ConversationsPage() {
 
       return {
         id: conv.id as string,
-        conversation_type: conv.conversation_type as "general" | "application_question",
+        conversation_type: conv.conversation_type as "general" | "application_question" | "task",
         subject: conv.subject as string,
         status: conv.status as string,
         created_at: conv.created_at as string,
@@ -59,6 +64,7 @@ export default async function ConversationsPage() {
         account_managers: conv.account_managers as { name: string; email: string } | null,
         job_posts: conv.job_posts as { title: string; company: string | null } | null,
         unread_count: unreadCount,
+        open_task_count: openTaskCount,
         last_message: lastMessage
           ? {
               content: (lastMessage.content as string).slice(0, 120),
@@ -73,7 +79,7 @@ export default async function ConversationsPage() {
   return (
     <>
       <h2 className="text-xl font-semibold text-gray-900 mb-6">
-        Questions & Tasks
+        Questions, Tasks & Messages
       </h2>
       <ConversationsClient conversations={conversations} />
     </>

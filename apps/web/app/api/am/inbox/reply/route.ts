@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
+import { hasJobSeekerAccess } from "@/lib/am-access";
 import { GmailClient } from "@/lib/gmail/client";
 
 /**
@@ -40,15 +41,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email not found" }, { status: 404 });
   }
 
-  // Verify AM has access to this seeker
-  const { data: assignment } = await supabaseAdmin
-    .from("job_seeker_assignments")
-    .select("id")
-    .eq("account_manager_id", auth.user.id)
-    .eq("job_seeker_id", email.job_seeker_id)
-    .maybeSingle();
-
-  if (!assignment) {
+  const allowed = await hasJobSeekerAccess(auth.user.id, email.job_seeker_id);
+  if (!allowed) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 

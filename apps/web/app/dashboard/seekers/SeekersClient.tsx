@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 
+type BulkAction = "message" | "task" | null;
+
 interface SeekerWithStats {
   id: string;
   full_name: string | null;
@@ -35,6 +37,13 @@ export default function SeekersClient({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "attention" | "active">("all");
   const [view, setView] = useState<"cards" | "table">("cards");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<BulkAction>(null);
+  const [bulkSubject, setBulkSubject] = useState("");
+  const [bulkContent, setBulkContent] = useState("");
+  const [bulkDueDate, setBulkDueDate] = useState("");
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ sent: number; failed: number } | null>(null);
 
   const filtered = useMemo(() => {
     return seekers.filter((s) => {
@@ -58,6 +67,54 @@ export default function SeekersClient({
   }, [seekers, search, filter]);
 
   const totalNeedsAttention = seekers.reduce((sum, s) => sum + s.stats.needsAttention, 0);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((s) => s.id)));
+    }
+  }
+
+  async function sendBulk() {
+    if (!bulkSubject.trim() || !bulkContent.trim() || selected.size === 0) return;
+    setBulkSending(true);
+    setBulkResult(null);
+    const endpoint = bulkAction === "task" ? "/api/am/bulk/task" : "/api/am/bulk/message";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seeker_ids: Array.from(selected),
+          subject: bulkSubject.trim(),
+          content: bulkContent.trim(),
+          due_date: bulkAction === "task" && bulkDueDate ? bulkDueDate : undefined,
+        }),
+      });
+      const data = await res.json();
+      setBulkResult({ sent: data.sent ?? 0, failed: data.failed ?? 0 });
+      if (data.sent > 0) {
+        setBulkSubject("");
+        setBulkContent("");
+        setBulkDueDate("");
+        setSelected(new Set());
+      }
+    } catch {
+      setBulkResult({ sent: 0, failed: selected.size });
+    } finally {
+      setBulkSending(false);
+    }
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -117,6 +174,31 @@ export default function SeekersClient({
         </div>
       </div>
 
+      {/* Bulk Action Toolbar */}
+      {selected.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-blue-800">{selected.size} selected</span>
+          <button
+            onClick={() => setBulkAction("message")}
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+          >
+            Send Message
+          </button>
+          <button
+            onClick={() => setBulkAction("task")}
+            className="px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700"
+          >
+            Assign Task
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Results */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-8 text-center">
@@ -125,7 +207,7 @@ export default function SeekersClient({
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((seeker) => (
-            <SeekerCard key={seeker.id} seeker={seeker} />
+            <SeekerCard key={seeker.id} seeker={seeker} selected={selected.has(seeker.id)} onToggle={() => toggleSelect(seeker.id)} />
           ))}
         </div>
       ) : (
@@ -133,6 +215,14 @@ export default function SeekersClient({
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="px-4 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === filtered.length && filtered.length > 0}
+                    onChange={toggleSelectAll}
+                    className="accent-blue-600"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase hidden md:table-cell">Location</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Matched</th>
@@ -147,7 +237,15 @@ export default function SeekersClient({
             </thead>
             <tbody className="divide-y">
               {filtered.map((seeker) => (
-                <tr key={seeker.id} className="hover:bg-gray-50">
+                <tr key={seeker.id} className={`hover:bg-gray-50 ${selected.has(seeker.id) ? "bg-blue-50" : ""}`}>
+                  <td className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(seeker.id)}
+                      onChange={() => toggleSelect(seeker.id)}
+                      className="accent-blue-600"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div>
                       <p className="font-medium text-gray-900">{seeker.full_name || "Unnamed"}</p>
@@ -192,21 +290,98 @@ export default function SeekersClient({
           </table>
         </div>
       )}
+
+      {/* Bulk Compose Modal */}
+      {bulkAction && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+            <h3 className="text-lg font-bold text-gray-900">
+              {bulkAction === "task" ? "Assign Task" : "Send Message"} to {selected.size} seeker{selected.size !== 1 ? "s" : ""}
+            </h3>
+
+            {bulkResult && (
+              <div className={`p-3 rounded-lg text-sm ${bulkResult.failed === 0 ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+                {bulkResult.sent > 0 && `Sent to ${bulkResult.sent} seekers. `}
+                {bulkResult.failed > 0 && `Failed for ${bulkResult.failed} seekers.`}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+              <input
+                type="text"
+                value={bulkSubject}
+                onChange={(e) => setBulkSubject(e.target.value)}
+                placeholder={bulkAction === "task" ? "e.g. Complete your profile" : "e.g. Weekly update"}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {bulkAction === "task" ? "Task Description" : "Message"}
+              </label>
+              <textarea
+                value={bulkContent}
+                onChange={(e) => setBulkContent(e.target.value)}
+                rows={4}
+                placeholder="Write your message here…"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            {bulkAction === "task" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date (optional)</label>
+                <input
+                  type="date"
+                  value={bulkDueDate}
+                  onChange={(e) => setBulkDueDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => { setBulkAction(null); setBulkResult(null); }}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={sendBulk}
+                disabled={!bulkSubject.trim() || !bulkContent.trim() || bulkSending}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg"
+              >
+                {bulkSending ? "Sending…" : `Send to ${selected.size}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function SeekerCard({ seeker }: { seeker: SeekerWithStats }) {
+function SeekerCard({ seeker, selected, onToggle }: { seeker: SeekerWithStats; selected: boolean; onToggle: () => void }) {
   const hasAttention = seeker.stats.needsAttention > 0;
 
   return (
-    <Link
-      href={`/dashboard/seekers/${seeker.id}`}
-      className={`block bg-white rounded-lg shadow hover:shadow-md transition-shadow ${
-        hasAttention ? "ring-2 ring-orange-400" : ""
-      }`}
-    >
-      <div className="p-5">
+    <div className={`relative bg-white rounded-lg shadow hover:shadow-md transition-shadow ${
+      hasAttention ? "ring-2 ring-orange-400" : ""
+    } ${selected ? "ring-2 ring-blue-400" : ""}`}>
+      {/* Checkbox overlay */}
+      <div className="absolute top-3 left-3 z-10">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          onClick={(e) => e.stopPropagation()}
+          className="accent-blue-600 w-4 h-4"
+        />
+      </div>
+      <Link href={`/dashboard/seekers/${seeker.id}`} className="block p-5 pl-9">
         <div className="flex items-start justify-between mb-3">
           <div>
             <h3 className="font-semibold text-gray-900">{seeker.full_name || "Unnamed"}</h3>
@@ -274,8 +449,8 @@ function SeekerCard({ seeker }: { seeker: SeekerWithStats }) {
           <Stat label="Intv" value={seeker.stats.interviews} color="purple" />
           <Stat label="Inbox" value={seeker.stats.inboxTotal} />
         </div>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
 

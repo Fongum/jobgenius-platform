@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/refresh-jobs",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/availability-reminder",
+      "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/cron/profile-nudge",
+      "schedule": "0 10 * * *"
     }
   ]
 }

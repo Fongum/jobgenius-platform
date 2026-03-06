@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { isAdminRole } from "@/lib/auth/roles";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,11 +32,12 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect based on user type
+      // Redirect based on user type and role
       if (data.user.userType === "job_seeker") {
         router.push("/portal");
       } else {
-        router.push("/dashboard");
+        const isAdmin = isAdminRole(data.user.role);
+        router.push(isAdmin ? "/dashboard/admin/job-seekers" : "/dashboard");
       }
     } catch {
       setError("An error occurred. Please try again.");

@@ -1,5 +1,6 @@
 import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
+import { hasOpenTask, isConversationType } from "@/lib/conversations/tasks";
 
 export async function GET(request: Request) {
   const auth = await requireJobSeeker(request);
@@ -8,7 +9,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const type = searchParams.get("type"); // 'general' or 'application_question'
+  const type = searchParams.get("type"); // 'general' | 'application_question' | 'task'
 
   let query = supabaseAdmin
     .from("conversations")
@@ -16,12 +17,12 @@ export async function GET(request: Request) {
       *,
       account_managers ( name, email ),
       job_posts ( title, company ),
-      conversation_messages ( id, content, sender_type, read_at, created_at )
+      conversation_messages ( id, content, sender_type, read_at, created_at, attachments )
     `)
     .eq("job_seeker_id", auth.user.id)
     .order("updated_at", { ascending: false });
 
-  if (type === "general" || type === "application_question") {
+  if (isConversationType(type)) {
     query = query.eq("conversation_type", type);
   }
 
@@ -37,8 +38,11 @@ export async function GET(request: Request) {
     const unreadCount = messages.filter(
       (m) => m.sender_type === "account_manager" && m.read_at === null
     ).length;
+    const openTaskCount = messages.filter(
+      (m) => m.sender_type === "account_manager" && hasOpenTask(m.attachments)
+    ).length;
     const lastMessage = messages.length > 0
-      ? messages.sort(
+      ? [...messages].sort(
           (a, b) =>
             new Date(b.created_at as string).getTime() -
             new Date(a.created_at as string).getTime()
@@ -50,6 +54,7 @@ export async function GET(request: Request) {
     return {
       ...rest,
       unread_count: unreadCount,
+      open_task_count: openTaskCount,
       last_message: lastMessage
         ? {
             content: (lastMessage.content as string).slice(0, 120),
