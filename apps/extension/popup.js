@@ -1816,6 +1816,42 @@ async function init() {
   }
 
   updatePageInfo();
+
+  // Check for session expiry warnings
+  checkSessionWarnings();
+}
+
+async function checkSessionWarnings() {
+  const { sessionWarning } = await chrome.storage.local.get("sessionWarning");
+  if (!sessionWarning) return;
+
+  // Only show warnings from the last 24 hours
+  if (Date.now() - sessionWarning.timestamp > 24 * 60 * 60 * 1000) {
+    await chrome.storage.local.remove("sessionWarning");
+    chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+
+  const warningBanner = document.createElement("div");
+  warningBanner.className = "session-warning";
+  warningBanner.style.cssText =
+    "background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:8px 12px;" +
+    "margin:8px 0;display:flex;align-items:center;gap:8px;font-size:12px;color:#991B1B;";
+  warningBanner.innerHTML =
+    `<span style="font-size:16px">⚠️</span>` +
+    `<span><strong>${sessionWarning.platform}</strong>: ${sessionWarning.message}</span>` +
+    `<button id="dismissSessionWarning" style="margin-left:auto;background:none;border:none;` +
+    `color:#991B1B;cursor:pointer;font-size:14px;">×</button>`;
+
+  const mainApp = document.getElementById("mainApp");
+  if (mainApp) {
+    mainApp.insertBefore(warningBanner, mainApp.firstChild);
+    document.getElementById("dismissSessionWarning")?.addEventListener("click", async () => {
+      warningBanner.remove();
+      await chrome.storage.local.remove("sessionWarning");
+      chrome.action.setBadgeText({ text: "" });
+    });
+  }
 }
 
 init();

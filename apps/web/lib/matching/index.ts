@@ -14,7 +14,11 @@
 export * from "./types";
 export * from "./extractors";
 export * from "./scorer";
+export * from "./skill-hierarchy";
+export * from "./resume-extractor";
 
 // Re-export main functions for convenience
 export { computeMatchScore } from "./scorer";
 export { parseJobPost } from "./extractors";
+export { hierarchicalSkillMatch, skillSimilarity, resolveSkill } from "./skill-hierarchy";
+export { extractResumeSignals, computeResumeBonus } from "./resume-extractor";

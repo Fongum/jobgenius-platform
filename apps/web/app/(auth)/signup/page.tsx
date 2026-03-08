@@ -1,20 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 type UserType = "am" | "job_seeker";
 
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userType, setUserType] = useState<UserType>("job_seeker");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref) setReferralCode(ref.trim().toUpperCase());
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +48,7 @@ export default function SignUpPage() {
           password,
           name,
           userType,
+          ...(referralCode ? { referralCode } : {}),
         }),
       });
 
@@ -79,6 +87,11 @@ export default function SignUpPage() {
               ? "Sign up as an Account Manager to start managing job seekers."
               : "Sign up as a Job Seeker to find your next opportunity."}
           </p>
+          {referralCode && (
+            <p className="mt-2 text-center text-sm text-green-700 font-medium">
+              Referred by a friend — welcome!
+            </p>
+          )}
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -242,3 +255,10 @@ export default function SignUpPage() {
   );
 }
 
+export default function SignUpPage() {
+  return (
+    <Suspense>
+      <SignUpForm />
+    </Suspense>
+  );
+}

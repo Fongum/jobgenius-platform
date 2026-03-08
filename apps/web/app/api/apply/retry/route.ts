@@ -1,6 +1,8 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
+import { determineRetryStrategy, recordRetryStrategy } from "@/lib/smart-retry";
+import { logActivity } from "@/lib/feedback-loop";
 
 type RetryPayload = {
   run_id?: string;
@@ -88,6 +90,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // Determine smart retry strategy based on failure context
+  const { data: prevStrategies } = await supabaseServer
+    .from("retry_strategies")
+    .select("strategy")
+    .eq("run_id", run.id);
+
+  const retryResult = determineRetryStrategy({
+    errorCode: (run as Record<string, unknown>).last_error_code as string | null,
+    lastError: (run as Record<string, unknown>).last_error as string | null,
+    failedStep: run.current_step,
+    atsType: run.ats_type,
+    attemptNumber: nextAttempt,
+    previousStrategies: (prevStrategies ?? []).map((s) => s.strategy),
+  });
+
   const { error } = await supabaseServer
     .from("application_runs")
     .update({
@@ -99,6 +116,8 @@ export async function POST(request: Request) {
       locked_at: null,
       locked_by: null,
       claim_token: null,
+      retry_strategy: retryResult.strategy,
+      retry_changes: retryResult.changes,
       updated_at: nowIso,
     })
     .eq("id", run.id);
@@ -110,11 +129,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Record retry strategy for learning
+  recordRetryStrategy(run.id, nextAttempt, retryResult.strategy, retryResult.changes).catch(() => {});
+
   await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
     event_type: "RETRY",
-    message: payload.note ?? "Retry requested by AM.",
+    message: `${payload.note ?? "Retry requested."} Strategy: ${retryResult.strategy} — ${retryResult.reason}`,
   });
 
   await supabaseServer.from("apply_run_events").insert({
@@ -122,7 +144,12 @@ export async function POST(request: Request) {
     level: "INFO",
     event_type: "RETRY",
     actor: getActorFromHeaders(request.headers),
-    payload: { note: payload.note ?? null },
+    payload: {
+      note: payload.note ?? null,
+      strategy: retryResult.strategy,
+      changes: retryResult.changes,
+      reason: retryResult.reason,
+    },
   });
 
   if (run.queue_id) {
@@ -132,11 +159,23 @@ export async function POST(request: Request) {
       .eq("id", run.queue_id);
   }
 
+  // Log to activity feed (non-blocking)
+  logActivity(run.job_seeker_id, {
+    eventType: "application_retry",
+    title: "Application retrying",
+    description: `Strategy: ${retryResult.strategy} — ${retryResult.reason}`,
+    meta: { run_id: run.id, attempt: nextAttempt, strategy: retryResult.strategy },
+    refType: "application_runs",
+    refId: run.id,
+  }).catch(() => {});
+
   return Response.json({
     success: true,
     run_id: run.id,
     status: "RETRYING",
     ats_type: run.ats_type,
     current_step: run.current_step,
+    retry_strategy: retryResult.strategy,
+    retry_reason: retryResult.reason,
   });
 }

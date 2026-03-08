@@ -368,7 +368,25 @@
     if (hint.includes("country")) return addressCountry;
 
     if (hint.includes("salary") || hint.includes("compensation") || hint.includes("desired pay")) {
-      return null;
+      return "Negotiable";
+    }
+
+    if (hint.includes("how did you hear") || hint.includes("where did you find") || hint.includes("referral source")) {
+      return "Job board";
+    }
+
+    if (hint.includes("start date") || hint.includes("when can you start") || hint.includes("available to start")) {
+      return "Immediately";
+    }
+
+    if (hint.includes("notice period")) {
+      return "2 weeks";
+    }
+
+    if (hint.includes("current") && hint.includes("title")) {
+      const lastJob = Array.isArray(profile?.work_history) && profile.work_history.length > 0
+        ? profile.work_history[0] : null;
+      return pickFirst(lastJob?.title, lastJob?.role) || null;
     }
 
     if (hint.includes("current employer") || hint.includes("current company") ||
@@ -388,7 +406,7 @@
 
     if (type === "email") return email;
     if (type === "tel") return phone;
-    return type === "email" ? email : "N/A";
+    return "";
   }
 
   function fillTextInputs(defaultEmail, profile = null) {
@@ -777,6 +795,119 @@
     ].join("::");
   }
 
+  /**
+   * Wait for the DOM to stop mutating before proceeding.
+   * Resolves after `idleMs` of no mutations or `totalMs` timeout.
+   */
+  function waitForDomStable(idleMs = 800, totalMs = 8000) {
+    return new Promise((resolve) => {
+      let timer = null;
+      const deadline = setTimeout(() => {
+        if (observer) observer.disconnect();
+        resolve();
+      }, totalMs);
+
+      const observer = new MutationObserver(() => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          observer.disconnect();
+          clearTimeout(deadline);
+          resolve();
+        }, idleMs);
+      });
+
+      const target = document.body ?? document.documentElement;
+      if (target) {
+        observer.observe(target, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+        });
+      }
+
+      timer = setTimeout(() => {
+        observer.disconnect();
+        clearTimeout(deadline);
+        resolve();
+      }, idleMs);
+    });
+  }
+
+  /**
+   * Dismiss common blocking overlays (cookie banners, modals).
+   */
+  function dismissOverlays() {
+    let dismissed = false;
+
+    // Cookie consent
+    const cookieSelectors = [
+      "button[id*='cookie' i][id*='accept' i]",
+      "#onetrust-accept-btn-handler",
+      ".cc-dismiss",
+      ".cc-btn.cc-allow",
+      "[data-testid='cookie-accept']",
+    ];
+    for (const sel of cookieSelectors) {
+      const btn = document.querySelector(sel);
+      if (btn instanceof HTMLElement && btn.offsetParent !== null) {
+        btn.click();
+        dismissed = true;
+        break;
+      }
+    }
+
+    // Modal close
+    const modalSelectors = [
+      "[role='dialog'] button[aria-label*='close' i]",
+      ".modal button.close",
+      ".modal-close",
+      "[data-dismiss='modal']",
+    ];
+    for (const sel of modalSelectors) {
+      const btn = document.querySelector(sel);
+      if (btn instanceof HTMLElement && btn.offsetParent !== null) {
+        btn.click();
+        dismissed = true;
+        break;
+      }
+    }
+
+    return dismissed;
+  }
+
+  /**
+   * Upload a file via drag-and-drop zone if standard input not found.
+   */
+  async function uploadViaDragDrop(resumeUrl) {
+    if (!resumeUrl) return { ok: false, reason: "NO_INPUT_OR_URL" };
+
+    // Try standard input first
+    const fileInputs = Array.from(document.querySelectorAll("input[type='file']"))
+      .filter((input) => !input.disabled);
+    if (fileInputs.length > 0) {
+      return uploadResume(resumeUrl); // Use existing method
+    }
+
+    // Look for drop zones
+    const dropZone = document.querySelector(
+      "[class*='dropzone'], [class*='drop-zone'], [class*='upload-area'], " +
+      "[class*='file-upload'], [class*='drag-drop'], " +
+      ".dz-clickable, .filepond--root"
+    );
+
+    if (dropZone) {
+      // Clicking often reveals a file input
+      dropZone.click();
+      await sleep(1000);
+      const revealedInput = document.querySelector("input[type='file']");
+      if (revealedInput) {
+        return uploadResume(resumeUrl);
+      }
+    }
+
+    return { ok: false, reason: "NO_UPLOAD_ELEMENT" };
+  }
+
   window.JobGeniusDom = {
     sleep,
     findButtonByText,
@@ -791,9 +922,12 @@
     fillTextAreas,
     fillAllFields,
     uploadResume,
+    uploadViaDragDrop,
     findOtpInput,
     extractRequiredFields,
     requiredFieldsMissing,
     captureFlowFingerprint,
+    waitForDomStable,
+    dismissOverlays,
   };
 })();

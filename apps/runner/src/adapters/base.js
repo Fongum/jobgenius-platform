@@ -121,14 +121,43 @@ function resolveFieldValue(hint, type, profile, defaultEmail) {
   if (hint.includes("zip") || hint.includes("postal")) return addressZip;
   if (hint.includes("country")) return addressCountry;
 
+  // Additional common screening fields
+  if (hint.includes("salary") || hint.includes("compensation") || hint.includes("desired pay")) {
+    return "Negotiable";
+  }
+  if ((hint.includes("years") && hint.includes("experience")) || hint.includes("years of experience")) {
+    if (Array.isArray(profile?.work_history) && profile.work_history.length > 0) {
+      return String(Math.min(profile.work_history.length * 2, 15));
+    }
+    return "3";
+  }
+  if (hint.includes("current") && (hint.includes("company") || hint.includes("employer"))) {
+    const latest = Array.isArray(profile?.work_history) ? profile.work_history[0] : null;
+    return pickFirst(latest?.company, latest?.organization, latest?.employer) || "";
+  }
+  if (hint.includes("current") && hint.includes("title")) {
+    const latest = Array.isArray(profile?.work_history) ? profile.work_history[0] : null;
+    return pickFirst(latest?.title, latest?.role) || "";
+  }
+  if (hint.includes("how did you hear") || hint.includes("where did you find") || hint.includes("referral source")) {
+    return "Job board";
+  }
+  if (hint.includes("start date") || hint.includes("when can you start") || hint.includes("available to start")) {
+    return "Immediately";
+  }
+  if (hint.includes("notice period")) {
+    return "2 weeks";
+  }
+
   if (type === "email") return email;
   if (type === "tel") return phone;
-  return type === "email" ? email : "N/A";
+  return type === "email" ? email : "";
 }
 
 export async function fillKnownFields(page, ctx) {
   const profile = ctx?.profile ?? {};
   const defaultEmail = ctx?.defaultEmail ?? "";
+  const job = ctx?.job ?? {};
   const inputs = await page.$$(
     "input[type='text'], input[type='email'], input[type='tel'], input:not([type]), textarea"
   );
@@ -137,11 +166,158 @@ export async function fillKnownFields(page, ctx) {
     if (isDisabled !== null) continue;
     const value = await input.inputValue();
     if (value) continue;
+    const tagName = await input.evaluate((el) => el.tagName.toLowerCase());
     const type = (await input.getAttribute("type")) ?? "text";
     const hint = await getInputHint(input);
+
+    // Handle textarea cover letter / motivation fields
+    if (tagName === "textarea") {
+      const coverLetterValue = resolveCoverLetterValue(hint, profile, job);
+      if (coverLetterValue) {
+        await input.fill(coverLetterValue);
+        continue;
+      }
+    }
+
     const fillValue = resolveFieldValue(hint, type, profile, defaultEmail);
     if (!fillValue) continue;
     await input.fill(fillValue);
+  }
+
+  // Handle select fields (work authorization, sponsorship, etc.)
+  await fillSelectFields(page, profile);
+
+  // Handle radio groups
+  await fillRadioGroups(page, profile);
+
+  // Handle consent checkboxes
+  await fillConsentCheckboxes(page);
+}
+
+function resolveCoverLetterValue(hint, profile, job) {
+  const fullName = pickFirst(profile?.full_name, profile?.name);
+  const jobTitle = pickFirst(job?.title, "this position");
+  const company = pickFirst(job?.company, "your company");
+
+  let background = "my professional experience";
+  if (Array.isArray(profile?.work_history) && profile.work_history.length > 0) {
+    const latest = profile.work_history[0];
+    background = pickFirst(latest?.title, latest?.role, background);
+  }
+
+  if (hint.includes("cover letter") || hint.includes("letter of interest") || hint.includes("introduction")) {
+    return `Dear Hiring Team,\n\nI am excited to apply for the ${jobTitle} role at ${company}. My background in ${background} makes me a strong fit for this position. I look forward to contributing to your team.\n\nBest regards,\n${fullName}`;
+  }
+  if (hint.includes("why") || hint.includes("motivation") || hint.includes("interest") || hint.includes("reason for applying")) {
+    return `I am excited about the ${jobTitle} opportunity at ${company} because it aligns perfectly with my background and career goals.`;
+  }
+  if (hint.includes("additional") || hint.includes("anything else") || hint.includes("comments")) {
+    return "No additional information at this time.";
+  }
+  return null;
+}
+
+async function fillSelectFields(page, profile) {
+  const selects = await page.$$("select");
+  for (const select of selects) {
+    const isDisabled = await select.getAttribute("disabled");
+    if (isDisabled !== null) continue;
+    const currentValue = await select.inputValue().catch(() => "");
+    // Check if default/empty
+    const firstOptValue = await select.evaluate((el) => el.options[0]?.value ?? "");
+    if (currentValue && currentValue !== firstOptValue) continue;
+
+    const hint = await getInputHint(select);
+    if (!hint) continue;
+
+    let candidates = null;
+    if (hint.includes("authorized") || hint.includes("legally work") || hint.includes("work authorization")) {
+      candidates = ["yes", "authorized", "u.s. citizen", "citizen"];
+    } else if (hint.includes("sponsor") || hint.includes("sponsorship")) {
+      candidates = ["no", "does not require", "will not require"];
+    } else if (hint.includes("country")) {
+      const country = pickFirst(profile?.address_country);
+      candidates = country ? [country.toLowerCase(), "united states", "usa"] : ["united states", "usa"];
+    } else if (hint.includes("gender") || hint.includes("race") || hint.includes("veteran") || hint.includes("disability")) {
+      candidates = ["prefer not to answer", "decline to self-identify", "decline to answer"];
+    }
+
+    if (!candidates) continue;
+
+    // Try to match option text
+    const matched = await select.evaluate(
+      (el, candidates) => {
+        const options = Array.from(el.options);
+        for (const candidate of candidates) {
+          const match = options.find((o) => (o.textContent ?? "").toLowerCase().includes(candidate));
+          if (match) {
+            el.value = match.value;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            return true;
+          }
+        }
+        return false;
+      },
+      candidates
+    );
+
+    if (!matched) continue;
+  }
+}
+
+async function fillRadioGroups(page, profile) {
+  const radios = await page.$$("input[type='radio']");
+  const groups = new Map();
+  for (const radio of radios) {
+    const name = await radio.getAttribute("name");
+    if (!name) continue;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(radio);
+  }
+
+  for (const [, group] of groups) {
+    const anyChecked = await Promise.all(group.map((r) => r.isChecked()));
+    if (anyChecked.some(Boolean)) continue;
+
+    const firstRadio = group[0];
+    const hint = await getInputHint(firstRadio);
+    if (!hint) continue;
+
+    let targetLabel = null;
+    if (hint.includes("authorized") || hint.includes("eligible to work")) targetLabel = "yes";
+    else if (hint.includes("sponsor")) targetLabel = "no";
+    else if (hint.includes("relocate")) targetLabel = "yes";
+    else if (hint.includes("gender") || hint.includes("race") || hint.includes("veteran") || hint.includes("disability")) {
+      targetLabel = "prefer not";
+    }
+
+    if (!targetLabel) continue;
+
+    for (const radio of group) {
+      const radioLabel = await radio.evaluate((el) => {
+        const label = el.getAttribute("aria-label") || el.getAttribute("value") || "";
+        return label.toLowerCase();
+      });
+      if (radioLabel.includes(targetLabel)) {
+        await radio.click().catch(() => null);
+        break;
+      }
+    }
+  }
+}
+
+async function fillConsentCheckboxes(page) {
+  const checkboxes = await page.$$("input[type='checkbox']");
+  const autoCheckKeywords = ["agree", "accept", "certify", "confirm", "acknowledge", "terms", "conditions", "authorize"];
+  for (const checkbox of checkboxes) {
+    const checked = await checkbox.isChecked();
+    if (checked) continue;
+    const isDisabled = await checkbox.getAttribute("disabled");
+    if (isDisabled !== null) continue;
+    const hint = await getInputHint(checkbox);
+    if (autoCheckKeywords.some((kw) => hint.includes(kw))) {
+      await checkbox.check().catch(() => null);
+    }
   }
 }
 

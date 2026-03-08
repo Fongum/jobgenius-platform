@@ -10,7 +10,7 @@
     if (host.includes("linkedin")) return "LINKEDIN";
     if (host.includes("greenhouse")) return "GREENHOUSE";
     if (host.includes("workday") || host.includes("myworkdayjobs")) return "WORKDAY";
-    if (host.includes("lever.co")) return "LEVER";
+    if (host.includes("lever.co") || host.includes("jobs.lever.co")) return "LEVER";
     if (host.includes("smartrecruiters")) return "SMARTRECRUITERS";
     if (host.includes("icims.com")) return "ICIMS";
     if (host.includes("jobvite.com")) return "JOBVITE";

@@ -1,6 +1,8 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
+import { recordAdapterEvent } from "@/lib/adapter-health";
+import { logActivity } from "@/lib/feedback-loop";
 
 type FailPayload = {
   run_id?: string;
@@ -134,6 +136,31 @@ export async function POST(request: Request) {
     dom_hint: payload.dom_hint ?? null,
     message: payload.message ?? null,
   });
+
+  // Record adapter health event (non-blocking)
+  const failOutcome = reason.toLowerCase().includes("captcha") ? "captcha_blocked"
+    : reason.toLowerCase().includes("session") || reason.toLowerCase().includes("login") ? "session_expired"
+    : reason.toLowerCase().includes("timeout") ? "timeout"
+    : "failure";
+
+  recordAdapterEvent({
+    atsType: run.ats_type ?? "UNKNOWN",
+    runId: run.id,
+    outcome: failOutcome,
+    step: payload.step ?? run.current_step ?? undefined,
+    errorCode: payload.error_code ?? reason,
+    urlHost: urlHost ?? undefined,
+  }).catch(() => {});
+
+  // Log to seeker activity feed (non-blocking)
+  logActivity(run.job_seeker_id, {
+    eventType: "application_failed",
+    title: "Application failed",
+    description: `${run.ats_type ?? "Unknown ATS"} — ${reason}`,
+    meta: { run_id: run.id, ats_type: run.ats_type, error_code: payload.error_code, step: payload.step },
+    refType: "application_runs",
+    refId: run.id,
+  }).catch(() => {});
 
   return Response.json({ success: true, run_id: run.id, status: "FAILED" });
 }

@@ -1,6 +1,7 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { logActivity } from "@/lib/feedback-loop";
 
 type EnqueuePayload = {
   job_post_id?: string;
@@ -61,6 +62,16 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  // Log to activity feed (non-blocking)
+  logActivity(payload.job_seeker_id, {
+    eventType: "job_queued",
+    title: "Job queued for application",
+    description: `Manually queued by AM`,
+    meta: { queue_id: data?.id, job_post_id: payload.job_post_id, category: payload.category ?? "manual" },
+    refType: "application_queue",
+    refId: data?.id,
+  }).catch(() => {});
 
   if (data?.id) {
     try {

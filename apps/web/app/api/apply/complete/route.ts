@@ -7,6 +7,8 @@ import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { supabaseServer } from "@/lib/supabase/server";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { applicationAckEmail } from "@/lib/email-templates/application-ack";
+import { recordAdapterEvent } from "@/lib/adapter-health";
+import { logActivity } from "@/lib/feedback-loop";
 
 type CompletePayload = {
   run_id?: string;
@@ -291,6 +293,26 @@ export async function POST(request: Request) {
       });
     }
   }
+
+  // Record adapter health event (non-blocking)
+  recordAdapterEvent({
+    atsType: run.ats_type ?? "UNKNOWN",
+    runId: run.id,
+    outcome: "success",
+    step: run.current_step ?? undefined,
+  }).catch(() => {});
+
+  // Log to seeker activity feed (non-blocking)
+  logActivity(run.job_seeker_id, {
+    eventType: "application_applied",
+    title: "Application submitted",
+    description: jobPost
+      ? `Applied to ${jobPost.title} at ${jobPost.company}`
+      : "Application completed",
+    meta: { run_id: run.id, ats_type: run.ats_type, job_post_id: run.job_post_id },
+    refType: "application_runs",
+    refId: run.id,
+  }).catch(() => {});
 
   return Response.json({
     success: true,

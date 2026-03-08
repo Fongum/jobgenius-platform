@@ -368,6 +368,26 @@ interface SeekerConversationMessage {
   attachments?: unknown;
 }
 
+interface ScreeningAnswer {
+  id: string;
+  question_key: string;
+  question_text: string;
+  answer_value: string;
+  answer_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface FailureScreenshot {
+  id: string;
+  run_id: string;
+  step: string;
+  reason: string;
+  url: string;
+  screenshot_path: string;
+  created_at: string;
+}
+
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "profile", label: "Profile" },
@@ -375,6 +395,10 @@ const TABS = [
   { id: "financial", label: "Financial" },
   { id: "jobs", label: "Jobs" },
   { id: "applications", label: "Applications" },
+  { id: "screening", label: "Screening" },
+  { id: "debug", label: "Debug" },
+  { id: "activity", label: "Activity" },
+  { id: "feedback", label: "Feedback" },
   { id: "messages", label: "Messages" },
   { id: "outreach", label: "Outreach" },
   { id: "interviews", label: "Interviews" },
@@ -398,6 +422,8 @@ export default function SeekerDetailClient({
   inboundEmails,
   auditLogs = [],
   financial = EMPTY_FINANCIAL_DATA,
+  screeningAnswers: initialScreeningAnswers = [],
+  failureScreenshots = [],
 }: {
   backHref?: string;
   seeker: SeekerData;
@@ -414,6 +440,8 @@ export default function SeekerDetailClient({
   inboundEmails: InboundEmail[];
   auditLogs?: ProfileAuditLog[];
   financial?: FinancialData;
+  screeningAnswers?: ScreeningAnswer[];
+  failureScreenshots?: FailureScreenshot[];
 }) {
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -540,6 +568,18 @@ export default function SeekerDetailClient({
           )}
           {activeTab === "applications" && (
             <ApplicationsTab queueItems={queueItems} runs={runs} />
+          )}
+          {activeTab === "screening" && (
+            <ScreeningAnswersTab seekerId={seeker.id} initialAnswers={initialScreeningAnswers} />
+          )}
+          {activeTab === "debug" && (
+            <DebugScreenshotsTab screenshots={failureScreenshots} runs={runs} />
+          )}
+          {activeTab === "activity" && (
+            <ActivityFeedTab seekerId={seeker.id} />
+          )}
+          {activeTab === "feedback" && (
+            <FeedbackTab seekerId={seeker.id} />
           )}
           {activeTab === "messages" && (
             <MessagesTab seekerId={seeker.id} />
@@ -3692,6 +3732,744 @@ function InboxTab({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Activity Feed Tab ──────────────────────────────────────────────
+function ActivityFeedTab({ seekerId }: { seekerId: string }) {
+  const [events, setEvents] = useState<{
+    id: string; event_type: string; title: string; description: string | null;
+    meta: Record<string, unknown>; created_at: string;
+  }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    const url = `/api/am/seekers/${seekerId}/activity?limit=100${filter ? `&event_type=${filter}` : ""}`;
+    setLoading(true);
+    fetch(url)
+      .then((r) => r.json())
+      .then((d) => setEvents(d.events ?? []))
+      .finally(() => setLoading(false));
+  }, [seekerId, filter]);
+
+  const EVENT_ICONS: Record<string, { color: string; label: string }> = {
+    application_applied: { color: "bg-green-400", label: "Applied" },
+    application_failed: { color: "bg-red-400", label: "Failed" },
+    application_retry: { color: "bg-orange-400", label: "Retry" },
+    feedback_recorded: { color: "bg-purple-400", label: "Feedback" },
+    interview_scheduled: { color: "bg-blue-400", label: "Interview" },
+    outreach_sent: { color: "bg-indigo-400", label: "Outreach" },
+    match_created: { color: "bg-cyan-400", label: "Match" },
+    profile_updated: { color: "bg-gray-400", label: "Profile" },
+  };
+
+  const eventTypes = [...new Set(events.map((e) => e.event_type))];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">Activity Feed</h3>
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm">
+          <option value="">All events</option>
+          {eventTypes.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+        </select>
+      </div>
+
+      {loading ? (
+        <div className="animate-pulse space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 bg-gray-100 rounded" />)}
+        </div>
+      ) : events.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 text-sm">
+          No activity recorded yet. Events appear here as applications, interviews, and other actions occur.
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Timeline line */}
+          <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-gray-200" />
+
+          <div className="space-y-0">
+            {events.map((e) => {
+              const icon = EVENT_ICONS[e.event_type] ?? { color: "bg-gray-400", label: e.event_type };
+              return (
+                <div key={e.id} className="relative flex gap-4 py-3">
+                  <div className={`w-6 h-6 rounded-full ${icon.color} shrink-0 z-10 flex items-center justify-center`}>
+                    <span className="w-2 h-2 bg-white rounded-full" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900">{e.title}</p>
+                      <span className="text-xs text-gray-400 shrink-0 ml-2">
+                        {new Date(e.created_at).toLocaleDateString()}{" "}
+                        {new Date(e.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    {e.description && (
+                      <p className="text-sm text-gray-500 mt-0.5">{e.description}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Feedback Tab ───────────────────────────────────────────────────
+const REJECTION_CATEGORIES = [
+  { value: "experience_mismatch", label: "Experience Mismatch" },
+  { value: "skills_gap", label: "Skills Gap" },
+  { value: "overqualified", label: "Overqualified" },
+  { value: "underqualified", label: "Underqualified" },
+  { value: "salary_mismatch", label: "Salary Mismatch" },
+  { value: "location_mismatch", label: "Location Mismatch" },
+  { value: "culture_fit", label: "Culture Fit" },
+  { value: "visa_sponsorship", label: "Visa/Sponsorship" },
+  { value: "internal_candidate", label: "Internal Candidate" },
+  { value: "position_filled", label: "Position Filled" },
+  { value: "company_freeze", label: "Company Hiring Freeze" },
+  { value: "no_response", label: "No Response/Ghosted" },
+  { value: "other", label: "Other" },
+];
+
+const FEEDBACK_TYPES = [
+  { value: "application_rejected", label: "Application Rejected" },
+  { value: "interview_rejected", label: "Interview Rejected" },
+  { value: "ghosted", label: "Ghosted" },
+  { value: "withdrawn", label: "Withdrawn" },
+  { value: "ats_failure", label: "ATS Failure" },
+];
+
+function FeedbackTab({ seekerId }: { seekerId: string }) {
+  const [feedbackList, setFeedbackList] = useState<{
+    id: string; feedback_type: string; rejection_category: string | null;
+    company: string | null; role_title: string | null; notes: string | null;
+    created_at: string;
+  }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [analysis, setAnalysis] = useState<{
+    hasEnoughData: boolean; totalFeedback?: number;
+    categoryCounts?: Record<string, number>;
+    suggestions?: { weight: string; direction: string; reason: string }[];
+  } | null>(null);
+
+  // Form state
+  const [formType, setFormType] = useState("application_rejected");
+  const [formCategory, setFormCategory] = useState("");
+  const [formCompany, setFormCompany] = useState("");
+  const [formRole, setFormRole] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function loadFeedback() {
+    setLoading(true);
+    fetch(`/api/am/feedback?job_seeker_id=${seekerId}`)
+      .then((r) => r.json())
+      .then((d) => setFeedbackList(d.feedback ?? []))
+      .finally(() => setLoading(false));
+  }
+
+  function loadAnalysis() {
+    fetch(`/api/am/feedback?job_seeker_id=${seekerId}&action=analyze`)
+      .then((r) => r.json())
+      .then(setAnalysis);
+  }
+
+  useEffect(() => {
+    loadFeedback();
+    loadAnalysis();
+  }, [seekerId]);
+
+  async function submitFeedback() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/am/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_seeker_id: seekerId,
+          feedback_type: formType,
+          rejection_category: formCategory || null,
+          company: formCompany || null,
+          role_title: formRole || null,
+          notes: formNotes || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setShowForm(false);
+      setFormType("application_rejected");
+      setFormCategory("");
+      setFormCompany("");
+      setFormRole("");
+      setFormNotes("");
+      loadFeedback();
+      loadAnalysis();
+    } catch {
+      alert("Failed to record feedback");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function applyWeightAdjustment() {
+    if (!confirm("Apply AI-suggested weight adjustments based on rejection patterns?")) return;
+    const res = await fetch("/api/am/feedback", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_seeker_id: seekerId, action: "apply_weight_adjustment" }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(`Weights updated! Changes: ${JSON.stringify(data.suggestions?.map((s: { weight: string; direction: string }) => `${s.weight} ${s.direction}`) ?? [])}`);
+      loadAnalysis();
+    } else {
+      alert(data.error ?? "Failed to apply adjustment");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">Rejection Feedback</h3>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+          + Record Feedback
+        </button>
+      </div>
+
+      <p className="text-sm text-gray-500">
+        Track rejection reasons to improve matching accuracy. The system analyzes patterns and suggests weight adjustments.
+      </p>
+
+      {/* Analysis card */}
+      {analysis && analysis.hasEnoughData && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-purple-900">Pattern Analysis ({analysis.totalFeedback} feedback entries)</h4>
+            {analysis.suggestions && analysis.suggestions.length > 0 && (
+              <button onClick={applyWeightAdjustment} className="px-3 py-1 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700">
+                Apply Suggested Adjustments
+              </button>
+            )}
+          </div>
+
+          {analysis.categoryCounts && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {Object.entries(analysis.categoryCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 5)
+                .map(([cat, count]) => (
+                  <span key={cat} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                    {cat.replace(/_/g, " ")}: {count}
+                  </span>
+                ))}
+            </div>
+          )}
+
+          {analysis.suggestions && analysis.suggestions.length > 0 && (
+            <div className="space-y-1 mt-2">
+              {analysis.suggestions.map((s, i) => (
+                <p key={i} className="text-xs text-purple-700">
+                  → {s.direction === "increase" ? "Increase" : "Decrease"} <strong>{s.weight}</strong> weight — {s.reason}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add form */}
+      {showForm && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-gray-900">Record Feedback</h4>
+            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Feedback Type</label>
+              <select value={formType} onChange={(e) => setFormType(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+                {FEEDBACK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Category</label>
+              <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+                <option value="">Select...</option>
+                {REJECTION_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Company</label>
+              <input value={formCompany} onChange={(e) => setFormCompany(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Company name" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Role</label>
+              <input value={formRole} onChange={(e) => setFormRole(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Role title" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+            <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} placeholder="Additional context..." />
+          </div>
+
+          <button onClick={submitFeedback} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {saving ? "Saving..." : "Save Feedback"}
+          </button>
+        </div>
+      )}
+
+      {/* Feedback list */}
+      {loading ? (
+        <div className="animate-pulse space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-gray-100 rounded" />)}</div>
+      ) : feedbackList.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 text-sm">
+          No feedback recorded. Record rejection reasons to improve this seeker&apos;s matching accuracy.
+        </div>
+      ) : (
+        <div className="divide-y border rounded-lg bg-white">
+          {feedbackList.map((f) => (
+            <div key={f.id} className="px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    f.feedback_type.includes("rejected") ? "bg-red-100 text-red-700" :
+                    f.feedback_type === "ghosted" ? "bg-gray-100 text-gray-700" :
+                    "bg-yellow-100 text-yellow-700"
+                  }`}>
+                    {f.feedback_type.replace(/_/g, " ")}
+                  </span>
+                  {f.rejection_category && (
+                    <span className="text-xs text-gray-500">{f.rejection_category.replace(/_/g, " ")}</span>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400">{new Date(f.created_at).toLocaleDateString()}</span>
+              </div>
+              {(f.company || f.role_title) && (
+                <p className="text-sm text-gray-700 mt-1">{f.company}{f.role_title ? ` — ${f.role_title}` : ""}</p>
+              )}
+              {f.notes && <p className="text-xs text-gray-500 mt-0.5">{f.notes}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Screening Answers Tab ──────────────────────────────────────────
+const PRESET_QUESTIONS: { key: string; text: string; type: string }[] = [
+  { key: "work_authorization", text: "Are you authorized to work in the US?", type: "select" },
+  { key: "sponsorship", text: "Will you now or in the future require sponsorship?", type: "select" },
+  { key: "salary_expectations", text: "What are your salary expectations?", type: "text" },
+  { key: "years_experience", text: "How many years of relevant experience do you have?", type: "text" },
+  { key: "willing_to_relocate", text: "Are you willing to relocate?", type: "select" },
+  { key: "start_date", text: "When can you start?", type: "text" },
+  { key: "notice_period", text: "What is your notice period?", type: "text" },
+  { key: "highest_education", text: "What is your highest level of education?", type: "text" },
+  { key: "how_did_you_hear", text: "How did you hear about this position?", type: "text" },
+  { key: "gender", text: "Gender (EEO)", type: "select" },
+  { key: "race_ethnicity", text: "Race/Ethnicity (EEO)", type: "select" },
+  { key: "veteran_status", text: "Veteran status (EEO)", type: "select" },
+  { key: "disability_status", text: "Disability status (EEO)", type: "select" },
+];
+
+function ScreeningAnswersTab({
+  seekerId,
+  initialAnswers,
+}: {
+  seekerId: string;
+  initialAnswers: ScreeningAnswer[];
+}) {
+  const [answers, setAnswers] = useState<ScreeningAnswer[]>(initialAnswers);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editText, setEditText] = useState("");
+  const [editType, setEditType] = useState("text");
+  const [saving, setSaving] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [newText, setNewText] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [newType, setNewType] = useState("text");
+
+  const answerMap = new Map(answers.map((a) => [a.question_key, a]));
+
+  async function saveAnswer(questionKey: string, questionText: string, answerValue: string, answerType: string) {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}/screening-answers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question_key: questionKey,
+          question_text: questionText,
+          answer_value: answerValue,
+          answer_type: answerType,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      const { answer } = await res.json();
+      setAnswers((prev) => {
+        const idx = prev.findIndex((a) => a.question_key === questionKey);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = answer;
+          return copy;
+        }
+        return [...prev, answer];
+      });
+      setEditingKey(null);
+    } catch {
+      alert("Failed to save answer");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteAnswer(answerId: string) {
+    if (!confirm("Delete this screening answer?")) return;
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}/screening-answers`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answer_id: answerId }),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      setAnswers((prev) => prev.filter((a) => a.id !== answerId));
+    } catch {
+      alert("Failed to delete answer");
+    }
+  }
+
+  function startEdit(a: ScreeningAnswer) {
+    setEditingKey(a.question_key);
+    setEditValue(a.answer_value);
+    setEditText(a.question_text);
+    setEditType(a.answer_type);
+  }
+
+  // Question keys not yet answered
+  const unusedPresets = PRESET_QUESTIONS.filter((p) => !answerMap.has(p.key));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">Screening Answers</h3>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+        >
+          + Add Answer
+        </button>
+      </div>
+
+      <p className="text-sm text-gray-500">
+        Pre-configured answers the runner uses to fill common screening questions on job applications.
+      </p>
+
+      {/* Add form */}
+      {showAdd && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-gray-900">Add Screening Answer</h4>
+            <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
+          </div>
+
+          {unusedPresets.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Quick-add preset</label>
+              <select
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+                value=""
+                onChange={(e) => {
+                  const p = PRESET_QUESTIONS.find((q) => q.key === e.target.value);
+                  if (p) {
+                    setNewKey(p.key);
+                    setNewText(p.text);
+                    setNewType(p.type);
+                  }
+                }}
+              >
+                <option value="">Select a common question...</option>
+                {unusedPresets.map((p) => (
+                  <option key={p.key} value={p.key}>{p.text}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Question Key</label>
+              <input
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                placeholder="e.g. work_authorization"
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+              <select value={newType} onChange={(e) => setNewType(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+                <option value="text">Text</option>
+                <option value="select">Select</option>
+                <option value="radio">Radio</option>
+                <option value="checkbox">Checkbox</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Question Text</label>
+            <input
+              value={newText}
+              onChange={(e) => setNewText(e.target.value)}
+              placeholder="Full question text"
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Answer Value</label>
+            <input
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              placeholder="The answer to fill in"
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+
+          <button
+            onClick={() => {
+              if (!newKey.trim() || !newValue.trim()) return;
+              saveAnswer(newKey.trim(), newText.trim(), newValue.trim(), newType);
+              setNewKey("");
+              setNewText("");
+              setNewValue("");
+              setNewType("text");
+              setShowAdd(false);
+            }}
+            disabled={saving || !newKey.trim() || !newValue.trim()}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Answer"}
+          </button>
+        </div>
+      )}
+
+      {/* Answers list */}
+      {answers.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 text-sm">
+          No screening answers configured. Add answers so the runner can fill common application fields automatically.
+        </div>
+      ) : (
+        <div className="divide-y border rounded-lg bg-white">
+          {answers.map((a) => (
+            <div key={a.id} className="px-4 py-3">
+              {editingKey === a.question_key ? (
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-gray-700">{a.question_key}</div>
+                  <input
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    placeholder="Question text"
+                    className="w-full px-3 py-1.5 border rounded text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      placeholder="Answer value"
+                      className="flex-1 px-3 py-1.5 border rounded text-sm"
+                    />
+                    <select value={editType} onChange={(e) => setEditType(e.target.value)} className="px-2 py-1.5 border rounded text-sm">
+                      <option value="text">Text</option>
+                      <option value="select">Select</option>
+                      <option value="radio">Radio</option>
+                      <option value="checkbox">Checkbox</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveAnswer(a.question_key, editText, editValue, editType)}
+                      disabled={saving}
+                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {saving ? "Saving..." : "Save"}
+                    </button>
+                    <button onClick={() => setEditingKey(null)} className="px-3 py-1 text-gray-500 text-xs hover:text-gray-700">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{a.question_key}</span>
+                      <span className="text-xs text-gray-400">{a.answer_type}</span>
+                    </div>
+                    {a.question_text && (
+                      <p className="text-sm text-gray-500 mt-0.5">{a.question_text}</p>
+                    )}
+                    <p className="text-sm font-medium text-gray-900 mt-1">{a.answer_value}</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => startEdit(a)} className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                      Edit
+                    </button>
+                    <button onClick={() => deleteAnswer(a.id)} className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Debug Screenshots Tab ──────────────────────────────────────────
+function DebugScreenshotsTab({
+  screenshots,
+  runs,
+}: {
+  screenshots: FailureScreenshot[];
+  runs: RunItem[];
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const runMap = new Map(runs.map((r) => [r.id, r]));
+
+  const reasonColors: Record<string, string> = {
+    captcha: "bg-yellow-100 text-yellow-800",
+    required_fields: "bg-orange-100 text-orange-800",
+    timeout: "bg-red-100 text-red-800",
+    error: "bg-red-100 text-red-800",
+    navigation: "bg-purple-100 text-purple-800",
+  };
+
+  function getReasonBadgeClass(reason: string) {
+    const lower = reason.toLowerCase();
+    for (const [key, cls] of Object.entries(reasonColors)) {
+      if (lower.includes(key)) return cls;
+    }
+    return "bg-gray-100 text-gray-800";
+  }
+
+  if (screenshots.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-400">
+        <p className="text-lg mb-1">No failure screenshots</p>
+        <p className="text-sm">Screenshots are captured when the runner encounters errors during applications.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">Failure Screenshots</h3>
+        <span className="text-sm text-gray-500">{screenshots.length} screenshot{screenshots.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="space-y-3">
+        {screenshots.map((s) => {
+          const run = runMap.get(s.run_id);
+          const isExpanded = expandedId === s.id;
+
+          return (
+            <div key={s.id} className="border rounded-lg bg-white overflow-hidden">
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : s.id)}
+                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getReasonBadgeClass(s.reason)}`}>
+                    {s.reason || "unknown"}
+                  </span>
+                  <span className="text-sm text-gray-700 truncate">
+                    {s.step && <span className="font-medium">Step: {s.step}</span>}
+                    {run?.job_posts && (
+                      <span className="text-gray-500 ml-2">
+                        — {run.job_posts.company}: {run.job_posts.title}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-gray-400">
+                    {new Date(s.created_at).toLocaleDateString()}{" "}
+                    {new Date(s.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className="text-gray-400 text-xs">{isExpanded ? "▲" : "▼"}</span>
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="border-t px-4 py-4 space-y-3">
+                  {/* Run context */}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                    <div>
+                      <span className="text-gray-500">Run ID:</span>{" "}
+                      <span className="font-mono text-xs text-gray-700">{s.run_id.slice(0, 8)}...</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Status:</span>{" "}
+                      <span className="text-gray-700">{run?.status || "—"}</span>
+                    </div>
+                    {s.url && (
+                      <div className="col-span-2">
+                        <span className="text-gray-500">URL:</span>{" "}
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 text-xs break-all">
+                          {s.url}
+                        </a>
+                      </div>
+                    )}
+                    {run?.last_error && (
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Error:</span>{" "}
+                        <span className="text-red-600 text-xs">{run.last_error}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Screenshot image */}
+                  <div className="bg-gray-100 rounded-lg p-2">
+                    <img
+                      src={`/api/apply/screenshot/view?path=${encodeURIComponent(s.screenshot_path)}`}
+                      alt={`Failure screenshot: ${s.reason}`}
+                      className="w-full rounded border border-gray-200"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                        (e.target as HTMLImageElement).insertAdjacentHTML(
+                          "afterend",
+                          '<p class="text-sm text-gray-400 py-4 text-center">Screenshot not available</p>'
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { resolveJobTargetUrl } from "@/lib/job-url";
 
-type AtsType = "LINKEDIN" | "GREENHOUSE" | "WORKDAY" | "GENERIC";
+type AtsType = "LINKEDIN" | "GREENHOUSE" | "WORKDAY" | "LEVER" | "SMARTRECRUITERS" | "GENERIC";
 
 const STEP_SETS: Record<AtsType, string[]> = {
   LINKEDIN: [
@@ -25,6 +25,22 @@ const STEP_SETS: Record<AtsType, string[]> = {
     "FILL_FORM",
     "UPLOAD_RESUME",
     "REVIEW",
+    "SUBMIT",
+    "CONFIRMATION",
+  ],
+  LEVER: [
+    "OPEN_JOB",
+    "TRY_APPLY_ENTRY",
+    "FILL_FORM",
+    "UPLOAD_RESUME",
+    "SUBMIT",
+    "CONFIRMATION",
+  ],
+  SMARTRECRUITERS: [
+    "OPEN_JOB",
+    "TRY_APPLY_ENTRY",
+    "FILL_FORM",
+    "UPLOAD_RESUME",
     "SUBMIT",
     "CONFIRMATION",
   ],
@@ -60,11 +76,17 @@ export function detectAtsType(source?: string | null, url?: string | null): AtsT
     return "LINKEDIN";
   }
 
+  if (combined.includes("lever.co")) {
+    return "LEVER";
+  }
+
+  if (combined.includes("smartrecruiters")) {
+    return "SMARTRECRUITERS";
+  }
+
   if (
-    combined.includes("lever.co") ||
     combined.includes("ashby") ||
     combined.includes("jobvite") ||
-    combined.includes("smartrecruiters") ||
     combined.includes("icims") ||
     combined.includes("workable") ||
     combined.includes("recruitee") ||

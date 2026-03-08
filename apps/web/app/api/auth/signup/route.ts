@@ -20,6 +20,7 @@ type SignUpPayload = {
   name?: string;
   userType?: UserType;
   inviteToken?: string;
+  referralCode?: string;
 };
 
 function isLeadIntakeMissingError(error: unknown) {
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, password, name, userType = "am", inviteToken } = payload;
+  const { email, password, name, userType = "am", inviteToken, referralCode } = payload;
 
   if (!email || !password) {
     return Response.json(
@@ -152,6 +153,20 @@ export async function POST(request: Request) {
       if (!isLeadIntakeMissingError(err)) {
         console.error("Lead intake sync on signup failed:", err);
       }
+    }
+  }
+
+  // Process referral (job_seeker signups only, non-fatal)
+  if (result.user?.userType === "job_seeker" && referralCode) {
+    try {
+      const { getReferrerByCode, createReferral } = await import("@/lib/referrals");
+      const referrerId = await getReferrerByCode(referralCode);
+      const newSeekerId = result.user.id;
+      if (referrerId && referrerId !== newSeekerId) {
+        await createReferral(referrerId, newSeekerId);
+      }
+    } catch (err) {
+      console.error("Referral processing error (non-fatal):", err);
     }
   }
 

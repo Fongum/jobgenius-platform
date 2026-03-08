@@ -8,6 +8,7 @@ import {
   type JobPost,
 } from "@/lib/matching";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
+import { logActivity } from "@/lib/feedback-loop";
 
 type MatchPayload = {
   job_seeker_id?: string;
@@ -363,6 +364,13 @@ export async function POST(request: Request) {
         errors.push(`Auto-queue insert failed: ${queueError.message}`);
       } else {
         autoQueuedCount = toQueue.length;
+        // Log auto-queued jobs to activity feed (non-blocking)
+        logActivity(seeker.id, {
+          eventType: "jobs_auto_queued",
+          title: `${toQueue.length} job${toQueue.length > 1 ? "s" : ""} auto-queued`,
+          description: `Matched above ${threshold}% threshold and queued for application`,
+          meta: { count: toQueue.length, threshold },
+        }).catch(() => {});
       }
     }
   }

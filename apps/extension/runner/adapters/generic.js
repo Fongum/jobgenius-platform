@@ -76,8 +76,11 @@
     async fillKnownFields(ctx) {
       const fillSummary = dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
       if (ctx.resumeUrl) {
-        const upload = await dom.uploadResume(ctx.resumeUrl);
-        if (!upload.ok) {
+        let upload = await dom.uploadResume(ctx.resumeUrl);
+        if (!upload.ok && dom.uploadViaDragDrop) {
+          upload = await dom.uploadViaDragDrop(ctx.resumeUrl);
+        }
+        if (!upload.ok && upload.reason !== "NO_INPUT_OR_URL" && upload.reason !== "NO_UPLOAD_ELEMENT") {
           return { ok: false, reason: "RESUME_UPLOAD_FAILED" };
         }
       }

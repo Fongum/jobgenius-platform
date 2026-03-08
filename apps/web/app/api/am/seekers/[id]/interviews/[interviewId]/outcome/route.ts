@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { hasJobSeekerAccess } from "@/lib/am-access";
+import { logActivity, recordFeedback } from "@/lib/feedback-loop";
 
 interface RouteParams {
   params: { id: string; interviewId: string };
@@ -101,6 +102,45 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         status: "placed",
       })
       .eq("id", seekerId);
+
+    // Mark any pending referral as placed (non-fatal)
+    try {
+      const { markReferralPlaced } = await import("@/lib/referrals");
+      await markReferralPlaced(seekerId);
+    } catch (err) {
+      console.error("markReferralPlaced error (non-fatal):", err);
+    }
+  }
+
+  // Log to activity feed (non-blocking)
+  const outcomeLabels: Record<string, string> = {
+    offer_extended: "Offer extended",
+    hired: "Hired!",
+    rejected: "Interview rejected",
+    ghosted: "Ghosted after interview",
+    declined: "Candidate declined",
+  };
+
+  logActivity(seekerId, {
+    eventType: outcome === "hired" ? "seeker_placed" : "interview_outcome",
+    title: outcomeLabels[outcome] ?? `Interview outcome: ${outcome}`,
+    description: outcome_notes || undefined,
+    meta: { interview_id: interviewId, outcome, offer_amount },
+    refType: "interviews",
+    refId: interviewId,
+  }).catch(() => {});
+
+  // Auto-record rejection feedback for learning
+  if (outcome === "rejected" || outcome === "ghosted") {
+    recordFeedback({
+      jobSeekerId: seekerId,
+      interviewId,
+      feedbackType: outcome === "rejected" ? "interview_rejected" : "ghosted",
+      rejectionReason: rejection_reason || undefined,
+      rejectionCategory: rejection_reason ? undefined : "no_response",
+      source: "am_recorded",
+      createdBy: amId,
+    }).catch(() => {});
   }
 
   return NextResponse.json({ interview: updated });

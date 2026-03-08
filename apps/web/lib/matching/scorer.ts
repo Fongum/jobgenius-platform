@@ -16,6 +16,8 @@ import type {
   ScoringWeights,
   DEFAULT_WEIGHTS,
 } from "./types";
+import { hierarchicalSkillMatch } from "./skill-hierarchy";
+import { computeResumeBonus } from "./resume-extractor";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -308,75 +310,56 @@ function scoreSkills(
   // Also check description for skills if structured data is missing
   const descriptionLower = (job.description_text ?? "").toLowerCase();
 
-  const matchedRequired: string[] = [];
-  const matchedPreferred: string[] = [];
-  const missingRequired: string[] = [];
+  // Use hierarchical matching for structured skills
+  if (jobRequired.length > 0 || jobPreferred.length > 0) {
+    const hierarchy = hierarchicalSkillMatch(seekerSkills, jobRequired, jobPreferred);
 
-  // Check required skills
-  for (const skill of jobRequired) {
-    const found = seekerSkills.some((s) => fuzzyMatch(s, skill) || fuzzyMatch(skill, s));
-    if (found) {
-      matchedRequired.push(skill);
-    } else {
-      missingRequired.push(skill);
-    }
-  }
-
-  // Check preferred skills
-  for (const skill of jobPreferred) {
-    const found = seekerSkills.some((s) => fuzzyMatch(s, skill) || fuzzyMatch(skill, s));
-    if (found) {
-      matchedPreferred.push(skill);
-    }
-  }
-
-  // Fallback: check seeker skills against description
-  if (jobRequired.length === 0 && jobPreferred.length === 0) {
-    for (const skill of seekerSkills) {
-      if (fuzzyMatch(skill, descriptionLower)) {
-        matchedRequired.push(skill);
-      }
-    }
-  }
-
-  // Calculate score
-  let score = 0;
-  const totalJobSkills = jobRequired.length + jobPreferred.length;
-
-  if (totalJobSkills > 0) {
-    // Required skills worth 80% of skills score, preferred worth 20%
     const requiredWeight = 0.8;
     const preferredWeight = 0.2;
 
-    const requiredScore =
-      jobRequired.length > 0
-        ? (matchedRequired.length / jobRequired.length) * maxScore * requiredWeight
-        : maxScore * requiredWeight;
+    const requiredScore = jobRequired.length > 0
+      ? hierarchy.requiredCoverage * maxScore * requiredWeight
+      : maxScore * requiredWeight;
 
-    const preferredScore =
-      jobPreferred.length > 0
-        ? (matchedPreferred.length / jobPreferred.length) * maxScore * preferredWeight
-        : 0;
+    const preferredScore = jobPreferred.length > 0
+      ? hierarchy.preferredCoverage * maxScore * preferredWeight
+      : 0;
 
-    score = Math.round(requiredScore + preferredScore);
-  } else if (matchedRequired.length > 0) {
-    // Fallback scoring when no structured skills
-    score = Math.min(maxScore, matchedRequired.length * 7);
+    const score = Math.round(requiredScore + preferredScore);
+    const coveragePct = Math.round(hierarchy.requiredCoverage * 100);
+
+    return {
+      score: Math.min(maxScore, score),
+      max: maxScore,
+      details: {
+        matched_required: hierarchy.matchedRequired.map((m) => m.required),
+        matched_preferred: hierarchy.matchedPreferred.map((m) => m.preferred),
+        missing_required: hierarchy.missingRequired,
+        coverage_pct: coveragePct,
+      },
+    };
   }
 
-  const coveragePct =
-    jobRequired.length > 0
-      ? Math.round((matchedRequired.length / jobRequired.length) * 100)
-      : 100;
+  // Fallback: check seeker skills against description (no structured data)
+  const matchedFromDesc: string[] = [];
+  for (const skill of seekerSkills) {
+    if (fuzzyMatch(skill, descriptionLower)) {
+      matchedFromDesc.push(skill);
+    }
+  }
+
+  const score = matchedFromDesc.length > 0
+    ? Math.min(maxScore, matchedFromDesc.length * 7)
+    : 0;
 
   return {
     score: Math.min(maxScore, score),
     max: maxScore,
     details: {
-      matched_required: matchedRequired,
-      matched_preferred: matchedPreferred,
-      missing_required: missingRequired,
-      coverage_pct: coveragePct,
+      matched_required: matchedFromDesc,
+      matched_preferred: [],
+      missing_required: [],
+      coverage_pct: 100,
     },
   };
 }
@@ -793,7 +776,7 @@ function determineConfidence(
   let totalPossible = 0;
 
   // Seeker data
-  totalPossible += 7;
+  totalPossible += 8;
   if (seeker.skills.length > 0) dataPoints++;
   if (seeker.target_titles.length > 0) dataPoints++;
   if (seeker.location) dataPoints++;
@@ -801,6 +784,7 @@ function determineConfidence(
   if (seeker.years_experience !== null) dataPoints++;
   if (seeker.work_type) dataPoints++;
   if (seeker.seniority) dataPoints++;
+  if (seeker.resume_text && seeker.resume_text.length > 200) dataPoints++;
 
   // Job data
   totalPossible += 7;
@@ -860,6 +844,15 @@ export function computeMatchScore(
   const penaltiesResult = scorePenalties(seeker, job, weights.max_penalty);
   const titleAlignment = analyzeTitleAlignment(seeker.target_titles, job.title);
 
+  // Resume text bonus — extract additional signals not captured by structured fields
+  const resumeResult = computeResumeBonus(
+    seeker.resume_text,
+    seeker.skills,
+    job.required_skills,
+    job.preferred_skills,
+    job.description_text
+  );
+
   // Calculate total score
   let rawScore =
     skillsResult.score +
@@ -868,7 +861,8 @@ export function computeMatchScore(
     salaryResult.score +
     locationResult.score +
     companyFitResult.score +
-    penaltiesResult.score; // penalties are negative
+    resumeResult.bonus +      // resume text bonus (0-8 pts)
+    penaltiesResult.score;    // penalties are negative
 
   const hasStructuredSkills =
     job.required_skills.length > 0 || job.preferred_skills.length > 0;

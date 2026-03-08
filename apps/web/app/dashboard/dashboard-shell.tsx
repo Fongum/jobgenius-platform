@@ -83,8 +83,12 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/assignments", label: "Assignments", icon: "link" },
     { href: "/dashboard/admin/broadcast", label: "Broadcast", icon: "megaphone" },
     { href: "/dashboard/admin/analytics", label: "Analytics", icon: "analytics" },
+    { href: "/dashboard/admin/application-analytics", label: "App Analytics", icon: "analytics" },
+    { href: "/dashboard/admin/adapter-health", label: "Adapter Health", icon: "analytics" },
+    { href: "/dashboard/admin/career-pages", label: "Career Pages", icon: "globe" },
     { href: "/dashboard/admin/voice", label: "Voice Automation", icon: "phone" },
     { href: "/dashboard/admin/reports", label: "Report Settings", icon: "document" },
+    { href: "/dashboard/admin/referrals", label: "Referrals", icon: "gift" },
     { href: "/dashboard/billing", label: "Billing", icon: "credit-card" },
   ],
 };
@@ -268,6 +272,12 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
       return (
         <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      );
+    case "gift":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
         </svg>
       );
     default:

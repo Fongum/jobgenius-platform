@@ -68,6 +68,8 @@ const RUNNER_SCRIPT_FILES = [
   "runner/adapters/linkedin_easy_apply.js",
   "runner/adapters/greenhouse.js",
   "runner/adapters/workday.js",
+  "runner/adapters/lever.js",
+  "runner/adapters/smartrecruiters.js",
   "runner/adapters/generic.js",
   "runner/engine.js",
   "runner/index.js",
@@ -812,11 +814,57 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(RUNNER_ALARM, { periodInMinutes: 1 });
 });
 
+const SESSION_EXPIRY_ALARM = "jobgenius-session-check";
+const SESSION_EXPIRY_WARN_HOURS = 24;
+
+chrome.alarms.create(SESSION_EXPIRY_ALARM, { periodInMinutes: 60 });
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RUNNER_ALARM) {
     pollRunner();
   }
+  if (alarm.name === SESSION_EXPIRY_ALARM) {
+    checkSessionExpiry();
+  }
 });
+
+async function checkSessionExpiry() {
+  const criticalCookies = [
+    { url: "https://www.linkedin.com", name: "li_at", label: "LinkedIn" },
+  ];
+
+  for (const { url, name, label } of criticalCookies) {
+    try {
+      const cookie = await chrome.cookies.get({ url, name });
+      if (!cookie) {
+        showSessionWarning(label, "not found — please log in to " + label);
+        continue;
+      }
+      if (typeof cookie.expirationDate === "number") {
+        const hoursUntilExpiry = (cookie.expirationDate - Date.now() / 1000) / 3600;
+        if (hoursUntilExpiry < SESSION_EXPIRY_WARN_HOURS) {
+          showSessionWarning(
+            label,
+            hoursUntilExpiry <= 0
+              ? "session expired — please log in again"
+              : `session expires in ${Math.round(hoursUntilExpiry)} hours — visit ${label} to refresh`
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(`Session expiry check failed for ${label}:`, err);
+    }
+  }
+}
+
+function showSessionWarning(platform, message) {
+  chrome.action.setBadgeText({ text: "!" });
+  chrome.action.setBadgeBackgroundColor({ color: "#EF4444" });
+  // Store warning for popup to display
+  setStorage({
+    sessionWarning: { platform, message, timestamp: Date.now() },
+  });
+}
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== "complete" || !tab?.url) {

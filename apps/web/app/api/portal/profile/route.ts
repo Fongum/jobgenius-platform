@@ -2,6 +2,7 @@ import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { calculateProfileCompletion } from "@/lib/portal/profile-completion";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+import { logActivity } from "@/lib/feedback-loop";
 
 export async function GET(request: Request) {
   const auth = await requireJobSeeker(request);
@@ -192,6 +193,15 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "Failed to update profile." }, { status: 500 });
   }
 
+  // Log to activity feed (non-blocking)
+  const updatedKeys = Object.keys(updates);
+  logActivity(auth.user.id, {
+    eventType: "profile_updated",
+    title: "Profile updated",
+    description: `Updated: ${updatedKeys.join(", ")}`,
+    meta: { fields: updatedKeys },
+  }).catch(() => {});
+
   // Auto-trigger matching if matching-relevant fields were updated
   const MATCHING_FIELDS = [
     "skills", "target_titles", "salary_min", "salary_max", "work_type",
@@ -199,7 +209,6 @@ export async function PATCH(request: Request) {
     "open_to_relocation", "preferred_industries", "preferred_company_sizes",
     "years_experience", "work_type_preferences", "requires_visa_sponsorship",
   ];
-  const updatedKeys = Object.keys(updates);
   const hasMatchingFields = updatedKeys.some((k) => MATCHING_FIELDS.includes(k));
   if (hasMatchingFields) {
     triggerMatchingForSeeker(auth.user.id);

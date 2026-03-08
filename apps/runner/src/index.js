@@ -1,15 +1,18 @@
 import fs from "fs";
 import path from "path";
 import { chromium } from "playwright";
-import { fetchNextGlobal, fetchPlan, generatePlan, pauseRun, retryRun } from "./api.js";
+import { fetchNextGlobal, fetchPlan, generatePlan, pauseRun, retryRun, postJson } from "./api.js";
 import { runPlan } from "./engine.js";
 import { linkedinAdapter } from "./adapters/linkedin_easy_apply.js";
 import { greenhouseAdapter } from "./adapters/greenhouse.js";
 import { workdayAdapter } from "./adapters/workday.js";
 import { genericAdapter } from "./adapters/generic.js";
+import { leverAdapter } from "./adapters/lever.js";
+import { smartRecruitersAdapter } from "./adapters/smartrecruiters.js";
 import { start as startDiscoveryAgent } from "./discovery/agent.js";
 import { logLine } from "./logger.js";
 import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
+import { getJson } from "./api.js";
 
 const API_BASE_URL = process.env.JOBGENIUS_API_BASE_URL;
 const RUNNER_ID = (() => {
@@ -72,7 +75,7 @@ if (!STATE_KEY && process.env.NODE_ENV === "production") {
   });
 }
 
-const adapters = [linkedinAdapter, greenhouseAdapter, workdayAdapter, genericAdapter];
+const adapters = [linkedinAdapter, greenhouseAdapter, workdayAdapter, leverAdapter, smartRecruitersAdapter, genericAdapter];
 const activeRuns = new Set();
 const jobSeekerHistory = new Map();
 const jobSeekerAuthFailures = new Map();
@@ -147,6 +150,50 @@ async function fetchStorageState(storageStateUrl) {
     });
     return null;
   }
+}
+
+async function fetchScreeningAnswers(jobSeekerId) {
+  if (!jobSeekerId) return [];
+  try {
+    const result = await getJson(
+      `${API_BASE_URL}/api/apply/screening-answers?jobSeekerId=${encodeURIComponent(jobSeekerId)}`,
+      {
+        Authorization: `Bearer ${RUNNER_AUTH_TOKEN}`,
+        "x-runner": "cloud",
+        "x-runner-id": RUNNER_ID,
+      }
+    );
+    return result?.answers ?? [];
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      step: "SCREENING_ANSWERS",
+      msg: `Failed to fetch screening answers: ${error?.message ?? "unknown"}`,
+    });
+    return [];
+  }
+}
+
+async function checkSessionHealth(jobSeekerId, atsType, storageState) {
+  if (!storageState || atsType !== "LINKEDIN") return true;
+  // Check that LinkedIn cookies haven't expired
+  const now = Date.now() / 1000;
+  const cookies = storageState.cookies ?? [];
+  const linkedinCookies = cookies.filter((c) =>
+    (c.domain ?? "").includes("linkedin.com")
+  );
+  if (linkedinCookies.length === 0) return false;
+  // Check if any critical cookies (li_at) have expired
+  const liAt = linkedinCookies.find((c) => c.name === "li_at");
+  if (liAt?.expires && liAt.expires > 0 && liAt.expires < now) {
+    logLine({
+      level: "WARN",
+      step: "SESSION_HEALTH",
+      msg: `LinkedIn session expired for ${jobSeekerId} (li_at expired ${Math.round(now - liAt.expires)}s ago).`,
+    });
+    return false;
+  }
+  return true;
 }
 
 function getAdapter(atsType) {
@@ -336,6 +383,7 @@ function summarizeErrorMessage(error, fallback = "Runner error.") {
 async function executeRun(run) {
   activeRuns.add(run.run_id);
   metrics.claimed += 1;
+  const runStartedAt = Date.now();
   logLine({
     level: "INFO",
     runId: run.run_id,
@@ -471,6 +519,33 @@ async function executeRun(run) {
     const remoteState = await fetchStorageState(run.storage_state_url);
     const localState = readState(run.job_seeker_id);
     const storageState = remoteState ?? localState;
+
+    // Session health check (proactive, before launching browser)
+    const sessionHealthy = await checkSessionHealth(
+      run.job_seeker_id,
+      run.ats_type,
+      storageState
+    );
+    if (!sessionHealthy) {
+      clearState(run.job_seeker_id);
+      recordPause("REAUTH_REQUIRED");
+      await pauseRun(
+        API_BASE_URL,
+        {
+          run_id: run.run_id,
+          reason: "REAUTH_REQUIRED",
+          message: "Session health check failed. Please re-authenticate.",
+          step: "OPEN_URL",
+        },
+        RUNNER_AUTH_TOKEN,
+        run.claim_token,
+        RUNNER_ID
+      );
+      return;
+    }
+
+    // Fetch screening answers for the job seeker
+    const screeningAnswers = await fetchScreeningAnswers(run.job_seeker_id);
 
     const resumeUrl = run.resume?.url ?? null;
     resumePath = await downloadResume(resumeUrl, run.job_seeker_id);
@@ -610,6 +685,8 @@ async function executeRun(run) {
       onProgress,
       resumePath,
       profile: run.profile ?? null,
+      screeningAnswers,
+      job: run.job ?? null,
     });
 
     if (reauthOverride) {
@@ -730,6 +807,28 @@ async function executeRun(run) {
       );
     }
     runProgress.delete(run.run_id);
+
+    // Report run duration to adapter health tracking
+    const runDurationMs = Date.now() - runStartedAt;
+    try {
+      await postJson(
+        `${API_BASE_URL}/api/apply/event`,
+        {
+          run_id: run.run_id,
+          event_type: "RUN_DURATION",
+          payload: {
+            duration_ms: runDurationMs,
+            ats_type: run.ats_type,
+          },
+        },
+        RUNNER_AUTH_TOKEN,
+        null,
+        RUNNER_ID
+      );
+    } catch {
+      // Non-blocking: duration reporting should not affect run cleanup
+    }
+
     activeRuns.delete(run.run_id);
     if (resumePath && fs.existsSync(resumePath)) {
       try {

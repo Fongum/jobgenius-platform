@@ -160,6 +160,26 @@ export default async function SeekerDetailPage({ params }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(50);
 
+  // Load screening answers
+  const { data: screeningAnswers } = await supabaseAdmin
+    .from("job_seeker_screening_answers")
+    .select("id, question_key, question_text, answer_value, answer_type, created_at, updated_at")
+    .eq("job_seeker_id", id)
+    .order("question_key");
+
+  // Load failure screenshots (most recent 50)
+  const runIds = (runs || []).map((r) => r.id);
+  let failureScreenshots: { id: string; run_id: string; step: string; reason: string; url: string; screenshot_path: string; created_at: string }[] = [];
+  if (runIds.length > 0) {
+    const { data: screenshots } = await supabaseAdmin
+      .from("apply_run_screenshots")
+      .select("id, run_id, step, reason, url, screenshot_path, created_at")
+      .in("run_id", runIds)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    failureScreenshots = (screenshots || []) as typeof failureScreenshots;
+  }
+
   const [
     contractsRes,
     registrationPaymentsRes,
@@ -242,6 +262,8 @@ export default async function SeekerDetailPage({ params }: PageProps) {
       gmailConnection={gmailConnection ? { email: gmailConnection.gmail_email, connectedAt: gmailConnection.created_at } : null}
       inboundEmails={(inboundEmails || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["inboundEmails"]}
       auditLogs={(auditLogs || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["auditLogs"]}
+      screeningAnswers={(screeningAnswers || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["screeningAnswers"]}
+      failureScreenshots={failureScreenshots as unknown as Parameters<typeof SeekerDetailClient>[0]["failureScreenshots"]}
       financial={{
         contracts: (contractsRes.data || []) as unknown as FinancialProp["contracts"],
         registrationPayments: (registrationPaymentsRes.data || []) as unknown as FinancialProp["registrationPayments"],

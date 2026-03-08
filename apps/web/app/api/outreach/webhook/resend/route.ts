@@ -1,6 +1,7 @@
 import { recordRecruiterOptOut } from "@/lib/outreach-consent";
 import { scoreReplySentiment, sentimentLabel } from "@/lib/outreach-intelligence";
 import { canTransitionOutreachState, type OutreachMessageState } from "@/lib/outreach-state";
+import { classifyReply, generateDraftReply } from "@/lib/outreach-reply-classifier";
 import { supabaseServer } from "@/lib/supabase/server";
 
 function resolveMessageId(payload: Record<string, unknown>) {
@@ -187,6 +188,37 @@ export async function POST(request: Request) {
       },
       { onConflict: "recruiter_thread_id" }
     );
+
+    // Classify reply and generate AI draft response
+    const replyClassification = classifyReply(message.subject ?? "", replyText ?? "");
+    const { data: seeker } = await supabaseServer
+      .from("job_seekers")
+      .select("full_name")
+      .eq("id", thread.job_seeker_id)
+      .single();
+
+    const { data: recruiter } = await supabaseServer
+      .from("recruiters")
+      .select("name, company")
+      .eq("id", thread.recruiter_id)
+      .single();
+
+    const aiDraft = generateDraftReply({
+      classification: replyClassification,
+      seekerName: seeker?.full_name ?? "the candidate",
+      company: recruiter?.company ?? "",
+      recruiterName: recruiter?.name ?? "there",
+    });
+
+    // Update the inbound message with classification and draft
+    await supabaseServer
+      .from("outreach_messages")
+      .update({
+        reply_classification: replyClassification,
+        ai_draft_reply: aiDraft,
+        ai_draft_status: aiDraft ? "generated" : "none",
+      })
+      .eq("id", message.id);
 
     if (replySentimentScore <= -20) {
       await supabaseServer.from("attention_items").insert({

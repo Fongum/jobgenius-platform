@@ -367,6 +367,8 @@
       sidebarReportClick(submitResult?.clickedLabel || "Continue");
 
       await dom.sleep(1300);
+      if (dom.waitForDomStable) await dom.waitForDomStable();
+      dom.dismissOverlays?.();
       const afterFingerprint =
         dom.captureFlowFingerprint?.() ?? window.location.href;
       const progressed = beforeFingerprint !== afterFingerprint;
@@ -418,6 +420,11 @@
     setSidebarStatus("Running");
     ctx.currentStep = "INIT";
     ctx.buttonHints = Array.isArray(ctx.buttonHints) ? ctx.buttonHints : [];
+
+    // Dismiss overlays and wait for DOM to stabilize before starting
+    dom.dismissOverlays?.();
+    if (dom.waitForDomStable) await dom.waitForDomStable();
+
     await logEvent(ctx, {
       run_id: ctx.runId,
       event_type: "RUNNER_STARTED",

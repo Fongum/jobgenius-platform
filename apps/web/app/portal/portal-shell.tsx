@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/portal/conversations", label: "Questions & Tasks", icon: "chat" },
   { href: "/portal/references", label: "References", icon: "users" },
   { href: "/portal/applications", label: "Applications", icon: "briefcase" },
+  { href: "/portal/tracker", label: "Live Tracker", icon: "bolt" },
   { href: "/portal/inbox", label: "Inbox", icon: "inbox" },
   { href: "/portal/contacts", label: "Contacts", icon: "contacts" },
   { href: "/portal/availability", label: "Availability", icon: "clock" },
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/portal/learning", label: "Learning", icon: "academic" },
   { href: "/portal/performance", label: "Performance", icon: "trophy" },
   { href: "/portal/progress", label: "Progress", icon: "star" },
+  { href: "/portal/referrals", label: "Referrals", icon: "gift" },
 ];
 
 function NavIcon({ icon, className }: { icon: string; className?: string }) {
@@ -109,6 +111,18 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
+        </svg>
+      );
+    case "gift":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+        </svg>
+      );
+    case "bolt":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       );
     default:
