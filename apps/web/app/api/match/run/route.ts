@@ -370,7 +370,7 @@ export async function POST(request: Request) {
           title: `${toQueue.length} job${toQueue.length > 1 ? "s" : ""} auto-queued`,
           description: `Matched above ${threshold}% threshold and queued for application`,
           meta: { count: toQueue.length, threshold },
-        }).catch(() => {});
+        }).catch((err) => console.error("[match:run] activity log failed:", err));
       }
     }
   }

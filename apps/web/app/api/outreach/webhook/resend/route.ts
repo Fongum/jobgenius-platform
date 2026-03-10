@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
   const { data: message, error: messageError } = await supabaseServer
     .from("outreach_messages")
-    .select("id, recruiter_thread_id, status, to_email")
+    .select("id, recruiter_thread_id, status, to_email, subject")
     .eq("provider_message_id", messageId)
     .maybeSingle();
 

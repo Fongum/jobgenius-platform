@@ -95,7 +95,7 @@ export async function runJobRefresh(triggeredBy: string): Promise<RefreshSummary
           .eq('source', source)
           .eq('is_stale', false)
           .not('external_id', 'in', `(${sourceExternalIds.map((id) => `"${id}"`).join(',')})`)
-          .select('id', { count: 'exact', head: true });
+          .select('id');
       }
     }
 

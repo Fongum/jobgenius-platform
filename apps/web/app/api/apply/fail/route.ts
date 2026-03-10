@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     step: payload.step ?? run.current_step ?? undefined,
     errorCode: payload.error_code ?? reason,
     urlHost: urlHost ?? undefined,
-  }).catch(() => {});
+  }).catch((err) => console.error("[apply:fail] adapter health event failed:", err));
 
   // Log to seeker activity feed (non-blocking)
   logActivity(run.job_seeker_id, {
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
     meta: { run_id: run.id, ats_type: run.ats_type, error_code: payload.error_code, step: payload.step },
     refType: "application_runs",
     refId: run.id,
-  }).catch(() => {});
+  }).catch((err) => console.error("[apply:fail] activity log failed:", err));
 
   return Response.json({ success: true, run_id: run.id, status: "FAILED" });
 }

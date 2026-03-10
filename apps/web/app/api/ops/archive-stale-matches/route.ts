@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   // Check which have active queue items
-  const jobPostIds = [...new Set(staleMatches.map((m) => m.job_post_id))];
+  const jobPostIds = Array.from(new Set(staleMatches.map((m) => m.job_post_id)));
   const { data: activeQueued } = await supabaseAdmin
     .from("application_queue")
     .select("job_post_id")

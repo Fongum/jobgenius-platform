@@ -113,7 +113,7 @@ export async function POST(request: Request) {
           job_seeker_id: queueItem.job_seeker_id,
           job_post_id: queueItem.job_post_id,
           application_queue_id: queueItem.id,
-        }).catch(() => {});
+        }).catch((err) => console.error("[queue:status] activity log failed:", err));
       }
 
       if (payload.status === "REJECTED") {
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
           job_seeker_id: queueItem.job_seeker_id,
           job_post_id: queueItem.job_post_id,
           application_queue_id: queueItem.id,
-        }).catch(() => {});
+        }).catch((err) => console.error("[queue:status] activity log failed:", err));
       }
 
       if (payload.status === "HIRED") {
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
           job_seeker_id: queueItem.job_seeker_id,
           job_post_id: queueItem.job_post_id,
           application_queue_id: queueItem.id,
-        }).catch(() => {});
+        }).catch((err) => console.error("[queue:status] activity log failed:", err));
       }
     }
   }

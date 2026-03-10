@@ -1,0 +1,15 @@
+export { default as HeroSection } from "./HeroSection";
+export { default as CompaniesStrip } from "./CompaniesStrip";
+export { default as PainPointSection } from "./PainPointSection";
+export { default as HowItWorksSection } from "./HowItWorksSection";
+export { default as WhatWeDoSection } from "./WhatWeDoSection";
+export { default as StatsSection } from "./StatsSection";
+export { default as AiHumanSection } from "./AiHumanSection";
+export { default as InterviewPrepSection } from "./InterviewPrepSection";
+export { default as ReferralSection } from "./ReferralSection";
+export { default as NetworkSection } from "./NetworkSection";
+export { default as PricingSection } from "./PricingSection";
+export { default as TestimonialsSection } from "./TestimonialsSection";
+export { default as FaqSection } from "./FaqSection";
+export { default as FinalCtaSection } from "./FinalCtaSection";
+export { default as Footer } from "./Footer";

@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
  * Returns real-time status of all applications with step details.
  */
 export async function GET(request: Request) {
-  const auth = await requireJobSeeker(request.headers);
+  const auth = await requireJobSeeker(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 });
   }

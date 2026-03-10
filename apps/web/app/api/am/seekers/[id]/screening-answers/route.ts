@@ -6,7 +6,7 @@ interface RouteContext {
   params: { id: string };
 }
 
-async function verifyAccess(userId: string, role: string, seekerId: string) {
+async function verifyAccess(userId: string, role: string | undefined, seekerId: string) {
   if (isAdminRole(role)) return true;
 
   const { data: assignment } = await supabaseAdmin

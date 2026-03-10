@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     meta: { interview_id: interview.id, job_post_id: body.job_post_id, type: body.interview_type },
     refType: "interviews",
     refId: interview.id,
-  }).catch(() => {});
+  }).catch((err) => console.error("[interviews] activity log failed:", err));
 
   // Insert slot offers if slot_ids provided
   if (hasSlots && body.slot_ids) {

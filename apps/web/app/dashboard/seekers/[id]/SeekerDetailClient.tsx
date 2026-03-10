@@ -3765,7 +3765,7 @@ function ActivityFeedTab({ seekerId }: { seekerId: string }) {
     profile_updated: { color: "bg-gray-400", label: "Profile" },
   };
 
-  const eventTypes = [...new Set(events.map((e) => e.event_type))];
+  const eventTypes = Array.from(new Set(events.map((e) => e.event_type)));
 
   return (
     <div className="space-y-4">

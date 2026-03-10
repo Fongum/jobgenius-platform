@@ -128,7 +128,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     meta: { interview_id: interviewId, outcome, offer_amount },
     refType: "interviews",
     refId: interviewId,
-  }).catch(() => {});
+  }).catch((err) => console.error("[interview:outcome] activity log failed:", err));
 
   // Auto-record rejection feedback for learning
   if (outcome === "rejected" || outcome === "ghosted") {
@@ -140,7 +140,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       rejectionCategory: rejection_reason ? undefined : "no_response",
       source: "am_recorded",
       createdBy: amId,
-    }).catch(() => {});
+    }).catch((err) => console.error("[interview:outcome] feedback recording failed:", err));
   }
 
   return NextResponse.json({ interview: updated });

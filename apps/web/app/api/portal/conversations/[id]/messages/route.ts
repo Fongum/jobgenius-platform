@@ -316,7 +316,7 @@ export async function PATCH(
           });
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error("[conversations:messages] notification failed:", err));
   }
 
   return Response.json({

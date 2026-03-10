@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     meta: { queue_id: data?.id, job_post_id: payload.job_post_id, category: payload.category ?? "manual" },
     refType: "application_queue",
     refId: data?.id,
-  }).catch(() => {});
+  }).catch((err) => console.error("[queue:enqueue] activity log failed:", err));
 
   if (data?.id) {
     try {

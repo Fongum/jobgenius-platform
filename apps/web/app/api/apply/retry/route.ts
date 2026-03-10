@@ -130,7 +130,7 @@ export async function POST(request: Request) {
   }
 
   // Record retry strategy for learning
-  recordRetryStrategy(run.id, nextAttempt, retryResult.strategy, retryResult.changes).catch(() => {});
+  recordRetryStrategy(run.id, nextAttempt, retryResult.strategy, retryResult.changes).catch((err) => console.error("[apply:retry] retry strategy recording failed:", err));
 
   await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
@@ -167,7 +167,7 @@ export async function POST(request: Request) {
     meta: { run_id: run.id, attempt: nextAttempt, strategy: retryResult.strategy },
     refType: "application_runs",
     refId: run.id,
-  }).catch(() => {});
+  }).catch((err) => console.error("[apply:retry] activity log failed:", err));
 
   return Response.json({
     success: true,

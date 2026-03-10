@@ -200,7 +200,7 @@ export async function PATCH(request: Request) {
     title: "Profile updated",
     description: `Updated: ${updatedKeys.join(", ")}`,
     meta: { fields: updatedKeys },
-  }).catch(() => {});
+  }).catch((err) => console.error("[portal:profile] activity log failed:", err));
 
   // Auto-trigger matching if matching-relevant fields were updated
   const MATCHING_FIELDS = [

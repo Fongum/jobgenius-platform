@@ -288,9 +288,7 @@ export async function POST(request: Request) {
         job_seeker_id: jobSeeker.id,
         job_post_id: jobPost.id,
         application_queue_id: run.queue_id ?? undefined,
-      }).catch(() => {
-        // Non-blocking: email failure should not break the application flow
-      });
+      }).catch((err) => console.error("[apply:complete] completion email failed:", err));
     }
   }
 
@@ -300,7 +298,7 @@ export async function POST(request: Request) {
     runId: run.id,
     outcome: "success",
     step: run.current_step ?? undefined,
-  }).catch(() => {});
+  }).catch((err) => console.error("[apply:complete] adapter health event failed:", err));
 
   // Log to seeker activity feed (non-blocking)
   logActivity(run.job_seeker_id, {
@@ -312,7 +310,7 @@ export async function POST(request: Request) {
     meta: { run_id: run.id, ats_type: run.ats_type, job_post_id: run.job_post_id },
     refType: "application_runs",
     refId: run.id,
-  }).catch(() => {});
+  }).catch((err) => console.error("[apply:complete] activity log failed:", err));
 
   return Response.json({
     success: true,

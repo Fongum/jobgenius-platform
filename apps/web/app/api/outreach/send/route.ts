@@ -406,7 +406,7 @@ export async function POST(request: Request) {
       meta: { message_id: messageId, recruiter_id: recruiter.id, thread_id: thread.id },
       refType: "outreach_messages",
       refId: messageId,
-    }).catch(() => {});
+    }).catch((err) => console.error("[outreach:send] activity log failed:", err));
   }
 
   const noReplyHours = Number(process.env.OUTREACH_NO_REPLY_HOURS ?? 72);
