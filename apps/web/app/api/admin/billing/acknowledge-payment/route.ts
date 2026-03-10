@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
+import { logAdminAction } from "@/lib/audit";
 
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -109,6 +110,15 @@ export async function POST(request: Request) {
       template_key: "billing-payment-acknowledged",
     });
   }
+
+  logAdminAction({
+    adminId: auth.user.id,
+    adminEmail: auth.user.email,
+    action: "billing.acknowledge_payment",
+    targetType: "payment_screenshot",
+    targetId: screenshotId,
+    details: { job_seeker_id: screenshot.job_seeker_id, installment_id: screenshot.installment_id },
+  }).catch((e) => console.error("Audit log failed", e));
 
   return NextResponse.json({ ok: true });
 }

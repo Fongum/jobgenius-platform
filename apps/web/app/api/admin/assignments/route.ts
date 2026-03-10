@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
+import { logAdminAction } from "@/lib/audit";
 
 /**
  * POST /api/admin/assignments
@@ -88,6 +89,15 @@ export async function POST(request: Request) {
       );
     }
 
+    logAdminAction({
+      adminId: auth.user.id,
+      adminEmail: auth.user.email,
+      action: "assignment.create",
+      targetType: "job_seeker",
+      targetId: job_seeker_id,
+      details: { account_manager_id },
+    }).catch((e) => console.error("Audit log failed", e));
+
     return NextResponse.json(assignment);
   } catch (error) {
     console.error("Error creating assignment:", error);
@@ -130,6 +140,14 @@ export async function DELETE(request: Request) {
         { status: 500 }
       );
     }
+
+    logAdminAction({
+      adminId: auth.user.id,
+      adminEmail: auth.user.email,
+      action: "assignment.delete",
+      targetType: "job_seeker",
+      targetId: job_seeker_id,
+    }).catch((e) => console.error("Audit log failed", e));
 
     return NextResponse.json({ success: true });
   } catch (error) {

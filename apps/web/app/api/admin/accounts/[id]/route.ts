@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
+import { logAdminAction } from "@/lib/audit";
 
 /**
  * PATCH /api/admin/accounts/[id]
@@ -96,6 +97,15 @@ export async function PATCH(
         { status: 404 }
       );
     }
+
+    logAdminAction({
+      adminId: auth.user.id,
+      adminEmail: auth.user.email,
+      action: "account.update",
+      targetType: "account_manager",
+      targetId: id,
+      details: { updates },
+    }).catch((e) => console.error("Audit log failed", e));
 
     return NextResponse.json({
       id: am.id,

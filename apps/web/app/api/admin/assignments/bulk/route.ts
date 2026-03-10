@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
+import { logAdminAction } from "@/lib/audit";
 
 /**
  * POST /api/admin/assignments/bulk
@@ -82,6 +83,14 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+
+    logAdminAction({
+      adminId: auth.user.id,
+      adminEmail: auth.user.email,
+      action: "assignment.bulk",
+      targetType: "job_seeker",
+      details: { account_manager_id, seeker_count: uniqueIds.length },
+    }).catch((e) => console.error("Audit log failed", e));
 
     return NextResponse.json({
       count: data?.length || 0,

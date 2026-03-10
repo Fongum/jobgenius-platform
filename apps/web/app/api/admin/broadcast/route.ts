@@ -3,6 +3,7 @@ import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { normalizeAMRole } from "@/lib/auth/roles";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { broadcastAnnouncementEmail } from "@/lib/email-templates/broadcast-announcement";
+import { logAdminAction } from "@/lib/audit";
 
 type TargetAudience = "all_job_seekers" | "all_account_managers" | "all_users";
 
@@ -166,6 +167,15 @@ export async function POST(req: NextRequest) {
       sent_at: new Date().toISOString(),
     })
     .eq("id", announcementId);
+
+  logAdminAction({
+    adminId: auth.user.id,
+    adminEmail: auth.user.email,
+    action: "broadcast.send",
+    targetType: "system_announcement",
+    targetId: announcementId,
+    details: { subject, target_audience: targetAudience, recipient_count: recipientCount, send_email: sendEmail },
+  }).catch((e) => console.error("Audit log failed", e));
 
   return NextResponse.json(
     {
