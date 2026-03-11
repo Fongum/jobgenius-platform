@@ -83,7 +83,7 @@ export default function QuizTab({ prepId }: { prepId: string }) {
     fetch(`/api/portal/interview-prep/${prepId}/quiz`)
       .then((res) => res.json())
       .then((data) => setQuizzes(data.quizzes ?? []))
-      .catch(() => {})
+      .catch((err) => console.error("[interview-prep] fetch quizzes failed:", err))
       .finally(() => setLoading(false));
   }
 

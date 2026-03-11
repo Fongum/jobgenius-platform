@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { signUp, signIn } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import type { UserType } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const REFRESH_TOKEN_COOKIE = "jg_refresh_token";
@@ -55,6 +56,27 @@ export async function POST(request: Request) {
   }
 
   const { email, password, name, userType = "am", inviteToken, referralCode } = payload;
+
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "unknown";
+
+  const signupRateLimit = await enforceRateLimit({
+    request,
+    scope: "auth_signup",
+    identifier: normalizedEmail,
+    limit: 5,
+    windowSeconds: 60,
+    blockSeconds: 120,
+  });
+
+  if (!signupRateLimit.allowed) {
+    return Response.json(
+      { success: false, error: "Too many signup attempts. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(1, signupRateLimit.retryAfterSeconds)) },
+      }
+    );
+  }
 
   if (!email || !password) {
     return Response.json(

@@ -4,7 +4,7 @@ import {
   getNextStep,
 } from "@/lib/apply";
 import { resolveJobTargetUrl } from "@/lib/job-url";
-import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
 import { randomUUID } from "crypto";
@@ -281,27 +281,13 @@ export async function GET(request: Request) {
     );
   }
 
-  const amResult = await getAccountManagerFromRequest(request.headers);
-  if ("error" in amResult) {
-    return Response.json({ success: false, error: amResult.error }, { status: 401 });
-  }
-
-  const hasAccess = await hasJobSeekerAccess(
-    amResult.accountManager.id,
-    jobSeekerId
-  );
-
-  if (!hasAccess) {
-    return Response.json(
-      { success: false, error: "Not authorized for this job seeker." },
-      { status: 403 }
-    );
-  }
+  const access = await requireAMAccessToSeeker(request.headers, jobSeekerId);
+  if (!access.ok) return access.response;
 
   const { data: assignments, error: assignmentsError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("job_seeker_id")
-    .eq("account_manager_id", amResult.accountManager.id);
+    .eq("account_manager_id", access.amId);
 
   if (assignmentsError) {
     return Response.json(
@@ -375,7 +361,7 @@ export async function GET(request: Request) {
   const nowIso = new Date().toISOString();
   const claimToken = randomUUID();
   const actor = getActorFromHeaders(request.headers);
-  const lockedBy = `${actor}:${amResult.accountManager.email}`;
+  const lockedBy = `${actor}:${access.amEmail}`;
 
   const { data: lockedRun, error: lockError } = await supabaseServer
     .from("application_runs")

@@ -61,7 +61,7 @@ export default function LessonViewer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "in_progress" }),
         }
-      ).catch(() => {});
+      ).catch((err) => console.error("[learning] update lesson progress failed:", err));
     }
     startTimeRef.current = Date.now();
   }, [lesson.id, trackId, isCompleted, lesson.progress?.status]);
@@ -72,7 +72,7 @@ export default function LessonViewer({
       fetch(`/api/portal/learning/${trackId}/lessons/${lesson.id}/notes`)
         .then((res) => res.json())
         .then((data) => setNotes(data.notes ?? []))
-        .catch(() => {});
+        .catch((err) => console.error("[learning] fetch notes failed:", err));
     }
   }, [showNotes, trackId, lesson.id]);
 

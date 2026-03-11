@@ -125,7 +125,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
-  const body = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { slot_id, interview_type = "video_call", notes_for_candidate, job_post_id } = body;
 
   if (!slot_id) {

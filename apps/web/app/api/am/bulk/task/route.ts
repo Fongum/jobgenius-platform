@@ -11,7 +11,12 @@ export async function POST(req: NextRequest) {
   }
 
   const amId = auth.user.id;
-  const body = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { seeker_ids, subject, content, due_date } = body;
 
   if (!Array.isArray(seeker_ids) || seeker_ids.length === 0) {

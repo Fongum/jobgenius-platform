@@ -117,7 +117,7 @@ export default function InterviewPrepDetail({
       .then((data) => {
         if (data?.progress) setProgress(data.progress);
       })
-      .catch(() => {});
+      .catch((err) => console.error("[interview-prep] fetch progress failed:", err));
   }, []);
 
   async function startNewPractice(sessionType: "qa" | "audio_simulation" = "qa") {

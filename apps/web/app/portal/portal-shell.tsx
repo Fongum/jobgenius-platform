@@ -226,7 +226,7 @@ export default function PortalShell({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ announcement_id: id }),
-    }).catch(() => {});
+    }).catch((err) => console.error("[portal] mark announcement read failed:", err));
   }
 
   return (

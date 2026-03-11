@@ -1,6 +1,6 @@
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { getActorFromHeaders } from "@/lib/actor";
-import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type StartPayload = {
@@ -42,22 +42,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const amResult = await getAccountManagerFromRequest(request.headers);
-  if ("error" in amResult) {
-    return Response.json({ success: false, error: amResult.error }, { status: 401 });
-  }
-
-  const hasAccess = await hasJobSeekerAccess(
-    amResult.accountManager.id,
-    queueItem.job_seeker_id
-  );
-
-  if (!hasAccess) {
-    return Response.json(
-      { success: false, error: "Not authorized for this job seeker." },
-      { status: 403 }
-    );
-  }
+  const access = await requireAMAccessToSeeker(request.headers, queueItem.job_seeker_id);
+  if (!access.ok) return access.response;
 
   const { data: existingRun, error: existingError } = await supabaseServer
     .from("application_runs")
@@ -76,7 +62,7 @@ export async function POST(request: Request) {
   const { data: assignments, error: assignmentsError } = await supabaseServer
     .from("job_seeker_assignments")
     .select("job_seeker_id")
-    .eq("account_manager_id", amResult.accountManager.id);
+    .eq("account_manager_id", access.amId);
 
   if (assignmentsError) {
     return Response.json(

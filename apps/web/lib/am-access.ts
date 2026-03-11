@@ -108,6 +108,52 @@ export async function hasJobSeekerAccess(
 }
 
 /**
+ * Convenience function that combines getAccountManagerFromRequest + hasJobSeekerAccess.
+ *
+ * Returns either `{ ok: true, amId, amEmail }` or `{ ok: false, response }` with a
+ * pre-built `Response.json` that the caller can return immediately.
+ */
+export async function requireAMAccessToSeeker(
+  headers: Headers,
+  jobSeekerId: string
+): Promise<
+  | { ok: true; amId: string; amEmail: string }
+  | { ok: false; response: Response }
+> {
+  const amResult = await getAccountManagerFromRequest(headers);
+  if ("error" in amResult) {
+    return {
+      ok: false,
+      response: Response.json(
+        { success: false, error: amResult.error },
+        { status: 401 }
+      ),
+    };
+  }
+
+  const allowed = await hasJobSeekerAccess(
+    amResult.accountManager.id,
+    jobSeekerId
+  );
+
+  if (!allowed) {
+    return {
+      ok: false,
+      response: Response.json(
+        { success: false, error: "Not authorized for this job seeker." },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    amId: amResult.accountManager.id,
+    amEmail: amResult.accountManager.email,
+  };
+}
+
+/**
  * Get all job seekers assigned to an account manager
  */
 export async function getAssignedJobSeekers(accountManagerId: string) {

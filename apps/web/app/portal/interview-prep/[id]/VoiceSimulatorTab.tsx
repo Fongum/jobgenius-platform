@@ -125,7 +125,7 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
       .then((data) => {
         if (data?.sessions) setSessions(data.sessions);
       })
-      .catch(() => {});
+      .catch((err) => console.error("[voice-sim] fetch sessions failed:", err));
   }, [loaded, prepId]);
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
           });
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error("[voice-sim] fetch job context failed:", err));
   }, [prepId]);
 
   useEffect(() => {

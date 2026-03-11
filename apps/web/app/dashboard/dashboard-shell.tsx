@@ -361,7 +361,7 @@ export default function DashboardShell({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ announcement_id: id }),
-    }).catch(() => {});
+    }).catch((err) => console.error("[am-dashboard] mark announcement read failed:", err));
   }
 
   const handleLogout = async () => {

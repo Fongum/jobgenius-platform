@@ -22,7 +22,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const { job_post_id } = body;
     const job_seeker_id = body.job_seeker_id || session.active_job_seeker_id;
 

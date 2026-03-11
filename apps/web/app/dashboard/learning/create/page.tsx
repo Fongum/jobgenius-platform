@@ -36,7 +36,7 @@ export default function CreateLearningTrackPage() {
       .then((data) => {
         if (data.seekers) setSeekers(data.seekers);
       })
-      .catch(() => {})
+      .catch((err) => console.error("[learning] fetch seekers failed:", err))
       .finally(() => setLoading(false));
   }, []);
 

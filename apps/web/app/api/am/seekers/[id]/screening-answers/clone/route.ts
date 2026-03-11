@@ -17,7 +17,13 @@ export async function POST(request: Request, { params }: RouteContext) {
   }
 
   const targetSeekerId = params.id;
-  const { source_seeker_id } = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const { source_seeker_id } = body;
 
   if (!source_seeker_id) {
     return NextResponse.json({ error: "source_seeker_id is required" }, { status: 400 });

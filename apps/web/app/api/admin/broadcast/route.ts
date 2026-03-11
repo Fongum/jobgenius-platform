@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
           template_key: "broadcast_announcement",
           job_seeker_id: seeker.id,
           meta: { announcement_id: announcementId, target_audience: targetAudience },
-        }).catch(() => null)
+        }).catch((err) => { console.error("[broadcast] send seeker email failed:", err); return null; })
       );
     }
 
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
           text: tpl.text,
           template_key: "broadcast_announcement",
           meta: { announcement_id: announcementId, target_audience: targetAudience, am_id: am.id },
-        }).catch(() => null)
+        }).catch((err) => { console.error("[broadcast] send AM email failed:", err); return null; })
       );
     }
 

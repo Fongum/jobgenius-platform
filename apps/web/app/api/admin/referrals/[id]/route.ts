@@ -14,7 +14,12 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 
   const { id } = params;
-  const body = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { reward_amount, mark_paid, reward_notes } = body;
 
   // Verify referral exists

@@ -1,4 +1,5 @@
 import { initiatePasswordReset, updatePassword } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type ResetRequestPayload = {
   email: string;
@@ -28,6 +29,27 @@ export async function POST(request: Request) {
 
   const { email } = payload;
 
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "unknown";
+
+  const resetRateLimit = await enforceRateLimit({
+    request,
+    scope: "auth_reset_password",
+    identifier: normalizedEmail,
+    limit: 5,
+    windowSeconds: 60,
+    blockSeconds: 120,
+  });
+
+  if (!resetRateLimit.allowed) {
+    return Response.json(
+      { success: false, error: "Too many reset attempts. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(1, resetRateLimit.retryAfterSeconds)) },
+      }
+    );
+  }
+
   if (!email) {
     return Response.json(
       { success: false, error: "Email is required." },
@@ -52,6 +74,25 @@ export async function POST(request: Request) {
  * The accessToken is provided after the user clicks the reset link.
  */
 export async function PUT(request: Request) {
+  const updateRateLimit = await enforceRateLimit({
+    request,
+    scope: "auth_update_password",
+    identifier: "global",
+    limit: 5,
+    windowSeconds: 60,
+    blockSeconds: 120,
+  });
+
+  if (!updateRateLimit.allowed) {
+    return Response.json(
+      { success: false, error: "Too many password update attempts. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(1, updateRateLimit.retryAfterSeconds)) },
+      }
+    );
+  }
+
   let payload: UpdatePasswordPayload;
 
   try {

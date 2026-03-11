@@ -54,7 +54,7 @@ export default function ProgressClient() {
     fetch("/api/portal/progress")
       .then((res) => res.json())
       .then((d) => setData(d))
-      .catch(() => {})
+      .catch((err) => console.error("[progress] fetch progress failed:", err))
       .finally(() => setLoading(false));
   }, []);
 

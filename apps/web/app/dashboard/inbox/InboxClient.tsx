@@ -100,7 +100,7 @@ export default function InboxClient({
             return added.length > 0 ? [...prev, ...added] : prev;
           });
         })
-        .catch(() => {});
+        .catch((err) => console.error("[inbox] poll messages failed:", err));
     }, 15000);
     return () => clearInterval(interval);
   }, [selectedId, selected]);

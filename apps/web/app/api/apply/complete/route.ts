@@ -2,7 +2,7 @@ import { buildContactSuggestions, buildDraftEmail } from "@/lib/outreach";
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
 import { fetchCompanyInfo } from "@/lib/company-info";
 import { getActorFromHeaders } from "@/lib/actor";
-import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { supabaseServer } from "@/lib/supabase/server";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -56,22 +56,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const amResult = await getAccountManagerFromRequest(request.headers);
-  if ("error" in amResult) {
-    return Response.json({ success: false, error: amResult.error }, { status: 401 });
-  }
-
-  const hasAccess = await hasJobSeekerAccess(
-    amResult.accountManager.id,
-    run.job_seeker_id
-  );
-
-  if (!hasAccess) {
-    return Response.json(
-      { success: false, error: "Not authorized for this job seeker." },
-      { status: 403 }
-    );
-  }
+  const access = await requireAMAccessToSeeker(request.headers, run.job_seeker_id);
+  if (!access.ok) return access.response;
 
   if (requiresClaimToken(request.headers)) {
     if (!payload.claim_token) {

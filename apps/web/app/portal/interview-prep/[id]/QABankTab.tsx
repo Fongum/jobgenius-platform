@@ -41,7 +41,7 @@ export default function QABankTab({ prepId }: { prepId: string }) {
     fetch(`/api/portal/interview-prep/${prepId}/qa-cards`)
       .then((res) => res.json())
       .then((data) => setCards(data.cards ?? []))
-      .catch(() => {})
+      .catch((err) => console.error("[interview-prep] fetch QA cards failed:", err))
       .finally(() => setLoading(false));
   }, [prepId]);
 

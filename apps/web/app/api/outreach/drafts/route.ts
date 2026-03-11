@@ -1,5 +1,5 @@
 import { buildContactSuggestions, buildDraftEmail } from "@/lib/outreach";
-import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
+import { getAccountManagerFromRequest, requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type DraftPayload = {
@@ -79,22 +79,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const amResult = await getAccountManagerFromRequest(request.headers);
-  if ("error" in amResult) {
-    return Response.json({ success: false, error: amResult.error }, { status: 401 });
-  }
-
-  const hasAccess = await hasJobSeekerAccess(
-    amResult.accountManager.id,
-    payload.job_seeker_id
-  );
-
-  if (!hasAccess) {
-    return Response.json(
-      { success: false, error: "Not authorized for this job seeker." },
-      { status: 403 }
-    );
-  }
+  const access = await requireAMAccessToSeeker(request.headers, payload.job_seeker_id);
+  if (!access.ok) return access.response;
 
   const { data: jobPost, error: jobError } = await supabaseServer
     .from("job_posts")
