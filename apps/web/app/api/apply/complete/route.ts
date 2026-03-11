@@ -97,28 +97,40 @@ export async function POST(request: Request) {
   }
 
   if (run.queue_id) {
-    await supabaseServer
+    const { error: queueError } = await supabaseServer
       .from("application_queue")
       .update({ status: "APPLIED", category: "applied", updated_at: nowIso })
       .eq("id", run.queue_id);
+
+    if (queueError) {
+      console.error("[apply:complete] failed to update queue status:", queueError);
+    }
   }
 
-  await supabaseServer.from("application_step_events").insert({
+  const { error: stepError } = await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
     event_type: "APPLIED",
     message: payload.note ?? "Marked applied.",
   });
 
+  if (stepError) {
+    console.error("[apply:complete] failed to insert step event:", stepError);
+  }
+
   const actor = getActorFromHeaders(request.headers);
 
-  await supabaseServer.from("apply_run_events").insert({
+  const { error: runEventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: "INFO",
     event_type: "APPLIED",
     actor,
     payload: { note: payload.note ?? null },
   });
+
+  if (runEventError) {
+    console.error("[apply:complete] failed to insert run event:", runEventError);
+  }
 
   const { data: jobPost } = await supabaseServer
     .from("job_posts")
@@ -138,11 +150,15 @@ export async function POST(request: Request) {
       const info = await fetchCompanyInfo(jobPost.company_website);
       scrapedEmails = info.emails;
       if (info.emails.length > 0 || info.pagesVisited.length > 0) {
-        await supabaseServer.from("company_info").insert({
+        const { error: companyInfoError } = await supabaseServer.from("company_info").insert({
           company_website: jobPost.company_website,
           emails: info.emails,
           pages_visited: info.pagesVisited,
         });
+
+        if (companyInfoError) {
+          console.error("[apply:complete] failed to insert company_info:", companyInfoError);
+        }
       }
     }
 
@@ -206,13 +222,17 @@ export async function POST(request: Request) {
     });
 
     if (draftRows.length > 0) {
-      await supabaseServer
+      const { error: draftUpsertError } = await supabaseServer
         .from("outreach_drafts")
         .upsert(draftRows, { onConflict: "job_seeker_id,job_post_id,contact_id" });
+
+      if (draftUpsertError) {
+        console.error("[apply:complete] failed to upsert outreach drafts:", draftUpsertError);
+      }
     }
 
     if (draftRows.length > 0) {
-      await supabaseServer.from("apply_outbox").insert(
+      const { error: outboxError } = await supabaseServer.from("apply_outbox").insert(
         draftRows.map((draft) => ({
           job_seeker_id: draft.job_seeker_id,
           job_post_id: draft.job_post_id,
@@ -225,6 +245,10 @@ export async function POST(request: Request) {
           updated_at: nowIsoInner,
         }))
       );
+
+      if (outboxError) {
+        console.error("[apply:complete] failed to insert apply_outbox entries:", outboxError);
+      }
     }
 
     if (draftRows.length > 0) {
@@ -247,7 +271,7 @@ export async function POST(request: Request) {
       workType: jobSeeker.work_type,
     });
 
-    await supabaseServer.from("interview_prep").upsert(
+    const { error: prepError } = await supabaseServer.from("interview_prep").upsert(
       {
         job_seeker_id: jobSeeker.id,
         job_post_id: jobPost.id,
@@ -256,6 +280,10 @@ export async function POST(request: Request) {
       },
       { onConflict: "job_seeker_id,job_post_id" }
     );
+
+    if (prepError) {
+      console.error("[apply:complete] failed to upsert interview_prep:", prepError);
+    }
 
     // Send application acknowledgement email to the job seeker
     if (jobSeeker.email) {

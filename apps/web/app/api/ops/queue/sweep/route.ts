@@ -132,7 +132,7 @@ async function runSweep(request: Request) {
 
   async function flagQueueAttention(queueId: string, reason: string, message: string) {
     const nowIso = new Date().toISOString();
-    await supabaseServer
+    const { error: queueFlagError } = await supabaseServer
       .from("application_queue")
       .update({
         status: "NEEDS_ATTENTION",
@@ -142,11 +142,19 @@ async function runSweep(request: Request) {
       })
       .eq("id", queueId);
 
-    await supabaseServer.from("attention_items").insert({
+    if (queueFlagError) {
+      console.error("[queue:sweep] failed to flag queue item:", queueFlagError);
+    }
+
+    const { error: attentionInsertError } = await supabaseServer.from("attention_items").insert({
       queue_id: queueId,
       status: "OPEN",
       reason,
     });
+
+    if (attentionInsertError) {
+      console.error("[queue:sweep] failed to insert attention item:", attentionInsertError);
+    }
   }
 
   let enqueued = 0;

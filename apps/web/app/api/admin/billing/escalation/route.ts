@@ -55,10 +55,14 @@ export async function POST(request: Request) {
 
   // If terminated, deactivate seeker account
   if (decision === "terminated") {
-    await supabaseAdmin
+    const { error: terminateError } = await supabaseAdmin
       .from("job_seekers")
       .update({ status: "terminated" })
       .eq("id", escalation.job_seeker_id);
+
+    if (terminateError) {
+      return NextResponse.json({ error: "Failed to terminate seeker account." }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ ok: true, decision });

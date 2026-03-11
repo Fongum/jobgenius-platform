@@ -128,10 +128,17 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { data: accountManagers, error } = await supabaseAdmin
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25", 10) || 25));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data: accountManagers, error, count } = await supabaseAdmin
       .from("account_managers")
-      .select("id, email, name, role, created_at, last_login_at")
-      .order("name", { ascending: true });
+      .select("id, email, name, role, created_at, last_login_at", { count: "exact" })
+      .order("name", { ascending: true })
+      .range(from, to);
 
     if (error) {
       return NextResponse.json(
@@ -140,7 +147,15 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(accountManagers || []);
+    return NextResponse.json({
+      data: accountManagers ?? [],
+      pagination: {
+        page,
+        pageSize,
+        total: count ?? 0,
+        totalPages: Math.ceil((count ?? 0) / pageSize),
+      },
+    });
   } catch (error) {
     console.error("Error listing accounts:", error);
     return NextResponse.json(

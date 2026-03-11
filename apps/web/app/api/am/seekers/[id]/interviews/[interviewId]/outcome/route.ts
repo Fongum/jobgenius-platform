@@ -97,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
     const jp = (jobPost as unknown as { job_posts?: { company_name?: string; title?: string } })?.job_posts;
 
-    await supabaseAdmin
+    const { error: placementError } = await supabaseAdmin
       .from("job_seekers")
       .update({
         placed_at: new Date().toISOString(),
@@ -107,6 +107,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         status: "placed",
       })
       .eq("id", seekerId);
+
+    if (placementError) {
+      console.error("[interview:outcome] failed to update seeker placement:", placementError);
+    }
 
     // Mark any pending referral as placed (non-fatal)
     try {

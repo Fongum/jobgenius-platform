@@ -22,26 +22,40 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25", 10) || 25));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabaseAdmin
     .from("application_queue")
     .select(`
       id, status, category, created_at, updated_at, last_error,
       job_posts (id, title, company, location, url)
-    `)
+    `, { count: "exact" })
     .eq("job_seeker_id", job_seeker_id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(from, to);
 
   if (status) {
     query = query.eq("status", status);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
 
   if (error) {
     return NextResponse.json({ error: "Failed to load queue." }, { status: 500 });
   }
 
-  return NextResponse.json({ queue: data });
+  return NextResponse.json({
+    queue: data,
+    pagination: {
+      page,
+      pageSize,
+      total: count ?? 0,
+      totalPages: Math.ceil((count ?? 0) / pageSize),
+    },
+  });
 }
 
 // POST: Add a job to the queue

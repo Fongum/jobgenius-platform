@@ -33,19 +33,26 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25", 10) || 25));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabaseServer
     .from("outreach_drafts")
     .select(
-      "id, job_seeker_id, job_post_id, contact_id, subject, body, status, updated_at, created_at, sent_at, last_error, outreach_contacts (role, full_name, email), job_posts (title, company), job_seekers (full_name, email)"
+      "id, job_seeker_id, job_post_id, contact_id, subject, body, status, updated_at, created_at, sent_at, last_error, outreach_contacts (role, full_name, email), job_posts (title, company), job_seekers (full_name, email)",
+      { count: "exact" }
     )
     .in("job_seeker_id", seekerIds)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .range(from, to);
 
   if (status) {
     query = query.eq("status", status);
   }
 
-  const { data: drafts, error: draftsError } = await query;
+  const { data: drafts, error: draftsError, count } = await query;
 
   if (draftsError) {
     return Response.json(
@@ -54,7 +61,16 @@ export async function GET(request: Request) {
     );
   }
 
-  return Response.json({ success: true, drafts: drafts ?? [] });
+  return Response.json({
+    success: true,
+    drafts: drafts ?? [],
+    pagination: {
+      page,
+      pageSize,
+      total: count ?? 0,
+      totalPages: Math.ceil((count ?? 0) / pageSize),
+    },
+  });
 }
 
 export async function POST(request: Request) {

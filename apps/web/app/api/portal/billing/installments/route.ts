@@ -155,10 +155,14 @@ export async function POST(request: Request) {
   }
 
   // Delete old installments and re-insert
-  await supabaseAdmin
+  const { error: deleteInstError } = await supabaseAdmin
     .from("payment_installments")
     .delete()
     .eq("registration_payment_id", regPayment.id);
+
+  if (deleteInstError) {
+    console.error("[portal:billing] failed to delete old installments:", deleteInstError);
+  }
 
   const installmentRows = installments.map((inst, i) => ({
     registration_payment_id: regPayment.id,

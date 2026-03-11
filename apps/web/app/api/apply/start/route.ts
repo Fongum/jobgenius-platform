@@ -148,25 +148,37 @@ export async function POST(request: Request) {
     );
   }
 
-  await supabaseServer
+  const { error: queueUpdateError } = await supabaseServer
     .from("application_queue")
     .update({ status: "READY", category: "in_progress", updated_at: nowIso })
     .eq("id", queueItem.id);
 
-  await supabaseServer.from("application_step_events").insert({
+  if (queueUpdateError) {
+    console.error("[apply:start] failed to update queue status:", queueUpdateError);
+  }
+
+  const { error: stepError } = await supabaseServer.from("application_step_events").insert({
     run_id: createdRun.id,
     step: initialStep,
     event_type: "READY",
     message: "Run ready for execution.",
   });
 
-  await supabaseServer.from("apply_run_events").insert({
+  if (stepError) {
+    console.error("[apply:start] failed to insert step event:", stepError);
+  }
+
+  const { error: runEventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: createdRun.id,
     level: "INFO",
     event_type: "READY",
     actor: getActorFromHeaders(request.headers),
     payload: { step: initialStep },
   });
+
+  if (runEventError) {
+    console.error("[apply:start] failed to insert run event:", runEventError);
+  }
 
   return Response.json({
     success: true,

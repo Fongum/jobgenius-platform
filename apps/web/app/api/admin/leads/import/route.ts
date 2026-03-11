@@ -206,7 +206,7 @@ export async function POST(request: Request) {
       }
     }
 
-    await supabaseAdmin.from("lead_import_rows").insert({
+    const { error: rowInsertError } = await supabaseAdmin.from("lead_import_rows").insert({
       batch_id: batch.id,
       row_number: rowNumber,
       raw_data: raw,
@@ -217,6 +217,10 @@ export async function POST(request: Request) {
       lead_submission_id: leadId,
     });
 
+    if (rowInsertError) {
+      console.error("[leads-import] failed to insert lead_import_row:", rowInsertError);
+    }
+
     details.push({
       row_number: rowNumber,
       status: rowStatus,
@@ -225,7 +229,7 @@ export async function POST(request: Request) {
     });
   }
 
-  await supabaseAdmin
+  const { error: batchUpdateError } = await supabaseAdmin
     .from("lead_import_batches")
     .update({
       status: "completed",
@@ -234,6 +238,10 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", batch.id);
+
+  if (batchUpdateError) {
+    console.error("[leads-import] failed to update batch status:", batchUpdateError);
+  }
 
   return NextResponse.json({
     ok: true,

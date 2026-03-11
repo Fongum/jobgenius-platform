@@ -67,10 +67,17 @@ export async function POST(request: Request) {
     }
 
     // Delete any existing assignment (reassignment scenario)
-    await supabaseAdmin
+    const { error: deleteError } = await supabaseAdmin
       .from("job_seeker_assignments")
       .delete()
       .eq("job_seeker_id", job_seeker_id);
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: "Failed to remove existing assignment." },
+        { status: 500 }
+      );
+    }
 
     // Create new assignment
     const { data: assignment, error } = await supabaseAdmin
@@ -170,7 +177,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { data: assignments, error } = await supabaseAdmin
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25", 10) || 25));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data: assignments, error, count } = await supabaseAdmin
       .from("job_seeker_assignments")
       .select(`
         id,
@@ -179,8 +192,9 @@ export async function GET(request: Request) {
         account_manager_id,
         job_seekers (id, full_name, email, location, seniority),
         account_managers (id, name, email)
-      `)
-      .order("created_at", { ascending: false });
+      `, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       return NextResponse.json(
@@ -189,7 +203,15 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(assignments || []);
+    return NextResponse.json({
+      data: assignments ?? [],
+      pagination: {
+        page,
+        pageSize,
+        total: count ?? 0,
+        totalPages: Math.ceil((count ?? 0) / pageSize),
+      },
+    });
   } catch (error) {
     console.error("Error listing assignments:", error);
     return NextResponse.json(

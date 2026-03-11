@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Update announcement status to 'sent'
-  await supabaseAdmin
+  const { error: statusUpdateError } = await supabaseAdmin
     .from("system_announcements")
     .update({
       status: "sent",
@@ -167,6 +167,10 @@ export async function POST(req: NextRequest) {
       sent_at: new Date().toISOString(),
     })
     .eq("id", announcementId);
+
+  if (statusUpdateError) {
+    console.error("[broadcast] failed to update announcement status to sent:", statusUpdateError);
+  }
 
   logAdminAction({
     adminId: auth.user.id,

@@ -81,18 +81,26 @@ export async function POST(request: Request) {
 
         if (existing) {
           // Link the external job to existing post, update times_seen
-          await supabaseAdmin
+          const { error: linkError } = await supabaseAdmin
             .from("external_jobs")
             .update({ promoted_to_job_post_id: existing.id, promoted_at: new Date().toISOString() })
             .eq("id", ej.id);
 
-          await supabaseAdmin
+          if (linkError) {
+            console.error("[promote-jobs] failed to link external_job to existing post:", linkError);
+          }
+
+          const { error: seenError } = await supabaseAdmin
             .from("job_posts")
             .update({
               last_seen_at: new Date().toISOString(),
               times_seen: (await supabaseAdmin.from("job_posts").select("times_seen").eq("id", existing.id).single()).data?.times_seen + 1 || 2,
             })
             .eq("id", existing.id);
+
+          if (seenError) {
+            console.error("[promote-jobs] failed to update times_seen on job_posts:", seenError);
+          }
 
           skippedDuplicates++;
           continue;
@@ -145,10 +153,14 @@ export async function POST(request: Request) {
       }
 
       // Link external job to the new post
-      await supabaseAdmin
+      const { error: linkNewError } = await supabaseAdmin
         .from("external_jobs")
         .update({ promoted_to_job_post_id: newPost.id, promoted_at: new Date().toISOString() })
         .eq("id", ej.id);
+
+      if (linkNewError) {
+        console.error("[promote-jobs] failed to link external_job to new post:", linkNewError);
+      }
 
       promoted++;
     } catch (err) {

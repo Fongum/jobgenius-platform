@@ -109,13 +109,17 @@ export async function POST(
 
   // Update candidate turn with score/feedback
   if (aiResponse.score !== null) {
-    await supabaseAdmin
+    const { error: scoreError } = await supabaseAdmin
       .from("voice_interview_turns")
       .update({
         score: aiResponse.score,
         feedback: aiResponse.feedback,
       })
       .eq("id", candidateTurn.id);
+
+    if (scoreError) {
+      console.error("[portal:voice-turn] failed to update turn score:", scoreError);
+    }
   }
 
   // Save interviewer response turn
@@ -135,10 +139,14 @@ export async function POST(
   }
 
   // Update session turn count
-  await supabaseAdmin
+  const { error: turnCountError } = await supabaseAdmin
     .from("voice_interview_sessions")
     .update({ total_turns: nextTurnNumber + 2 })
     .eq("id", params.sessionId);
+
+  if (turnCountError) {
+    console.error("[portal:voice-turn] failed to update session turn count:", turnCountError);
+  }
 
   return Response.json({
     candidate_turn: {

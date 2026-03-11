@@ -217,10 +217,14 @@ export async function PATCH(request: Request) {
   const completion = calculateProfileCompletion(data);
 
   if (typeof completion.percentage === "number") {
-    await supabaseAdmin
+    const { error: completionError } = await supabaseAdmin
       .from("job_seekers")
       .update({ profile_completion: completion.percentage })
       .eq("id", auth.user.id);
+
+    if (completionError) {
+      console.error("[portal:profile] failed to update profile_completion:", completionError);
+    }
   }
 
   return Response.json({ profile: data, completion });

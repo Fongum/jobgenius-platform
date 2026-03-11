@@ -14,22 +14,36 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const activeOnly = searchParams.get("active") !== "false";
 
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25", 10) || 25));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabaseAdmin
     .from("company_career_pages")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, to);
 
   if (activeOnly) {
     query = query.eq("is_active", true);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
 
   if (error) {
     return Response.json({ error: "Failed to load career pages." }, { status: 500 });
   }
 
-  return Response.json({ career_pages: data ?? [] });
+  return Response.json({
+    career_pages: data ?? [],
+    pagination: {
+      page,
+      pageSize,
+      total: count ?? 0,
+      totalPages: Math.ceil((count ?? 0) / pageSize),
+    },
+  });
 }
 
 /**

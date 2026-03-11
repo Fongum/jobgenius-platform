@@ -174,10 +174,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   // Mark slot booked
-  await supabaseAdmin
+  const { error: slotError } = await supabaseAdmin
     .from("interview_slots")
     .update({ is_booked: true })
     .eq("id", slot_id);
+
+  if (slotError) {
+    console.error("[am:auto-schedule] failed to mark slot as booked:", slotError);
+  }
 
   return NextResponse.json({ interview }, { status: 201 });
 }

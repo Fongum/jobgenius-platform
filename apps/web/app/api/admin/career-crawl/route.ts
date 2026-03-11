@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       }
 
       // Update career page metadata
-      await supabaseAdmin
+      const { error: pageUpdateError } = await supabaseAdmin
         .from("company_career_pages")
         .update({
           last_checked_at: new Date().toISOString(),
@@ -93,6 +93,10 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", page.id);
+
+      if (pageUpdateError) {
+        console.error("[career-crawl] failed to update career page metadata:", pageUpdateError);
+      }
 
       totalJobs += jobs.length;
       results.push({ company: page.company_name, ats: page.ats_type!, jobs_found: jobs.length });

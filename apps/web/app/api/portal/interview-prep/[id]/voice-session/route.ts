@@ -122,10 +122,14 @@ export async function POST(
   }
 
   // Update total turns
-  await supabaseAdmin
+  const { error: turnsUpdateError } = await supabaseAdmin
     .from("voice_interview_sessions")
     .update({ total_turns: 1 })
     .eq("id", session.id);
+
+  if (turnsUpdateError) {
+    console.error("[portal:voice-session] failed to update total_turns:", turnsUpdateError);
+  }
 
   return Response.json(
     {

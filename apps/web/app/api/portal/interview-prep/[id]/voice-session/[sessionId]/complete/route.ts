@@ -47,10 +47,14 @@ export async function POST(
     return Response.json({ error: "No transcript content to save." }, { status: 400 });
   }
 
-  await supabaseAdmin
+  const { error: deleteError } = await supabaseAdmin
     .from("voice_interview_turns")
     .delete()
     .eq("session_id", params.sessionId);
+
+  if (deleteError) {
+    console.error("[portal:voice-complete] failed to delete old turns:", deleteError);
+  }
 
   const rows: Array<{
     session_id: string;

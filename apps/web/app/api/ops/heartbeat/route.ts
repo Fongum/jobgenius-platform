@@ -29,11 +29,15 @@ export async function POST(request: Request) {
     );
   }
 
-  await supabaseServer.from("runner_heartbeats").insert({
+  const { error: insertError } = await supabaseServer.from("runner_heartbeats").insert({
     runner_id: payload.runner_id,
     ts: new Date().toISOString(),
     meta: payload.meta ?? {},
   });
+
+  if (insertError) {
+    return Response.json({ success: false, error: "Failed to record heartbeat." }, { status: 500 });
+  }
 
   return Response.json({ success: true });
 }

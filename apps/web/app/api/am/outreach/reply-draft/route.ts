@@ -61,10 +61,14 @@ export async function POST(request: Request) {
   }
 
   if (action === "dismiss") {
-    await supabaseAdmin
+    const { error: dismissError } = await supabaseAdmin
       .from("outreach_messages")
       .update({ ai_draft_status: "dismissed" })
       .eq("id", message_id);
+
+    if (dismissError) {
+      console.error("[outreach:reply-draft] failed to dismiss draft:", dismissError);
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -101,10 +105,14 @@ export async function POST(request: Request) {
     }
 
     // Mark draft as sent
-    await supabaseAdmin
+    const { error: markSentError } = await supabaseAdmin
       .from("outreach_messages")
       .update({ ai_draft_status: "sent" })
       .eq("id", message_id);
+
+    if (markSentError) {
+      console.error("[outreach:reply-draft] failed to mark draft as sent:", markSentError);
+    }
 
     return NextResponse.json({ ok: true, sent: true });
   }

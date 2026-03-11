@@ -231,10 +231,14 @@ export async function POST(request: Request) {
   if (updatedSeeker) {
     const completion = calculateProfileCompletion(updatedSeeker as Record<string, unknown>);
     if (typeof completion.percentage === "number") {
-      await supabaseAdmin
+      const { error: completionError } = await supabaseAdmin
         .from("job_seekers")
         .update({ profile_completion: completion.percentage })
         .eq("id", auth.user.id);
+
+      if (completionError) {
+        console.error("[portal:resume] failed to update profile_completion:", completionError);
+      }
     }
   }
 

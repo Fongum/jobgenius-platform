@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   const nowIso = new Date().toISOString();
   const reason = payload.reason ?? payload.error_code ?? "UNKNOWN";
 
-  await supabaseServer.from("application_step_events").insert({
+  const { error: stepError } = await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
     event_type: "NEEDS_ATTENTION",
@@ -80,8 +80,12 @@ export async function POST(request: Request) {
     meta: { reason, ...(payload.meta ?? {}) },
   });
 
+  if (stepError) {
+    console.error("[apply:pause] failed to insert step event:", stepError);
+  }
+
   if (run.queue_id) {
-    await supabaseServer
+    const { error: queueError } = await supabaseServer
       .from("application_queue")
       .update({
         status: "NEEDS_ATTENTION",
@@ -90,6 +94,10 @@ export async function POST(request: Request) {
         updated_at: nowIso,
       })
       .eq("id", run.queue_id);
+
+    if (queueError) {
+      console.error("[apply:pause] failed to update queue status:", queueError);
+    }
   }
 
   const { error } = await supabaseServer
@@ -114,7 +122,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await supabaseServer.from("apply_run_events").insert({
+  const { error: eventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: "WARN",
     event_type: "NEEDS_ATTENTION",
@@ -129,6 +137,10 @@ export async function POST(request: Request) {
     },
   });
 
+  if (eventError) {
+    console.error("[apply:pause] failed to insert run event:", eventError);
+  }
+
   let urlHost: string | null = null;
   if (payload.last_seen_url) {
     try {
@@ -138,7 +150,7 @@ export async function POST(request: Request) {
     }
   }
 
-  await supabaseServer.from("apply_error_signatures").insert({
+  const { error: sigError } = await supabaseServer.from("apply_error_signatures").insert({
     ats_type: run.ats_type ?? null,
     url_host: urlHost,
     step: payload.step ?? run.current_step,
@@ -146,6 +158,10 @@ export async function POST(request: Request) {
     dom_hint: payload.dom_hint ?? null,
     message: payload.message ?? null,
   });
+
+  if (sigError) {
+    console.error("[apply:pause] failed to insert error signature:", sigError);
+  }
 
   return Response.json({ success: true, run_id: run.id, status: "NEEDS_ATTENTION", reason });
 }

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   // Acknowledge the screenshot
-  await supabaseAdmin
+  const { error: ackError } = await supabaseAdmin
     .from("payment_screenshots")
     .update({
       acknowledged_at: now,
@@ -43,12 +43,20 @@ export async function POST(request: Request) {
     })
     .eq("id", screenshotId);
 
+  if (ackError) {
+    return NextResponse.json({ error: "Failed to acknowledge screenshot." }, { status: 500 });
+  }
+
   // Update installment to paid if linked
   if (screenshot.installment_id) {
-    await supabaseAdmin
+    const { error: installmentError } = await supabaseAdmin
       .from("payment_installments")
       .update({ status: "paid", paid_at: now })
       .eq("id", screenshot.installment_id);
+
+    if (installmentError) {
+      console.error("[billing] failed to update installment status:", installmentError);
+    }
 
     // Recalculate amount_paid on registration_payment
     const { data: installments } = await supabaseAdmin
@@ -71,7 +79,7 @@ export async function POST(request: Request) {
       const isComplete = regPay && Math.abs(amountPaid - Number(regPay.total_amount)) < 0.01;
       const isPartial = amountPaid > 0 && !isComplete;
 
-      await supabaseAdmin
+      const { error: regPayError } = await supabaseAdmin
         .from("registration_payments")
         .update({
           amount_paid: amountPaid,
@@ -79,15 +87,23 @@ export async function POST(request: Request) {
           work_started: amountPaid > 0,
         })
         .eq("id", regPaymentId);
+
+      if (regPayError) {
+        console.error("[billing] failed to update registration_payments:", regPayError);
+      }
     }
   }
 
   // Update payment request status if linked
   if (screenshot.payment_request_id) {
-    await supabaseAdmin
+    const { error: reqUpdateError } = await supabaseAdmin
       .from("payment_requests")
       .update({ status: "acknowledged" })
       .eq("id", screenshot.payment_request_id);
+
+    if (reqUpdateError) {
+      console.error("[billing] failed to update payment_requests status:", reqUpdateError);
+    }
   }
 
   // Notify seeker

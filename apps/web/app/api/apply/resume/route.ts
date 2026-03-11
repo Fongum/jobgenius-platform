@@ -66,14 +66,18 @@ export async function POST(request: Request) {
     );
   }
 
-  await supabaseServer.from("application_step_events").insert({
+  const { error: stepError } = await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
     event_type: "RESUMED",
     message: payload.note ?? "Resumed by AM.",
   });
 
-  await supabaseServer.from("apply_run_events").insert({
+  if (stepError) {
+    console.error("[apply:resume] failed to insert step event:", stepError);
+  }
+
+  const { error: runEventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: "INFO",
     event_type: "RESUMED",
@@ -81,16 +85,28 @@ export async function POST(request: Request) {
     payload: { note: payload.note ?? null },
   });
 
+  if (runEventError) {
+    console.error("[apply:resume] failed to insert run event:", runEventError);
+  }
+
   if (run.queue_id) {
-    await supabaseServer
+    const { error: queueError } = await supabaseServer
       .from("application_queue")
       .update({ status: "READY", category: "in_progress", updated_at: nowIso })
       .eq("id", run.queue_id);
 
-    await supabaseServer
+    if (queueError) {
+      console.error("[apply:resume] failed to update queue status:", queueError);
+    }
+
+    const { error: attentionError } = await supabaseServer
       .from("attention_items")
       .update({ status: "RESOLVED", resolved_at: nowIso })
-      .eq("queue_id", run.queue_id);
+      .eq("id", run.queue_id);
+
+    if (attentionError) {
+      console.error("[apply:resume] failed to update attention items:", attentionError);
+    }
   }
 
   return Response.json({

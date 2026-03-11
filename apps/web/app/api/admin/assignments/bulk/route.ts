@@ -61,10 +61,17 @@ export async function POST(request: Request) {
     }
 
     // Delete existing assignments for these job seekers
-    await supabaseAdmin
+    const { error: deleteError } = await supabaseAdmin
       .from("job_seeker_assignments")
       .delete()
       .in("job_seeker_id", uniqueIds);
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: "Failed to remove existing assignments." },
+        { status: 500 }
+      );
+    }
 
     // Create new assignments
     const assignments = uniqueIds.map((job_seeker_id: string) => ({

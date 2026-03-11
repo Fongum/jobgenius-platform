@@ -9,7 +9,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { data: referrals } = await supabaseAdmin
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25", 10) || 25));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data: referrals, count: totalCount } = await supabaseAdmin
     .from("referrals")
     .select(`
       id,
@@ -22,8 +28,9 @@ export async function GET(req: NextRequest) {
       signed_up_at,
       placed_at,
       created_at
-    `)
-    .order("created_at", { ascending: false });
+    `, { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, to);
 
   // Collect all seeker IDs for name lookup
   const allIds = new Set<string>();
@@ -73,5 +80,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     stats: { total, signed_up, placed, rewarded, total_paid, pending_payout },
     referrals: rows,
+    pagination: {
+      page,
+      pageSize,
+      total: totalCount ?? 0,
+      totalPages: Math.ceil((totalCount ?? 0) / pageSize),
+    },
   });
 }

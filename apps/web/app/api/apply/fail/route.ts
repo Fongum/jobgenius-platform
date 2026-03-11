@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   }
 
   if (run.queue_id) {
-    await supabaseServer
+    const { error: queueError } = await supabaseServer
       .from("application_queue")
       .update({
         status: "FAILED",
@@ -81,9 +81,13 @@ export async function POST(request: Request) {
         updated_at: nowIso,
       })
       .eq("id", run.queue_id);
+
+    if (queueError) {
+      console.error("[apply:fail] failed to update queue status:", queueError);
+    }
   }
 
-  await supabaseServer.from("application_step_events").insert({
+  const { error: stepError } = await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
     event_type: "FAILED",
@@ -91,7 +95,11 @@ export async function POST(request: Request) {
     meta: { reason },
   });
 
-  await supabaseServer.from("apply_run_events").insert({
+  if (stepError) {
+    console.error("[apply:fail] failed to insert step event:", stepError);
+  }
+
+  const { error: runEventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: "ERROR",
     event_type: "FAILED",
@@ -105,6 +113,10 @@ export async function POST(request: Request) {
     },
   });
 
+  if (runEventError) {
+    console.error("[apply:fail] failed to insert run event:", runEventError);
+  }
+
   let urlHost: string | null = null;
   if (payload.last_seen_url) {
     try {
@@ -114,7 +126,7 @@ export async function POST(request: Request) {
     }
   }
 
-  await supabaseServer.from("apply_error_signatures").insert({
+  const { error: sigError } = await supabaseServer.from("apply_error_signatures").insert({
     ats_type: run.ats_type,
     url_host: urlHost,
     step: payload.step ?? run.current_step,
@@ -122,6 +134,10 @@ export async function POST(request: Request) {
     dom_hint: payload.dom_hint ?? null,
     message: payload.message ?? null,
   });
+
+  if (sigError) {
+    console.error("[apply:fail] failed to insert error signature:", sigError);
+  }
 
   // Record adapter health event (non-blocking)
   const failOutcome = reason.toLowerCase().includes("captcha") ? "captcha_blocked"

@@ -118,14 +118,18 @@ export async function POST(request: Request) {
   // Record retry strategy for learning
   recordRetryStrategy(run.id, nextAttempt, retryResult.strategy, retryResult.changes).catch((err) => console.error("[apply:retry] retry strategy recording failed:", err));
 
-  await supabaseServer.from("application_step_events").insert({
+  const { error: stepError } = await supabaseServer.from("application_step_events").insert({
     run_id: run.id,
     step: run.current_step,
     event_type: "RETRY",
     message: `${payload.note ?? "Retry requested."} Strategy: ${retryResult.strategy} — ${retryResult.reason}`,
   });
 
-  await supabaseServer.from("apply_run_events").insert({
+  if (stepError) {
+    console.error("[apply:retry] failed to insert step event:", stepError);
+  }
+
+  const { error: runEventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
     level: "INFO",
     event_type: "RETRY",
@@ -138,11 +142,19 @@ export async function POST(request: Request) {
     },
   });
 
+  if (runEventError) {
+    console.error("[apply:retry] failed to insert run event:", runEventError);
+  }
+
   if (run.queue_id) {
-    await supabaseServer
+    const { error: queueError } = await supabaseServer
       .from("application_queue")
       .update({ status: "READY", category: "in_progress", updated_at: nowIso })
       .eq("id", run.queue_id);
+
+    if (queueError) {
+      console.error("[apply:retry] failed to update queue status:", queueError);
+    }
   }
 
   // Log to activity feed (non-blocking)
