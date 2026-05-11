@@ -15,6 +15,18 @@ const COOKIE_OPTIONS = {
   path: "/",
 };
 
+type ResumePrefillPayload = {
+  full_name?: string;
+  phone?: string;
+  location?: string;
+  linkedin_url?: string;
+  bio?: string;
+  skills?: string[];
+  work_history?: unknown[];
+  education?: unknown[];
+  raw_text?: string;
+};
+
 type SignUpPayload = {
   email: string;
   password: string;
@@ -22,6 +34,7 @@ type SignUpPayload = {
   userType?: UserType;
   inviteToken?: string;
   referralCode?: string;
+  resume?: ResumePrefillPayload;
 };
 
 function isLeadIntakeMissingError(error: unknown) {
@@ -55,7 +68,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, password, name, userType = "am", inviteToken, referralCode } = payload;
+  const { email, password, name, userType = "am", inviteToken, referralCode, resume } = payload;
 
   const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "unknown";
 
@@ -135,6 +148,35 @@ export async function POST(request: Request) {
       httpOnly: false,
       maxAge: 60 * 60 * 24 * 7,
     });
+  }
+
+  // Apply parsed-resume prefill to the new job seeker (best-effort, non-fatal)
+  if (result.user?.userType === "job_seeker" && resume) {
+    const updates: Record<string, unknown> = {};
+    if (resume.phone && typeof resume.phone === "string") updates.phone = resume.phone;
+    if (resume.linkedin_url && typeof resume.linkedin_url === "string") {
+      updates.linkedin_url = resume.linkedin_url;
+    }
+    if (Array.isArray(resume.work_history) && resume.work_history.length > 0) {
+      updates.work_history = resume.work_history;
+    }
+    if (Array.isArray(resume.education) && resume.education.length > 0) {
+      updates.education = resume.education;
+    }
+    if (resume.raw_text && typeof resume.raw_text === "string") {
+      updates.resume_text = resume.raw_text.slice(0, 50000);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      const { error: prefillError } = await supabaseAdmin
+        .from("job_seekers")
+        .update(updates)
+        .eq("id", result.user.id);
+
+      if (prefillError) {
+        console.error("Resume prefill on signup failed (non-fatal):", prefillError);
+      }
+    }
   }
 
   if (result.user?.userType === "job_seeker") {

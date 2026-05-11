@@ -627,15 +627,132 @@ function StatBox({
   );
 }
 
+function EditableChips({
+  items,
+  onUpdate,
+  color,
+  placeholder,
+}: {
+  items: string[];
+  onUpdate: (items: string[]) => void;
+  color: "blue" | "green";
+  placeholder: string;
+}) {
+  const [input, setInput] = useState("");
+
+  const colorStyles = {
+    blue: "bg-blue-100 text-blue-800",
+    green: "bg-green-100 text-green-800",
+  };
+
+  const addItem = () => {
+    const value = input.trim();
+    if (value && !items.includes(value)) {
+      onUpdate([...items, value]);
+    }
+    setInput("");
+  };
+
+  const removeItem = (item: string) => {
+    onUpdate(items.filter((i) => i !== item));
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <span
+            key={item}
+            className={`inline-flex items-center gap-1 px-3 py-1 ${colorStyles[color]} text-sm rounded-full`}
+          >
+            {item}
+            <button
+              type="button"
+              onClick={() => removeItem(item)}
+              className="ml-0.5 hover:opacity-70 font-bold text-xs"
+              title={`Remove "${item}"`}
+            >
+              &times;
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addItem();
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <button
+          type="button"
+          onClick={addItem}
+          disabled={!input.trim()}
+          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg disabled:opacity-40"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OverviewTab({
   seeker,
   references,
   documents,
+  onSeekerUpdate,
 }: {
   seeker: SeekerData;
   references: Reference[];
   documents: Document[];
+  onSeekerUpdate?: (fields: Partial<SeekerData>) => void;
 }) {
+  const [targetTitles, setTargetTitles] = useState<string[]>(seeker.target_titles ?? []);
+  const [skills, setSkills] = useState<string[]>(seeker.skills ?? []);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saveMsg, setSaveMsg] = useState<{ field: string; type: "success" | "error"; text: string } | null>(null);
+
+  const saveField = async (field: "target_titles" | "skills", value: string[]) => {
+    setSaving(field);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/api/am/seekers/${seeker.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveMsg({ field, type: "error", text: data.error || "Failed to save." });
+        return;
+      }
+      setSaveMsg({ field, type: "success", text: "Saved!" });
+      if (onSeekerUpdate) onSeekerUpdate({ [field]: value });
+      setTimeout(() => setSaveMsg((prev) => (prev?.field === field ? null : prev)), 2000);
+    } catch {
+      setSaveMsg({ field, type: "error", text: "Network error." });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const updateTargetTitles = (newTitles: string[]) => {
+    setTargetTitles(newTitles);
+    saveField("target_titles", newTitles);
+  };
+
+  const updateSkills = (newSkills: string[]) => {
+    setSkills(newSkills);
+    saveField("skills", newSkills);
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Profile Info */}
@@ -649,32 +766,22 @@ function OverviewTab({
           </dl>
         </Section>
 
-        <Section title="Target Titles">
-          {seeker.target_titles && seeker.target_titles.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {seeker.target_titles.map((t) => (
-                <span key={t} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                  {t}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm">No target titles set</p>
-          )}
+        <Section title={<span className="flex items-center gap-2">Target Titles {saving === "target_titles" && <span className="text-xs text-gray-400">Saving...</span>}{saveMsg?.field === "target_titles" && <span className={`text-xs ${saveMsg.type === "success" ? "text-green-600" : "text-red-600"}`}>{saveMsg.text}</span>}</span>}>
+          <EditableChips
+            items={targetTitles}
+            onUpdate={updateTargetTitles}
+            color="blue"
+            placeholder="Add a target title... (e.g. Database Administrator)"
+          />
         </Section>
 
-        <Section title="Skills">
-          {seeker.skills && seeker.skills.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {seeker.skills.map((s) => (
-                <span key={s} className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">
-                  {s}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm">No skills listed</p>
-          )}
+        <Section title={<span className="flex items-center gap-2">Skills {saving === "skills" && <span className="text-xs text-gray-400">Saving...</span>}{saveMsg?.field === "skills" && <span className={`text-xs ${saveMsg.type === "success" ? "text-green-600" : "text-red-600"}`}>{saveMsg.text}</span>}</span>}>
+          <EditableChips
+            items={skills}
+            onUpdate={updateSkills}
+            color="green"
+            placeholder="Add a skill..."
+          />
         </Section>
       </div>
 
@@ -4475,7 +4582,7 @@ function DebugScreenshotsTab({
 }
 
 // Utility components
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-gray-50 rounded-lg p-4">
       <h3 className="font-semibold text-gray-900 mb-3">{title}</h3>

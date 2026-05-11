@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import {
+  normalizeAssessmentQuestions,
+  type AssessmentQuestion,
+} from "@/lib/learning/assessment";
 import { useToast, ToastContainer } from "@/lib/use-toast";
+import AssessmentRunner from "./AssessmentRunner";
 
 type Lesson = {
   id: string;
@@ -13,6 +18,8 @@ type Lesson = {
     status: string;
     completed_at: string | null;
     time_spent_seconds: number;
+    quiz_score?: number | null;
+    mastery_score?: number | null;
   } | null;
   is_bookmarked: boolean;
 };
@@ -140,6 +147,49 @@ export default function LessonViewer({
     }
   }
 
+  async function completeQuiz(result: {
+    answers: Array<number | null>;
+    score: number;
+    correctCount: number;
+    totalQuestions: number;
+  }) {
+    const timeSpent = Math.round((Date.now() - startTimeRef.current) / 1000);
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `/api/portal/learning/${trackId}/lessons/${lesson.id}/progress`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "completed",
+            time_spent_seconds: timeSpent,
+            quiz_score: result.score,
+          }),
+        }
+      );
+
+      if (res.ok) {
+        const { progress } = await res.json();
+        onLessonUpdated({
+          id: lesson.id,
+          progress,
+        });
+
+        if (progress?.status === "completed") {
+          toast(`Quiz completed: ${result.score}%`, "success");
+        } else {
+          toast(`Quiz saved: ${result.score}%`, "success");
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast(data.error || "Failed to save quiz progress", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const content = lesson.content as {
     body?: string;
     summary?: string;
@@ -148,7 +198,10 @@ export default function LessonViewer({
     instructions?: string;
     starter_code?: string;
     resource_type?: string;
+    questions?: AssessmentQuestion[];
   };
+  const quizQuestions = normalizeAssessmentQuestions(content.questions ?? []);
+  const showManualComplete = lesson.content_type !== "quiz";
 
   return (
     <div>
@@ -292,12 +345,36 @@ export default function LessonViewer({
             Open Resource
           </a>
         )}
+
+        {lesson.content_type === "quiz" && (
+          <div>
+            {lesson.progress?.quiz_score !== undefined && lesson.progress?.quiz_score !== null && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <strong>Latest Score:</strong> {lesson.progress.quiz_score}%
+                </p>
+              </div>
+            )}
+            {quizQuestions.length > 0 ? (
+              <AssessmentRunner
+                title={lesson.title}
+                description="Answer every question to complete this quiz lesson. A passing result records mastery and schedules review."
+                questions={quizQuestions}
+                busy={saving}
+                ctaLabel="Save Quiz Result"
+                onComplete={completeQuiz}
+              />
+            ) : (
+              <p className="text-gray-400">Quiz questions are not available.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex gap-2">
-          {!isCompleted && (
+          {!isCompleted && showManualComplete && (
             <button
               onClick={markComplete}
               disabled={saving}

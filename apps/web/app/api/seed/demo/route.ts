@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { getAccountManagerFromRequest } from "@/lib/am-access";
 
 function canUseSeedRoute() {
   return (
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const accountManager = {
+  const demoAccountManager = {
     name: "Demo AM",
     email: "demo.am@jobgenius.local",
   };
@@ -84,17 +85,48 @@ export async function POST(request: Request) {
     },
   ];
 
-  const { data: amData, error: amError } = await supabaseServer
-    .from("account_managers")
-    .upsert(accountManager, { onConflict: "email" })
-    .select("id")
-    .single();
+  const runnerEmail = process.env.RUNNER_AM_EMAIL?.trim() ?? "";
+  let amData: { id: string } | null = null;
 
-  if (amError) {
-    return Response.json(
-      { success: false, error: "Failed to seed account manager." },
-      { status: 500 }
-    );
+  const requestAm = await getAccountManagerFromRequest(request.headers);
+  if (!("error" in requestAm)) {
+    amData = { id: requestAm.accountManager.id };
+  }
+
+  if (!amData && runnerEmail) {
+    const { data: runnerAm, error: runnerAmError } = await supabaseServer
+      .from("account_managers")
+      .select("id")
+      .eq("email", runnerEmail)
+      .maybeSingle();
+
+    if (runnerAmError) {
+      return Response.json(
+        { success: false, error: "Failed to resolve runner account manager." },
+        { status: 500 }
+      );
+    }
+
+    if (runnerAm?.id) {
+      amData = { id: runnerAm.id };
+    }
+  }
+
+  if (!amData) {
+    const { data: createdDemoAm, error: amError } = await supabaseServer
+      .from("account_managers")
+      .upsert(demoAccountManager, { onConflict: "email" })
+      .select("id")
+      .single();
+
+    if (amError || !createdDemoAm) {
+      return Response.json(
+        { success: false, error: "Failed to seed account manager." },
+        { status: 500 }
+      );
+    }
+
+    amData = { id: createdDemoAm.id };
   }
 
   const { data: jsData, error: jsError } = await supabaseServer

@@ -1016,9 +1016,9 @@ function QueueTab({
                       </button>
                     </>
                   )}
-                  {["RUNNING", "RETRYING", "READY"].includes(q.status) && (
+                  {["RUNNING", "RETRYING", "READY"].includes(q.status) && run && (
                     <button
-                      onClick={() => callApi("/api/apply/pause", "POST", { queue_id: q.id }, q.id)}
+                      onClick={() => callApi("/api/apply/pause", "POST", { run_id: run.id }, q.id)}
                       disabled={isLoading}
                       className="px-3 py-1.5 bg-yellow-50 text-yellow-800 text-xs font-medium rounded-lg hover:bg-yellow-100 disabled:opacity-50"
                     >
@@ -1027,34 +1027,40 @@ function QueueTab({
                   )}
                   {q.status === "NEEDS_ATTENTION" && (
                     <>
-                      <button
-                        onClick={() => callApi("/api/apply/resume", "POST", { queue_id: q.id }, q.id)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        Resume
-                      </button>
-                      <button
-                        onClick={() => callApi("/api/apply/retry", "POST", { queue_id: q.id }, q.id)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
-                      >
-                        Retry
-                      </button>
-                      <button
-                        onClick={() => callApi("/api/apply/complete", "POST", { queue_id: q.id }, q.id)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-medium rounded-lg hover:bg-green-100 disabled:opacity-50"
-                      >
-                        Mark Applied
-                      </button>
-                      <button
-                        onClick={() => callApi("/api/apply/fail", "POST", { queue_id: q.id }, q.id)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-lg hover:bg-red-100 disabled:opacity-50"
-                      >
-                        Mark Failed
-                      </button>
+                      {run ? (
+                        <>
+                          <button
+                            onClick={() => callApi("/api/apply/resume", "POST", { run_id: run.id }, q.id)}
+                            disabled={isLoading}
+                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Resume
+                          </button>
+                          <button
+                            onClick={() => callApi("/api/apply/retry", "POST", { run_id: run.id }, q.id)}
+                            disabled={isLoading}
+                            className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                          >
+                            Retry
+                          </button>
+                          <button
+                            onClick={() => callApi("/api/apply/complete", "POST", { run_id: run.id }, q.id)}
+                            disabled={isLoading}
+                            className="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-medium rounded-lg hover:bg-green-100 disabled:opacity-50"
+                          >
+                            Mark Applied
+                          </button>
+                          <button
+                            onClick={() => callApi("/api/apply/fail", "POST", { run_id: run.id }, q.id)}
+                            disabled={isLoading}
+                            className="px-3 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-lg hover:bg-red-100 disabled:opacity-50"
+                          >
+                            Mark Failed
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">No run found</span>
+                      )}
                     </>
                   )}
                 </div>

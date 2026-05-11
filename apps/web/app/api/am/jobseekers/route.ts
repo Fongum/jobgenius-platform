@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   if (isAdmin) {
     const { data: seekers, error, count } = await supabaseServer
       .from("job_seekers")
-      .select("id, full_name, location, seniority, target_titles, work_type", { count: "exact" })
+      .select("id, full_name, email, location, seniority, target_titles, work_type", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   const { data: assignments, error: assignmentsError, count } = await supabaseServer
     .from("job_seeker_assignments")
     .select(
-      "job_seeker_id, job_seekers (id, full_name, location, seniority, target_titles, work_type)",
+      "job_seeker_id, job_seekers (id, full_name, email, location, seniority, target_titles, work_type)",
       { count: "exact" }
     )
     .eq("account_manager_id", accountManager.id)

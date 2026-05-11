@@ -687,6 +687,10 @@ export async function runPlan({
     if (step.name === "TRY_APPLY_ENTRY") {
       const result = await activeAdapter.clickApplyEntry(page, ctx);
       if (result?.ok === false) {
+        await captureFailureScreenshot(page, {
+          runId: ctx.runId, step: step.name, reason: result.reason ?? "APPLY_BUTTON_MISSING",
+          apiBaseUrl, authToken, runnerId,
+        });
         await pauseRun(
           apiBaseUrl,
           {
@@ -866,6 +870,10 @@ export async function runPlan({
       }
       const result = await activeAdapter.submit(page, ctx);
       if (result?.ok === false) {
+        await captureFailureScreenshot(page, {
+          runId: ctx.runId, step: step.name, reason: result.reason ?? "SUBMIT_BUTTON_MISSING",
+          apiBaseUrl, authToken, runnerId,
+        });
         await pauseRun(
           apiBaseUrl,
           {
@@ -992,6 +1000,10 @@ export async function runPlan({
         return;
       }
 
+      await captureFailureScreenshot(page, {
+        runId: ctx.runId, step: step.name, reason: "REQUIRES_REVIEW",
+        apiBaseUrl, authToken, runnerId,
+      });
       await pauseRun(
         apiBaseUrl,
         {

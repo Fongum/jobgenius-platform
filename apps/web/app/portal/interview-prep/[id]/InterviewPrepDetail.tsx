@@ -93,13 +93,18 @@ export default function InterviewPrepDetail({
   videos,
   sessions: initialSessions,
   interview,
+  initialTab,
 }: {
   prep: Prep;
   videos: Video[];
   sessions: Session[];
   interview?: InterviewInfo | null;
+  initialTab?: string;
 }) {
-  const [activeTab, setActiveTab] = useState<string>("notes");
+  const defaultTab = SUB_TABS.some((tab) => tab.key === initialTab)
+    ? initialTab!
+    : "notes";
+  const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [sessions, setSessions] = useState<Session[]>(initialSessions);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
@@ -110,6 +115,13 @@ export default function InterviewPrepDetail({
 
   const content = prep.content ?? {};
   const jobPost = prep.job_posts;
+
+  useEffect(() => {
+    if (initialTab && SUB_TABS.some((tab) => tab.key === initialTab)) {
+      setActiveTab(initialTab);
+      setActiveSession(null);
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     fetch("/api/portal/interview-prep/progress")

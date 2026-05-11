@@ -107,6 +107,16 @@ export default async function LearningTracksPage() {
                             <span className="text-xs text-gray-400">
                               {lessons.length} lesson{lessons.length !== 1 ? "s" : ""}
                             </span>
+                            {track.creation_mode && (
+                              <span className="text-xs text-gray-400">
+                                {String(track.creation_mode).replace(/_/g, " ")}
+                              </span>
+                            )}
+                            {track.target_skill && (
+                              <span className="text-xs text-blue-600">
+                                Focus: {track.target_skill}
+                              </span>
+                            )}
                             {jobPost && (
                               <span className="text-xs text-gray-400 truncate max-w-[150px] sm:max-w-none">
                                 {jobPost.title}{jobPost.company ? ` @ ${jobPost.company}` : ""}

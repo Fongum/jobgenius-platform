@@ -40,10 +40,10 @@ export default function HeroSection() {
             <div className="flex flex-wrap gap-2 mb-8">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-violet-50 border border-violet-100 rounded-full text-sm font-medium text-violet-700">
                 <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                Plans from $500 &middot; pay in installments
+                5-min setup &middot; ~10 min/week from you
               </div>
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-orange-50 border border-orange-100 rounded-full text-sm font-medium text-orange-700">
-                5% success fee &middot; only when you&apos;re hired
+                Pay only when you&apos;re hired &middot; 5% success fee
               </div>
             </div>
 
@@ -70,7 +70,7 @@ export default function HeroSection() {
                 href="/signup"
                 className="bg-orange-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-200 text-center"
               >
-                Start My Job Search
+                Hand It Off &mdash; 5 Min Setup
               </Link>
               <a
                 href="#pricing"

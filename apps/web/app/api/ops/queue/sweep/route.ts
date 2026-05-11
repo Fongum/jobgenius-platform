@@ -7,7 +7,7 @@ import {
 } from "@/lib/auto-apply-preflight";
 
 const AUTO_APPLY_ALLOWED_ATS = new Set(
-  (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,GENERIC")
+  (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,LEVER,SMARTRECRUITERS,GENERIC")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean)

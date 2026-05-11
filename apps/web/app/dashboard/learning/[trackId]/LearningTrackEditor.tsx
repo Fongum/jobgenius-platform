@@ -11,6 +11,9 @@ type Lesson = {
   content: Record<string, unknown>;
   sort_order: number;
   estimated_minutes: number;
+  skill_slug: string | null;
+  learning_objective: string | null;
+  difficulty: "easy" | "medium" | "hard";
   is_ai_generated: boolean;
   created_at: string;
 };
@@ -21,6 +24,9 @@ type Track = {
   description: string | null;
   category: string;
   status: string;
+  creation_mode: string;
+  target_skill: string | null;
+  focus_skills: string[] | null;
   job_seekers: { id: string; full_name: string | null; email: string | null; skills: string[] | null; seniority: string | null } | null;
   job_posts: { id: string; title: string; company: string | null } | null;
   learning_lessons: Lesson[];
@@ -169,6 +175,14 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
             <div className="flex items-center gap-2 sm:gap-3 mt-2 text-sm text-gray-500 flex-wrap">
               <span className="truncate max-w-[200px]">Seeker: {seeker?.full_name || seeker?.email}</span>
               <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{track.category}</span>
+              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                {track.creation_mode.replace(/_/g, " ")}
+              </span>
+              {track.target_skill && (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs">
+                  Focus: {track.target_skill}
+                </span>
+              )}
               {jobPost && (
                 <span className="truncate max-w-[200px]">{jobPost.title}{jobPost.company ? ` @ ${jobPost.company}` : ""}</span>
               )}
@@ -272,6 +286,16 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
                         <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-100 rounded">
                           {lesson.content_type}
                         </span>
+                        {lesson.difficulty && (
+                          <span className="text-xs text-gray-500 px-1.5 py-0.5 bg-gray-50 rounded">
+                            {lesson.difficulty}
+                          </span>
+                        )}
+                        {lesson.skill_slug && (
+                          <span className="text-xs text-blue-600 px-1.5 py-0.5 bg-blue-50 rounded">
+                            {lesson.skill_slug.replace(/-/g, " ")}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-400">
                           ~{lesson.estimated_minutes} min
                         </span>
@@ -303,6 +327,16 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
 
                 {editingLesson === lesson.id && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
+                    {lesson.learning_objective && (
+                      <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                          Learning Objective
+                        </p>
+                        <p className="text-sm text-gray-700 mt-1">
+                          {lesson.learning_objective}
+                        </p>
+                      </div>
+                    )}
                     {lesson.content_type === "article" && typeof lesson.content.body === "string" ? (
                       <div className="bg-white rounded p-3 border border-gray-200 max-h-60 overflow-auto prose prose-sm max-w-none">
                         <div

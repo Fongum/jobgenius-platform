@@ -94,7 +94,27 @@ export function detectAtsType(source?: string | null, url?: string | null): AtsT
     combined.includes("successfactors") ||
     combined.includes("taleo") ||
     combined.includes("oraclecloud") ||
-    combined.includes("personio")
+    combined.includes("personio") ||
+    combined.includes("breezy.hr") ||
+    combined.includes("applytojob.com") ||
+    combined.includes("jazzhr")
+  ) {
+    return "GENERIC";
+  }
+
+  // Job board aggregators — these redirect to company career pages
+  if (
+    combined.includes("themuse.com") ||
+    combined.includes("arbeitnow.com") ||
+    combined.includes("remotive.com") ||
+    combined.includes("remoteok.com") ||
+    combined.includes("jobicy.com") ||
+    combined.includes("himalayas.app") ||
+    combined.includes("startup.jobs") ||
+    combined.includes("wellfound.com") ||
+    combined.includes("builtin.com") ||
+    combined.includes("findwork.dev") ||
+    combined.includes("glassdoor.com")
   ) {
     return "GENERIC";
   }

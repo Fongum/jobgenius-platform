@@ -102,7 +102,8 @@ export async function POST(request: Request) {
     const { error: attentionError } = await supabaseServer
       .from("attention_items")
       .update({ status: "RESOLVED", resolved_at: nowIso })
-      .eq("id", run.queue_id);
+      .eq("queue_id", run.queue_id)
+      .eq("status", "OPEN");
 
     if (attentionError) {
       console.error("[apply:resume] failed to update attention items:", attentionError);

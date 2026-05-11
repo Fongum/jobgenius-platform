@@ -1,11 +1,5 @@
 export async function extractRequiredFields(page) {
   return page.evaluate(() => {
-    const requiredInputs = Array.from(
-      document.querySelectorAll(
-        "input[required], textarea[required], select[required], input[aria-required='true'], textarea[aria-required='true'], select[aria-required='true']"
-      )
-    );
-
     const getLabelText = (input) => {
       const id = input.getAttribute("id");
       if (id) {
@@ -16,27 +10,134 @@ export async function extractRequiredFields(page) {
       if (parentLabel?.textContent) return parentLabel.textContent.trim();
       const ariaLabel = input.getAttribute("aria-label");
       if (ariaLabel) return ariaLabel.trim();
+      const placeholder = input.getAttribute("placeholder");
+      if (placeholder) return placeholder.trim();
       const name = input.getAttribute("name");
       return name ? name.trim() : "Unknown field";
     };
 
-    return requiredInputs
-      .filter((input) => !input.value)
-      .map((input) => {
-        const type = input.tagName.toLowerCase();
-        let options = null;
-        if (input.tagName.toLowerCase() === "select") {
-          options = Array.from(input.options)
-            .map((option) => option.textContent?.trim())
-            .filter(Boolean);
+    const isVisible = (input) => {
+      if (!(input instanceof HTMLElement)) return false;
+      const style = window.getComputedStyle(input);
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0"
+      ) {
+        return false;
+      }
+      const rect = input.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    const isRequiredField = (input) =>
+      input.matches?.("[required], [aria-required='true']");
+
+    const getFieldType = (input) => {
+      const tagName = input.tagName.toLowerCase();
+      if (tagName === "textarea" || tagName === "select") {
+        return tagName;
+      }
+      return (input.getAttribute("type") || "text").toLowerCase();
+    };
+
+    const hasEmptyValue = (input, type) => {
+      if (type === "checkbox") {
+        return !input.checked;
+      }
+      if (type === "file") {
+        return !input.files || input.files.length === 0;
+      }
+      if (type === "radio") {
+        return !input.checked;
+      }
+      return !String(input.value ?? "").trim();
+    };
+
+    const requiredFields = [];
+    const radioGroups = new Map();
+    const inputs = Array.from(document.querySelectorAll("input, textarea, select"));
+
+    for (const input of inputs) {
+      if (
+        !(
+          input instanceof HTMLInputElement ||
+          input instanceof HTMLTextAreaElement ||
+          input instanceof HTMLSelectElement
+        )
+      ) {
+        continue;
+      }
+
+      if (input.disabled || !isRequiredField(input)) {
+        continue;
+      }
+
+      const type = getFieldType(input);
+      if (type === "radio") {
+        const groupKey =
+          input.getAttribute("name") ||
+          input.getAttribute("id") ||
+          getLabelText(input);
+        if (!radioGroups.has(groupKey)) {
+          radioGroups.set(groupKey, []);
         }
-        return {
-          label: getLabelText(input),
-          type,
-          options,
-          required: true,
-        };
+        radioGroups.get(groupKey).push(input);
+        continue;
+      }
+
+      if (type !== "file" && !isVisible(input)) {
+        continue;
+      }
+
+      if (!hasEmptyValue(input, type)) {
+        continue;
+      }
+
+      let options = null;
+      if (input instanceof HTMLSelectElement) {
+        options = Array.from(input.options)
+          .map((option) => option.textContent?.trim())
+          .filter(Boolean);
+      }
+
+      requiredFields.push({
+        label: getLabelText(input),
+        type,
+        options,
+        required: true,
       });
+    }
+
+    for (const group of radioGroups.values()) {
+      if (!Array.isArray(group) || group.length === 0 || group.some((input) => input.checked)) {
+        continue;
+      }
+
+      const visibleGroup = group.filter((input) => isVisible(input));
+      const firstInput = visibleGroup[0] || group[0];
+      requiredFields.push({
+        label: getLabelText(firstInput),
+        type: "radio",
+        options: group
+          .map((input) => {
+            const id = input.getAttribute("id");
+            if (id) {
+              const label = document.querySelector(`label[for='${id}']`);
+              if (label?.textContent?.trim()) return label.textContent.trim();
+            }
+            return (
+              input.getAttribute("aria-label") ||
+              input.getAttribute("value") ||
+              getLabelText(input)
+            );
+          })
+          .filter(Boolean),
+        required: true,
+      });
+    }
+
+    return requiredFields;
   });
 }
 
@@ -88,6 +189,40 @@ async function getInputHint(input) {
   const name = await input.getAttribute("name");
   const id = await input.getAttribute("id");
   return normalizeHint([label, ariaLabel, placeholder, name, id].filter(Boolean).join(" "));
+}
+
+async function getGroupHint(input) {
+  return input.evaluate((el) => {
+    const normalize = (value) => (value ?? "").toString().trim().toLowerCase();
+
+    const fieldset = el.closest("fieldset");
+    if (fieldset) {
+      const legend = fieldset.querySelector("legend");
+      if (legend?.textContent) return normalize(legend.textContent);
+    }
+
+    const group = el.closest("[role='group'], [role='radiogroup']");
+    if (group) {
+      const labelId = group.getAttribute("aria-labelledby");
+      if (labelId) {
+        const labelEl = document.getElementById(labelId);
+        if (labelEl?.textContent) return normalize(labelEl.textContent);
+      }
+      const ariaLabel = group.getAttribute("aria-label");
+      if (ariaLabel) return normalize(ariaLabel);
+    }
+
+    const id = el.getAttribute("id");
+    if (id) {
+      const label = document.querySelector(`label[for='${id}']`);
+      if (label?.textContent) return normalize(label.textContent);
+    }
+
+    const parentLabel = el.closest("label");
+    if (parentLabel?.textContent) return normalize(parentLabel.textContent);
+
+    return normalize(el.getAttribute("name"));
+  });
 }
 
 function resolveFieldValue(hint, type, profile, defaultEmail) {
@@ -280,7 +415,7 @@ async function fillRadioGroups(page, profile) {
     if (anyChecked.some(Boolean)) continue;
 
     const firstRadio = group[0];
-    const hint = await getInputHint(firstRadio);
+    const hint = await getGroupHint(firstRadio);
     if (!hint) continue;
 
     let targetLabel = null;
@@ -295,10 +430,19 @@ async function fillRadioGroups(page, profile) {
 
     for (const radio of group) {
       const radioLabel = await radio.evaluate((el) => {
-        const label = el.getAttribute("aria-label") || el.getAttribute("value") || "";
-        return label.toLowerCase();
+        const id = el.getAttribute("id");
+        const linkedLabel =
+          id ? document.querySelector(`label[for='${id}']`)?.textContent ?? "" : "";
+        const wrappedLabel = el.closest("label")?.textContent ?? "";
+        const label =
+          linkedLabel ||
+          wrappedLabel ||
+          el.getAttribute("aria-label") ||
+          el.getAttribute("value") ||
+          "";
+        return label.toLowerCase().trim();
       });
-      if (radioLabel.includes(targetLabel)) {
+      if (radioLabel.includes(targetLabel) || targetLabel.includes(radioLabel)) {
         await radio.click().catch(() => null);
         break;
       }
@@ -322,8 +466,34 @@ async function fillConsentCheckboxes(page) {
 }
 
 export async function uploadResume(page, resumePath) {
-  const input = await page.$("input[type='file']");
-  if (!input || !resumePath) return { ok: false, reason: "NO_INPUT_OR_URL" };
+  if (!resumePath) return { ok: false, reason: "NO_INPUT_OR_URL" };
+
+  const fileInputs = await page.$$("input[type='file']");
+  const enabledInputs = [];
+  for (const input of fileInputs) {
+    const disabled = await input.getAttribute("disabled");
+    if (disabled === null) {
+      enabledInputs.push(input);
+    }
+  }
+
+  const input =
+    (await (async () => {
+      for (const candidate of enabledInputs) {
+        const hint = await getInputHint(candidate);
+        if (
+          hint.includes("resume") ||
+          hint.includes("cv") ||
+          hint.includes("curriculum vitae")
+        ) {
+          return candidate;
+        }
+      }
+      return enabledInputs[0] ?? null;
+    })()) ?? null;
+
+  if (!input) return { ok: false, reason: "NO_INPUT_OR_URL" };
+
   await input.setInputFiles(resumePath);
   return { ok: true };
 }

@@ -92,7 +92,7 @@ const AUTO_TAILOR_ENABLED = resolveFlag(
 const AUTO_TAILOR_REQUIRED = resolveFlag("AUTO_TAILOR_REQUIRED", false);
 const AUTO_APPLY_ENABLED = resolveFlag("AUTO_APPLY_ENABLED", IS_PROD);
 const AUTO_APPLY_ALLOWED_ATS = new Set(
-  (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,GENERIC")
+  (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,LEVER,SMARTRECRUITERS,GENERIC")
     .split(",")
     .map((entry) => entry.trim().toUpperCase())
     .filter(Boolean)

@@ -128,6 +128,22 @@ function detectTitleFamilies(title: string): Set<string> {
       ["data", "analytics", "bi", "reporting", "insights", "machinelearning", "ml"],
     ],
     [
+      "database",
+      ["database", "dba", "sql", "etl", "datawarehouse", "ssis", "ssrs", "mssql", "mysql", "postgres", "oracle", "nosql", "mongodb"],
+    ],
+    [
+      "infrastructure",
+      ["cloud", "infrastructure", "network", "system", "sysadmin", "devops", "sre", "platform", "linux", "windows", "aws", "azure", "gcp"],
+    ],
+    [
+      "healthcare",
+      ["nurse", "nursing", "clinical", "medical", "health", "pharmacy", "therapist", "physician", "dental"],
+    ],
+    [
+      "legal",
+      ["legal", "lawyer", "attorney", "paralegal", "compliance", "regulatory", "counsel"],
+    ],
+    [
       "product",
       ["product", "roadmap", "owner"],
     ],
@@ -174,6 +190,36 @@ function detectTitleFamilies(title: string): Set<string> {
   return families;
 }
 
+/**
+ * Detect if a target entry looks like a skill/technology rather than a job title.
+ * Single-token entries that are common tech keywords are treated as skills.
+ * These still contribute to family detection but should not drive partial matching.
+ */
+function isSkillLikeEntry(entry: string): boolean {
+  const rawWords = normalizeString(entry)
+    .replace(/[^a-z0-9+#/ -]+/g, " ")
+    .split(/[\s/()-]+/)
+    .filter((token) => token.length > 0);
+  // Multi-word entries are likely job titles (e.g. "Database Administrator")
+  if (rawWords.length >= 2) return false;
+  const tokens = tokenizeTitle(entry);
+  // Single token — check if it's a known technology/skill keyword
+  const skillKeywords = new Set([
+    "sql", "mssql", "mysql", "postgres", "postgresql", "oracle", "nosql", "mongodb",
+    "ssis", "ssrs", "ssas", "etl", "python", "java", "javascript", "typescript",
+    "react", "angular", "vue", "node", "golang", "ruby", "rust", "swift", "kotlin",
+    "aws", "azure", "gcp", "docker", "kubernetes", "terraform", "ansible",
+    "linux", "windows", "macos", "excel", "tableau", "powerbi",
+    "salesforce", "sap", "jira", "confluence", "git", "github",
+    "html", "css", "php", "c#", "c++", ".net", "spring",
+    "redis", "kafka", "elasticsearch", "graphql", "rest",
+    "microsoft", "google", "apple", "meta", "amazon",
+    "agile", "scrum", "kanban", "cicd", "ci/cd",
+  ]);
+  const normalized = tokens[0] || normalizeString(entry).replace(/[^a-z0-9+#]+/g, "");
+  return skillKeywords.has(normalized);
+}
+
 function analyzeTitleAlignment(
   targetTitles: string[] | null | undefined,
   rawJobTitle: string
@@ -188,7 +234,29 @@ function analyzeTitleAlignment(
   let bestTokenOverlap = 0;
   const sharedFamilies = new Set<string>();
 
+  // Separate actual title entries from skill-like entries
+  const titleEntries: string[] = [];
+  const skillEntries: string[] = [];
   for (const target of normalizedTargets) {
+    if (isSkillLikeEntry(target)) {
+      skillEntries.push(target);
+    } else {
+      titleEntries.push(target);
+    }
+  }
+
+  // Skill entries still contribute to family detection
+  for (const skill of skillEntries) {
+    const skillFamilies = detectTitleFamilies(skill);
+    for (const family of Array.from(skillFamilies)) {
+      if (jobFamilies.has(family)) {
+        sharedFamilies.add(family);
+      }
+    }
+  }
+
+  // Title entries drive exact/partial matching
+  for (const target of titleEntries) {
     if (jobTitle.includes(target)) {
       matchedTitles.push(target);
       continue;
@@ -217,7 +285,8 @@ function analyzeTitleAlignment(
     }
   }
 
-  const hasFamilies = normalizedTargets.some((target) => detectTitleFamilies(target).size > 0);
+  // Only consider families from actual title entries for hard mismatch detection
+  const hasFamilies = titleEntries.some((target) => detectTitleFamilies(target).size > 0);
   const hardMismatch =
     matchedTitles.length === 0 &&
     partialMatches.length === 0 &&

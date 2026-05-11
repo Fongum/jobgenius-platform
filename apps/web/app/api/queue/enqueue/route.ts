@@ -34,6 +34,47 @@ export async function POST(request: Request) {
   const access = await requireAMAccessToSeeker(request.headers, payload.job_seeker_id);
   if (!access.ok) return access.response;
 
+  const { data: existingQueue, error: existingQueueError } = await supabaseServer
+    .from("application_queue")
+    .select("id, status")
+    .eq("job_post_id", payload.job_post_id)
+    .eq("job_seeker_id", payload.job_seeker_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingQueueError) {
+    return Response.json(
+      { success: false, error: "Failed to check existing queue item." },
+      { status: 500 }
+    );
+  }
+
+  if (existingQueue?.id) {
+    const { data: existingRun, error: existingRunError } = await supabaseServer
+      .from("application_runs")
+      .select("id, status")
+      .eq("queue_id", existingQueue.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingRunError) {
+      return Response.json(
+        { success: false, error: "Failed to check existing application run." },
+        { status: 500 }
+      );
+    }
+
+    return Response.json({
+      success: true,
+      already_queued: true,
+      queue_id: existingQueue.id,
+      run_id: existingRun?.id ?? null,
+      status: existingRun?.status ?? existingQueue.status,
+    });
+  }
+
   const { data, error } = await supabaseServer.from("application_queue").insert({
     job_post_id: payload.job_post_id,
     job_seeker_id: payload.job_seeker_id,
@@ -73,6 +114,5 @@ export async function POST(request: Request) {
 
   return Response.json({ success: true });
 }
-
 
 
