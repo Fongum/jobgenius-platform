@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ROLES } from "../../for/roles";
 
 export default function Footer() {
   return (
@@ -21,12 +22,13 @@ export default function Footer() {
               Platform
             </h4>
             <ul className="space-y-2.5 text-sm">
-              <li><a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a></li>
-              <li><a href="#what-we-do" className="hover:text-white transition-colors">What We Do</a></li>
-              <li><a href="#referral-network" className="hover:text-white transition-colors">Referral Network</a></li>
-              <li><a href="#interview-prep" className="hover:text-white transition-colors">Interview Prep</a></li>
-              <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
+              <li><Link href="/how-it-works" className="hover:text-white transition-colors">How It Works</Link></li>
+              <li><Link href="/what-we-do" className="hover:text-white transition-colors">What We Do</Link></li>
+              <li><Link href="/referral-network" className="hover:text-white transition-colors">Referral Network</Link></li>
+              <li><Link href="/interview-prep" className="hover:text-white transition-colors">Interview Prep</Link></li>
+              <li><Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link></li>
+              <li><Link href="/blog" className="hover:text-white transition-colors">Blog</Link></li>
+              <li><Link href="/faq" className="hover:text-white transition-colors">FAQ</Link></li>
             </ul>
           </div>
           <div>
@@ -49,6 +51,22 @@ export default function Footer() {
               <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
               <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
             </ul>
+          </div>
+        </div>
+        <div className="border-t border-gray-800 pt-8 pb-8 mb-2">
+          <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
+            By Role
+          </h4>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {ROLES.map((r) => (
+              <Link
+                key={r.slug}
+                href={`/for/${r.slug}`}
+                className="hover:text-white transition-colors"
+              >
+                For {r.rolePlural}
+              </Link>
+            ))}
           </div>
         </div>
         <div className="border-t border-gray-800 pt-8 flex flex-col sm:flex-row justify-between items-center gap-3 text-sm">
