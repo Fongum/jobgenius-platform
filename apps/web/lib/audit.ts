@@ -18,6 +18,7 @@ type AuditAction =
   | "lead.import"
   | "broadcast.send"
   | "referral.update"
+  | "recruiter_partner.send_workspace_link"
   | "intake.approve"
   | "intake.waitlist"
   | "intake.reject"

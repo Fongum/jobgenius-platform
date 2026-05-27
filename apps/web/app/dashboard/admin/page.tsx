@@ -36,6 +36,11 @@ export default async function AdminPage() {
     .is("job_seeker_id", null)
     .eq("enabled", true);
 
+  const { count: hiringRequestCount } = await supabaseAdmin
+    .from("recruiter_role_requests")
+    .select("id", { count: "exact", head: true })
+    .not("status", "in", "(closed,rejected)");
+
   const { count: unassignedCount } = await supabaseAdmin
     .from("job_seekers")
     .select("id", { count: "exact", head: true })
@@ -83,7 +88,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <Link
           href="/dashboard/admin/accounts"
           className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
@@ -125,12 +130,27 @@ export default async function AdminPage() {
           <div className="mt-1 text-3xl font-bold text-indigo-600">{discoveryPolicyCount ?? 0}</div>
           <div className="text-xs text-gray-400 mt-1">{activeGeneratedSearchCount ?? 0} active searches</div>
         </Link>
+
+        <Link
+          href="/dashboard/admin/hiring-partners"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Hiring Requests</div>
+          <div className="mt-1 text-3xl font-bold text-violet-600">{hiringRequestCount ?? 0}</div>
+          <div className="text-xs text-gray-400 mt-1">Recruiter and agency demand</div>
+        </Link>
       </div>
 
       {/* Quick Actions */}
       <div className="bg-white rounded-lg shadow p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
+          <Link
+            href="/dashboard/admin/hiring-partners"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          >
+            Review Hiring Requests
+          </Link>
           <Link
             href="/dashboard/admin/intake"
             className="px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors"

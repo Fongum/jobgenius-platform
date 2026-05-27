@@ -6,6 +6,7 @@ import { Footer } from "./homepage";
 
 export const MARKETING_NAV = [
   { href: "/how-it-works", label: "How It Works" },
+  { href: "/hire", label: "Hire" },
   { href: "/referral-network", label: "Referral Network" },
   { href: "/interview-prep", label: "Interview Prep" },
   { href: "/pricing", label: "Pricing" },
