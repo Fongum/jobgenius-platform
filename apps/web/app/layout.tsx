@@ -74,7 +74,9 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [{ url: "/jobgenius-icon.svg", type: "image/svg+xml" }],
+    shortcut: ["/jobgenius-icon.svg"],
+    apple: [{ url: "/jobgenius-icon.svg", type: "image/svg+xml" }],
   },
 };
 

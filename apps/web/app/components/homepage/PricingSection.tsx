@@ -82,7 +82,10 @@ export default function PricingSection({
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {/* Tier 1 — Essentials */}
-            <div className="bg-white rounded-2xl border-2 border-gray-200 p-8 flex flex-col hover:border-violet-200 hover:shadow-lg transition-all">
+            <div className="bg-white rounded-2xl border-2 border-gray-200 p-8 flex flex-col relative hover:border-violet-200 hover:shadow-lg transition-all">
+              <div className="absolute top-4 right-4 bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">
+                20% OFF
+              </div>
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-gray-900">Essentials</h3>
                 <p className="text-sm text-gray-500 mt-1">
@@ -92,6 +95,9 @@ export default function PricingSection({
               <div className="mb-6">
                 <span className="text-4xl font-extrabold text-gray-900">$500</span>
                 <span className="text-gray-500 ml-1">registration fee</span>
+                <p className="mt-2 text-sm font-semibold text-emerald-700">
+                  Direct signup with code: 20% off, pay $400
+                </p>
               </div>
               <div className="bg-orange-50 border border-orange-100 rounded-lg px-4 py-2.5 mb-6">
                 <p className="text-sm font-medium text-orange-700">
@@ -117,8 +123,13 @@ export default function PricingSection({
 
             {/* Tier 2 — Premium */}
             <div className="bg-gradient-to-b from-violet-600 to-violet-700 rounded-2xl p-8 text-white flex flex-col relative overflow-hidden shadow-xl shadow-violet-200">
-              <div className="absolute top-4 right-4 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                MOST POPULAR
+              <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-2">
+                <div className="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  MOST POPULAR
+                </div>
+                <div className="bg-white/15 text-orange-200 text-xs font-bold px-3 py-1 rounded-full border border-white/20">
+                  25% OFF
+                </div>
               </div>
               <div className="mb-6">
                 <h3 className="text-lg font-bold">Premium</h3>
@@ -129,6 +140,9 @@ export default function PricingSection({
               <div className="mb-6">
                 <span className="text-4xl font-extrabold">$1,000</span>
                 <span className="text-violet-200 ml-1">registration fee</span>
+                <p className="mt-2 text-sm font-semibold text-orange-200">
+                  Direct signup with code: 25% off, pay $750
+                </p>
               </div>
               <div className="bg-white/15 border border-white/20 rounded-lg px-4 py-2.5 mb-6">
                 <p className="text-sm font-medium text-orange-300">
