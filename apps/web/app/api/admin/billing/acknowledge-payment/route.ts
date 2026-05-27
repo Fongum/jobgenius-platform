@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { logAdminAction } from "@/lib/audit";
+import {
+  getIntakeStateByJobSeekerId,
+  upsertJobSeekerIntakeState,
+} from "@/lib/intake";
+import { awardReferralRegistrationCreditForReferredSeeker } from "@/lib/referrals";
 
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -72,24 +77,49 @@ export async function POST(request: Request) {
 
       const { data: regPay } = await supabaseAdmin
         .from("registration_payments")
-        .select("total_amount, work_started")
+        .select("total_amount, work_started, amount_paid, credit_applied_amount")
         .eq("id", regPaymentId)
         .single();
 
-      const isComplete = regPay && Math.abs(amountPaid - Number(regPay.total_amount)) < 0.01;
-      const isPartial = amountPaid > 0 && !isComplete;
+      const previousCoveredAmount =
+        Number(regPay?.amount_paid ?? 0) + Number(regPay?.credit_applied_amount ?? 0);
+      const nextCoveredAmount =
+        amountPaid + Number(regPay?.credit_applied_amount ?? 0);
+      const isComplete =
+        regPay && Math.abs(nextCoveredAmount - Number(regPay.total_amount)) < 0.01;
+      const isPartial = nextCoveredAmount > 0 && !isComplete;
 
       const { error: regPayError } = await supabaseAdmin
         .from("registration_payments")
         .update({
           amount_paid: amountPaid,
           status: isComplete ? "complete" : isPartial ? "partial" : "pending",
-          work_started: amountPaid > 0,
+          work_started: nextCoveredAmount > 0,
         })
         .eq("id", regPaymentId);
 
       if (regPayError) {
         console.error("[billing] failed to update registration_payments:", regPayError);
+      } else if (previousCoveredAmount <= 0 && nextCoveredAmount > 0) {
+        const intakeState = await getIntakeStateByJobSeekerId(
+          screenshot.job_seeker_id
+        );
+        if (
+          intakeState?.status === "approved_payment_pending" ||
+          intakeState?.status === "active_client"
+        ) {
+          await upsertJobSeekerIntakeState({
+            jobSeekerId: screenshot.job_seeker_id,
+            status: "active_client",
+            metadata: {
+              first_payment_confirmed_at: now,
+            },
+          });
+        }
+
+        await awardReferralRegistrationCreditForReferredSeeker(
+          screenshot.job_seeker_id
+        );
       }
     }
   }

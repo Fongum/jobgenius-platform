@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getPublicCapacitySummary } from "@/lib/intake";
 import MarketingShell from "../components/MarketingShell";
 import PageHero from "../components/PageHero";
 import { breadcrumbJsonLd } from "../components/breadcrumb";
@@ -20,6 +21,8 @@ export const metadata: Metadata = {
   openGraph: { title, description, url: "/pricing", type: "website" },
   twitter: { card: "summary_large_image", title, description },
 };
+
+export const dynamic = "force-dynamic";
 
 const productJsonLd = {
   "@context": "https://schema.org",
@@ -56,7 +59,9 @@ const breadcrumb = breadcrumbJsonLd([
   { name: "Pricing", path: "/pricing" },
 ]);
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const capacitySummary = await getPublicCapacitySummary();
+
   return (
     <MarketingShell>
       <script
@@ -73,10 +78,10 @@ export default function PricingPage() {
         subtitle="One registration fee covers the strategy, applications, and outreach. A 5% success commission is only ever due after you accept an offer — never before."
         secondaryCta={{ href: "/how-it-works", label: "How It Works" }}
       />
-      <PricingSection />
+      <PricingSection capacitySummary={capacitySummary} />
       <StatsSection />
       <TestimonialsSection />
-      <FinalCtaSection />
+      <FinalCtaSection capacitySummary={capacitySummary} />
     </MarketingShell>
   );
 }

@@ -4,6 +4,7 @@ export { default as PainPointSection } from "./PainPointSection";
 export { default as HowItWorksSection } from "./HowItWorksSection";
 export { default as WhatWeDoSection } from "./WhatWeDoSection";
 export { default as StatsSection } from "./StatsSection";
+export { default as RolePathsSection } from "./RolePathsSection";
 export { default as AiHumanSection } from "./AiHumanSection";
 export { default as InterviewPrepSection } from "./InterviewPrepSection";
 export { default as ReferralSection } from "./ReferralSection";

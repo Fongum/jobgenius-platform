@@ -122,13 +122,24 @@ function SummaryCard({
 
 export default function ReviewFinishStep({
   profile,
+  offerPath,
+  summaryStepIndexes,
   saving,
+  finishError,
   goToStep,
   onFinish,
   onBack,
 }: {
   profile: ProfileData;
+  offerPath: "discount" | "strategy_preview";
+  summaryStepIndexes: {
+    about: number;
+    preferences: number;
+    workstyle: number;
+    salary: number;
+  };
   saving: boolean;
+  finishError?: string | null;
   goToStep: (step: number) => void;
   onFinish: () => void;
   onBack: () => void;
@@ -167,7 +178,11 @@ export default function ReviewFinishStep({
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-1">Review Your Profile</h2>
-      <p className="text-sm text-gray-500 mb-6">Review your information below. You can edit anything by clicking &quot;Edit&quot; on each section.</p>
+      <p className="text-sm text-gray-500 mb-6">
+        {offerPath === "strategy_preview"
+          ? "Review your information below. Once submitted, our team reviews fit before a strategy preview slot is reserved."
+          : "Review your information below. Once submitted, our team reviews fit before an onboarding spot is reserved."}
+      </p>
 
       <div className="flex justify-center mb-8">
         <ProfileScoreRing score={score} />
@@ -181,10 +196,16 @@ export default function ReviewFinishStep({
         </div>
       )}
 
+      {finishError && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {finishError}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SummaryCard
           title="About You"
-          stepIndex={1}
+          stepIndex={summaryStepIndexes.about}
           goToStep={goToStep}
           items={[
             { label: "Name", value: profile.full_name, missing: isEmpty(profile.full_name) },
@@ -195,7 +216,7 @@ export default function ReviewFinishStep({
         />
         <SummaryCard
           title="Job Preferences"
-          stepIndex={2}
+          stepIndex={summaryStepIndexes.preferences}
           goToStep={goToStep}
           items={[
             { label: "Seniority", value: profile.seniority, missing: isEmpty(profile.seniority) },
@@ -206,7 +227,7 @@ export default function ReviewFinishStep({
         />
         <SummaryCard
           title="Work Style & Location"
-          stepIndex={3}
+          stepIndex={summaryStepIndexes.workstyle}
           goToStep={goToStep}
           items={[
             { label: "Work Preferences", value: formatLocPrefs(), missing: isEmpty(profile.location_preferences) },
@@ -215,7 +236,7 @@ export default function ReviewFinishStep({
         />
         <SummaryCard
           title="Salary & Availability"
-          stepIndex={4}
+          stepIndex={summaryStepIndexes.salary}
           goToStep={goToStep}
           items={[
             { label: "Salary Range", value: formatSalary(), missing: isEmpty(profile.salary_min) && isEmpty(profile.salary_max) },
@@ -234,7 +255,11 @@ export default function ReviewFinishStep({
           disabled={saving}
           className="px-8 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
         >
-          {saving ? "Finishing..." : "Finish & Go to Dashboard"}
+          {saving
+            ? "Submitting..."
+            : offerPath === "strategy_preview"
+            ? "Submit Strategy Preview Request"
+            : "Submit for Review"}
         </button>
       </div>
     </div>

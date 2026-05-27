@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WelcomeResumeStep from "./steps/WelcomeResumeStep";
 import PlanSelectionStep from "./steps/PlanSelectionStep";
+import StrategyPreviewAgreementStep from "./steps/StrategyPreviewAgreementStep";
 import ContractStep from "./steps/ContractStep";
 import InstallmentPlanStep from "./steps/InstallmentPlanStep";
 import AboutYouStep from "./steps/AboutYouStep";
@@ -12,12 +13,24 @@ import WorkStyleLocationStep from "./steps/WorkStyleLocationStep";
 import SalaryAvailabilityStep from "./steps/SalaryAvailabilityStep";
 import ReviewFinishStep from "./steps/ReviewFinishStep";
 
-// ─── Types ─────────────────────────────────────────────────────
-
 interface LocationPreference {
   work_type: "remote" | "hybrid" | "onsite";
   locations: string[];
 }
+
+type PlanType = "essentials" | "premium";
+type OfferPath = "discount" | "strategy_preview";
+type StepId =
+  | "welcome"
+  | "plan"
+  | "preview"
+  | "contract"
+  | "payment"
+  | "about"
+  | "preferences"
+  | "workstyle"
+  | "salary"
+  | "review";
 
 export interface ProfileData {
   full_name?: string;
@@ -45,6 +58,8 @@ export interface ProfileData {
   citizenship_status?: string;
   start_date?: string;
   notice_period?: string;
+  offer_code?: string | null;
+  plan_type?: PlanType | null;
   onboarding_completed_at?: string;
 }
 
@@ -55,69 +70,141 @@ export interface DocRecord {
   uploaded_at: string;
 }
 
-// ─── Step Definitions ──────────────────────────────────────────
+interface OfferQuote {
+  planType: PlanType;
+  code: string | null;
+  source: "promo_code" | "seeker_referral" | null;
+  applied: boolean;
+  invalidCode: boolean;
+  baseFee: number;
+  discountPercent: number;
+  discountAmount: number;
+  finalFee: number;
+  message?: string;
+}
 
-const STEPS = [
-  { id: "welcome",     label: "Welcome" },
-  { id: "plan",        label: "Choose Plan" },
-  { id: "contract",    label: "Agreement" },
-  { id: "payment",     label: "Payment Plan" },
-  { id: "about",       label: "About You" },
-  { id: "preferences", label: "Job Preferences" },
-  { id: "workstyle",   label: "Work Style" },
-  { id: "salary",      label: "Salary & Availability" },
-  { id: "review",      label: "Review" },
-];
+interface StepDefinition {
+  id: StepId;
+  label: string;
+}
 
-// ─── Progress Bar ──────────────────────────────────────────────
+interface InitialIntakeState {
+  selectedPlan?: PlanType | null;
+  offerPath?: OfferPath | null;
+  submittedCode?: string | null;
+  previewAgreedAt?: string | null;
+}
 
-function ProgressBar({ currentStep }: { currentStep: number }) {
+const PLAN_BASE_FEES: Record<PlanType, number> = {
+  essentials: 500,
+  premium: 1000,
+};
+
+function buildBaseQuote(planType: PlanType): OfferQuote {
+  return {
+    planType,
+    code: null,
+    source: null,
+    applied: false,
+    invalidCode: false,
+    baseFee: PLAN_BASE_FEES[planType],
+    discountPercent: 0,
+    discountAmount: 0,
+    finalFee: PLAN_BASE_FEES[planType],
+  };
+}
+
+function buildSteps(offerPath: OfferPath): StepDefinition[] {
+  if (offerPath === "strategy_preview") {
+    return [
+      { id: "welcome", label: "Welcome" },
+      { id: "plan", label: "Choose Plan" },
+      { id: "preview", label: "Preview Terms" },
+      { id: "about", label: "About You" },
+      { id: "preferences", label: "Job Preferences" },
+      { id: "workstyle", label: "Work Style" },
+      { id: "salary", label: "Salary & Availability" },
+      { id: "review", label: "Review" },
+    ];
+  }
+
+  return [
+    { id: "welcome", label: "Welcome" },
+    { id: "plan", label: "Choose Plan" },
+    { id: "contract", label: "Agreement" },
+    { id: "payment", label: "Payment Plan" },
+    { id: "about", label: "About You" },
+    { id: "preferences", label: "Job Preferences" },
+    { id: "workstyle", label: "Work Style" },
+    { id: "salary", label: "Salary & Availability" },
+    { id: "review", label: "Review" },
+  ];
+}
+
+function ProgressBar({
+  currentStep,
+  steps,
+}: {
+  currentStep: number;
+  steps: StepDefinition[];
+}) {
   return (
     <>
-      {/* Desktop stepper */}
       <div className="hidden sm:flex items-center justify-between mb-8">
-        {STEPS.map((step, i) => (
+        {steps.map((step, index) => (
           <div key={step.id} className="flex items-center">
             <div className="flex flex-col items-center">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                  i < currentStep
+                  index < currentStep
                     ? "bg-green-500 text-white"
-                    : i === currentStep
+                    : index === currentStep
                     ? "bg-blue-600 text-white"
                     : "bg-gray-200 text-gray-500"
                 }`}
               >
-                {i < currentStep ? (
+                {index < currentStep ? (
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 ) : (
-                  i + 1
+                  index + 1
                 )}
               </div>
-              <span className={`text-xs mt-1 ${i === currentStep ? "text-blue-600 font-medium" : "text-gray-500"}`}>
+              <span
+                className={`text-xs mt-1 ${
+                  index === currentStep ? "text-blue-600 font-medium" : "text-gray-500"
+                }`}
+              >
                 {step.label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
-              <div className={`w-12 lg:w-20 h-0.5 mx-1 ${i < currentStep ? "bg-green-500" : "bg-gray-200"}`} />
+            {index < steps.length - 1 && (
+              <div
+                className={`w-12 lg:w-20 h-0.5 mx-1 ${
+                  index < currentStep ? "bg-green-500" : "bg-gray-200"
+                }`}
+              />
             )}
           </div>
         ))}
       </div>
-      {/* Mobile stepper */}
+
       <div className="sm:hidden mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-700">
-            Step {currentStep + 1} of {STEPS.length}
+            Step {currentStep + 1} of {steps.length}
           </span>
-          <span className="text-sm text-gray-500">{STEPS[currentStep].label}</span>
+          <span className="text-sm text-gray-500">{steps[currentStep]?.label}</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
             className="bg-blue-600 h-2 rounded-full transition-all"
-            style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
           />
         </div>
       </div>
@@ -125,42 +212,82 @@ function ProgressBar({ currentStep }: { currentStep: number }) {
   );
 }
 
-// ─── Main Wizard ───────────────────────────────────────────────
-
 export default function OnboardingWizard({
   profile: initial,
   documents: initialDocs,
   userEmail,
+  initialOfferCode,
+  initialIntakeState,
 }: {
   profile: ProfileData;
   documents: DocRecord[];
   userEmail: string;
+  initialOfferCode?: string | null;
+  initialIntakeState?: InitialIntakeState | null;
 }) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [profile, setProfile] = useState<ProfileData>(initial);
   const [docs, setDocs] = useState<DocRecord[]>(initialDocs);
   const [saving, setSaving] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<"essentials" | "premium" | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(
+    initialIntakeState?.selectedPlan ?? initial.plan_type ?? null
+  );
+  const [selectedOfferPath, setSelectedOfferPath] = useState<OfferPath>(
+    initialIntakeState?.offerPath ?? "discount"
+  );
+  const [offerCodeInput, setOfferCodeInput] = useState(
+    initialIntakeState?.submittedCode ?? initialOfferCode ?? initial.offer_code ?? ""
+  );
+  const [appliedOfferCode, setAppliedOfferCode] = useState<string | null>(
+    initialIntakeState?.submittedCode ?? initialOfferCode ?? initial.offer_code ?? null
+  );
+  const [offerQuote, setOfferQuote] = useState<OfferQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [signedRegistrationFee, setSignedRegistrationFee] = useState<number | null>(null);
+  const [previewAgreedAt, setPreviewAgreedAt] = useState<string | null>(
+    initialIntakeState?.previewAgreedAt ?? null
+  );
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+
+  const steps = useMemo(() => buildSteps(selectedOfferPath), [selectedOfferPath]);
+  const currentStepId = steps[currentStep]?.id ?? steps[0].id;
+
+  const summaryStepIndexes = useMemo(() => {
+    const findStepIndex = (stepId: StepId) =>
+      Math.max(
+        0,
+        steps.findIndex((step) => step.id === stepId)
+      );
+
+    return {
+      about: findStepIndex("about"),
+      preferences: findStepIndex("preferences"),
+      workstyle: findStepIndex("workstyle"),
+      salary: findStepIndex("salary"),
+    };
+  }, [steps]);
 
   const update = useCallback((key: keyof ProfileData, value: unknown) => {
-    setProfile((p) => ({ ...p, [key]: value }));
+    setProfile((current) => ({ ...current, [key]: value }));
   }, []);
 
   const updateMany = useCallback((fields: Partial<ProfileData>) => {
-    setProfile((p) => ({ ...p, ...fields }));
+    setProfile((current) => ({ ...current, ...fields }));
   }, []);
 
   const saveFields = useCallback(async (fields: Partial<ProfileData>): Promise<boolean> => {
     setSaving(true);
     try {
-      const res = await fetch("/api/portal/profile", {
+      const response = await fetch("/api/portal/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fields),
       });
-      if (!res.ok) return false;
-      const { profile: updated } = await res.json();
+      if (!response.ok) return false;
+      const { profile: updated } = await response.json();
       setProfile(updated);
       return true;
     } catch {
@@ -170,17 +297,93 @@ export default function OnboardingWizard({
     }
   }, []);
 
-  const goNext = () => {
-    if (currentStep < STEPS.length - 1) setCurrentStep((s) => s + 1);
-  };
+  const goNext = useCallback(() => {
+    setCurrentStep((step) => Math.min(step + 1, steps.length - 1));
+  }, [steps.length]);
 
-  const goBack = () => {
-    if (currentStep > 0) setCurrentStep((s) => s - 1);
-  };
+  const goBack = useCallback(() => {
+    setCurrentStep((step) => Math.max(step - 1, 0));
+  }, []);
 
-  const goToStep = (step: number) => {
-    setCurrentStep(step);
-  };
+  const goToStep = useCallback(
+    (step: number) => {
+      if (step >= 0 && step < steps.length) {
+        setCurrentStep(step);
+      }
+    },
+    [steps.length]
+  );
+
+  const applyOfferCode = useCallback(() => {
+    setSignedRegistrationFee(null);
+    const trimmedCode = offerCodeInput.trim();
+    setAppliedOfferCode(trimmedCode ? trimmedCode : null);
+  }, [offerCodeInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadQuote() {
+      if (!selectedPlan) {
+        setOfferQuote(null);
+        setQuoteError(null);
+        setQuoteLoading(false);
+        return;
+      }
+
+      if (selectedOfferPath === "strategy_preview") {
+        setOfferQuote(buildBaseQuote(selectedPlan));
+        setQuoteError(null);
+        setQuoteLoading(false);
+        return;
+      }
+
+      if (!appliedOfferCode) {
+        setOfferQuote(buildBaseQuote(selectedPlan));
+        setQuoteError(null);
+        setQuoteLoading(false);
+        return;
+      }
+
+      setQuoteLoading(true);
+      setQuoteError(null);
+      try {
+        const response = await fetch("/api/portal/billing/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planType: selectedPlan,
+            code: appliedOfferCode,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (!response.ok || !data?.quote) {
+          setOfferQuote(buildBaseQuote(selectedPlan));
+          setQuoteError(data?.error || "Could not validate that code.");
+          return;
+        }
+
+        setOfferQuote(data.quote as OfferQuote);
+        setQuoteError(data.quote.invalidCode ? data.quote.message : null);
+      } catch {
+        if (!cancelled) {
+          setOfferQuote(buildBaseQuote(selectedPlan));
+          setQuoteError("Network error while validating your code.");
+        }
+      } finally {
+        if (!cancelled) {
+          setQuoteLoading(false);
+        }
+      }
+    }
+
+    loadQuote();
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedOfferCode, selectedOfferPath, selectedPlan]);
 
   const handleSkip = () => {
     document.cookie = "jg_onboarding_skipped=1; path=/; max-age=86400; SameSite=Lax";
@@ -188,15 +391,70 @@ export default function OnboardingWizard({
   };
 
   const handleFinish = async () => {
-    const ok = await saveFields({ onboarding_completed_at: new Date().toISOString() });
-    if (ok) {
+    if (!selectedPlan) {
+      setFinishError("Select a plan before submitting for review.");
+      return;
+    }
+
+    setFinishError(null);
+    setFinishing(true);
+    const completedAt = new Date().toISOString();
+    const onboardingSaved = await saveFields({ onboarding_completed_at: completedAt });
+
+    if (!onboardingSaved) {
+      setFinishError("Could not save your onboarding details. Please try again.");
+      setFinishing(false);
+      return;
+    }
+
+    const baseQuote = buildBaseQuote(selectedPlan);
+    const baseRegistrationFee = offerQuote?.baseFee ?? baseQuote.baseFee;
+    const discountAmount =
+      selectedOfferPath === "discount" ? offerQuote?.discountAmount ?? 0 : 0;
+    const finalRegistrationFee =
+      selectedOfferPath === "discount"
+        ? signedRegistrationFee ?? offerQuote?.finalFee ?? baseQuote.finalFee
+        : baseQuote.finalFee;
+
+    try {
+      const response = await fetch("/api/portal/intake/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selectedPlan,
+          offerPath: selectedOfferPath,
+          submittedCode:
+            selectedOfferPath === "discount" ? appliedOfferCode : null,
+          baseRegistrationFee,
+          discountAmount,
+          finalRegistrationFee,
+          previewAgreedAt:
+            selectedOfferPath === "strategy_preview"
+              ? previewAgreedAt ?? new Date().toISOString()
+              : null,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setFinishError(
+          data?.error || "Could not submit your profile for review. Please try again."
+        );
+        setFinishing(false);
+        return;
+      }
+
       router.push("/portal");
+    } catch {
+      setFinishError(
+        "Could not submit your profile for review. Please check your connection and try again."
+      );
+      setFinishing(false);
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto pb-12">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Set Up Your Profile</h1>
         <button
@@ -207,10 +465,9 @@ export default function OnboardingWizard({
         </button>
       </div>
 
-      <ProgressBar currentStep={currentStep} />
+      <ProgressBar currentStep={currentStep} steps={steps} />
 
-      {/* Step content */}
-      {currentStep === 0 && (
+      {currentStepId === "welcome" && (
         <WelcomeResumeStep
           profile={profile}
           docs={docs}
@@ -220,31 +477,69 @@ export default function OnboardingWizard({
           userName={profile.full_name || userEmail}
         />
       )}
-      {currentStep === 1 && (
+
+      {currentStepId === "plan" && (
         <PlanSelectionStep
           selectedPlan={selectedPlan}
-          onSelectPlan={(plan) => setSelectedPlan(plan)}
+          onSelectPlan={(plan) => {
+            setSelectedPlan(plan);
+            setSignedRegistrationFee(null);
+          }}
+          offerPath={selectedOfferPath}
+          onOfferPathChange={(path) => {
+            setSelectedOfferPath(path);
+            setSignedRegistrationFee(null);
+          }}
+          offerCode={offerCodeInput}
+          onOfferCodeChange={(value) => setOfferCodeInput(value)}
+          onApplyOfferCode={applyOfferCode}
+          offerQuote={offerQuote}
+          quoteLoading={quoteLoading}
+          quoteError={quoteError}
           onContinue={goNext}
           onBack={goBack}
         />
       )}
-      {currentStep === 2 && selectedPlan && (
+
+      {currentStepId === "preview" && selectedPlan && (
+        <StrategyPreviewAgreementStep
+          planType={selectedPlan}
+          baseRegistrationFee={PLAN_BASE_FEES[selectedPlan]}
+          initialAgreed={Boolean(previewAgreedAt)}
+          onContinue={(agreedAt) => {
+            setPreviewAgreedAt(agreedAt);
+            goNext();
+          }}
+          onBack={goBack}
+        />
+      )}
+
+      {currentStepId === "contract" && selectedPlan && (
         <ContractStep
           seekerName={profile.full_name || userEmail}
           seekerEmail={profile.email || userEmail}
           planType={selectedPlan}
-          onContinue={goNext}
+          offerCode={appliedOfferCode}
+          quote={offerQuote ?? buildBaseQuote(selectedPlan)}
+          onContinue={(registrationFee) => {
+            setSignedRegistrationFee(registrationFee);
+            goNext();
+          }}
           onBack={goBack}
         />
       )}
-      {currentStep === 3 && selectedPlan && (
+
+      {currentStepId === "payment" && selectedPlan && (
         <InstallmentPlanStep
-          planType={selectedPlan}
+          registrationFee={
+            signedRegistrationFee ?? offerQuote?.finalFee ?? PLAN_BASE_FEES[selectedPlan]
+          }
           onContinue={goNext}
           onBack={goBack}
         />
       )}
-      {currentStep === 4 && (
+
+      {currentStepId === "about" && (
         <AboutYouStep
           profile={profile}
           update={update}
@@ -254,7 +549,8 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 5 && (
+
+      {currentStepId === "preferences" && (
         <JobPreferencesStep
           profile={profile}
           update={update}
@@ -264,7 +560,8 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 6 && (
+
+      {currentStepId === "workstyle" && (
         <WorkStyleLocationStep
           profile={profile}
           update={update}
@@ -274,7 +571,8 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 7 && (
+
+      {currentStepId === "salary" && (
         <SalaryAvailabilityStep
           profile={profile}
           update={update}
@@ -284,10 +582,14 @@ export default function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {currentStep === 8 && (
+
+      {currentStepId === "review" && (
         <ReviewFinishStep
           profile={profile}
-          saving={saving}
+          offerPath={selectedOfferPath}
+          summaryStepIndexes={summaryStepIndexes}
+          saving={saving || finishing}
+          finishError={finishError}
           goToStep={goToStep}
           onFinish={handleFinish}
           onBack={goBack}

@@ -80,6 +80,8 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin", label: "Admin Overview", icon: "shield", exact: true },
     { href: "/dashboard/admin/accounts", label: "Account Managers", icon: "user-cog" },
     { href: "/dashboard/admin/job-seekers", label: "All Job Seekers", icon: "users-all" },
+    { href: "/dashboard/admin/intake", label: "Intake Queue", icon: "queue" },
+    { href: "/dashboard/admin/capacity", label: "AM Capacity", icon: "chart" },
     { href: "/dashboard/admin/assignments", label: "Assignments", icon: "link" },
     { href: "/dashboard/admin/broadcast", label: "Broadcast", icon: "megaphone" },
     { href: "/dashboard/admin/analytics", label: "Analytics", icon: "analytics" },

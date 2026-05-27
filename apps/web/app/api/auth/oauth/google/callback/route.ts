@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/auth";
 import type { UserType } from "@/lib/auth";
+import { normalizeOfferCode } from "@/lib/offers";
+import { createReferral, getReferrerByCode } from "@/lib/referrals";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const REFRESH_TOKEN_COOKIE = "jg_refresh_token";
@@ -34,6 +36,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const userType: UserType =
     url.searchParams.get("userType") === "am" ? "am" : "job_seeker";
+  const normalizedOfferCode = normalizeOfferCode(url.searchParams.get("offerCode"));
 
   if (!code) {
     return NextResponse.redirect(
@@ -100,20 +103,46 @@ export async function GET(request: Request) {
       .eq("email", email)
       .maybeSingle();
 
+    let seekerId = existing?.id as string | undefined;
+
     if (existing) {
+      const seekerUpdates: Record<string, unknown> = {};
       if (!existing.auth_id) {
+        seekerUpdates.auth_id = authUser.id;
+      }
+      if (!existing.full_name && fullName) {
+        seekerUpdates.full_name = fullName;
+      }
+      if (normalizedOfferCode) {
+        seekerUpdates.offer_code = normalizedOfferCode;
+      }
+      if (Object.keys(seekerUpdates).length > 0) {
         await supabaseAdmin
           .from("job_seekers")
-          .update({ auth_id: authUser.id, full_name: existing.full_name ?? fullName })
+          .update(seekerUpdates)
           .eq("id", existing.id);
       }
     } else {
-      await supabaseAdmin.from("job_seekers").insert({
-        email,
-        full_name: fullName,
-        auth_id: authUser.id,
-        status: "active",
-      });
+      const { data: insertedSeeker } = await supabaseAdmin
+        .from("job_seekers")
+        .insert({
+          email,
+          full_name: fullName,
+          auth_id: authUser.id,
+          status: "active",
+          offer_code: normalizedOfferCode,
+        })
+        .select("id")
+        .single();
+
+      seekerId = insertedSeeker?.id;
+    }
+
+    if (seekerId && normalizedOfferCode) {
+      const referrerId = await getReferrerByCode(normalizedOfferCode);
+      if (referrerId && referrerId !== seekerId) {
+        await createReferral(referrerId, seekerId);
+      }
     }
   }
 
@@ -135,6 +164,13 @@ export async function GET(request: Request) {
     maxAge: 60 * 60 * 24 * 7,
   });
 
-  const dest = userType === "job_seeker" ? "/portal/onboarding" : "/dashboard";
+  const onboardingParams = new URLSearchParams();
+  if (normalizedOfferCode) {
+    onboardingParams.set("code", normalizedOfferCode);
+  }
+  const dest =
+    userType === "job_seeker"
+      ? `/portal/onboarding${onboardingParams.toString() ? `?${onboardingParams.toString()}` : ""}`
+      : "/dashboard";
   return NextResponse.redirect(`${origin}${dest}`);
 }

@@ -42,7 +42,7 @@ const STATUS_BADGE: Record<ReferralStatus, string> = {
 const STATUS_LABEL: Record<ReferralStatus, string> = {
   signed_up: "Signed Up",
   placed: "Placed",
-  rewarded: "Rewarded",
+  rewarded: "Credited",
 };
 
 function formatDate(iso: string | null) {
@@ -127,14 +127,16 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
     { key: "all", label: "All", count: stats.total },
     { key: "signed_up", label: "Signed Up", count: stats.signed_up },
     { key: "placed", label: "Placed", count: stats.placed },
-    { key: "rewarded", label: "Rewarded", count: stats.rewarded },
+    { key: "rewarded", label: "Credited", count: stats.rewarded },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Referrals</h1>
-        <p className="mt-1 text-sm text-gray-500">Manage referral rewards and track placement outcomes.</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Track referral conversions and the registration credits they generated.
+        </p>
       </div>
 
       {/* Stats */}
@@ -143,9 +145,9 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
           { label: "Total", value: stats.total, color: "text-gray-900" },
           { label: "Signed Up", value: stats.signed_up, color: "text-blue-600" },
           { label: "Placed", value: stats.placed, color: "text-green-600" },
-          { label: "Rewarded", value: stats.rewarded, color: "text-purple-600" },
-          { label: "Paid Out", value: `$${stats.total_paid.toFixed(2)}`, color: "text-purple-600" },
-          { label: "Pending", value: `$${stats.pending_payout.toFixed(2)}`, color: "text-amber-600" },
+          { label: "Credited", value: stats.rewarded, color: "text-purple-600" },
+          { label: "Credits Issued", value: `$${stats.total_paid.toFixed(2)}`, color: "text-purple-600" },
+          { label: "Awaiting Credit", value: `$${stats.pending_payout.toFixed(2)}`, color: "text-amber-600" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -186,8 +188,8 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Signed Up</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Placed</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Reward</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Paid</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Credit</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Issued</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
                 </tr>
               </thead>
@@ -233,7 +235,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Edit Referral</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Edit Referral Credit</h2>
                 <button onClick={closeEdit} className="p-1 rounded hover:bg-gray-100">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -246,7 +248,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reward Amount ($)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Credit Amount ($)</label>
                 <input
                   type="number"
                   min="0"
@@ -277,7 +279,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                     onChange={(e) => setEditMarkPaid(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">Mark as paid (sets status to Rewarded)</span>
+                  <span className="text-sm font-medium text-gray-700">Mark as credited</span>
                 </label>
               )}
 

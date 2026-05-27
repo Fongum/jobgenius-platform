@@ -4,10 +4,27 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { hasOpenTask } from "@/lib/conversations/tasks";
+import {
+  formatCapacityMonthLabel,
+  getIntakeStateByJobSeekerId,
+  type IntakeStateRecord,
+} from "@/lib/intake";
 
 type AccountManagerSummary = {
   name: string | null;
   email: string | null;
+};
+
+type IntakeViewModel = {
+  eyebrow: string;
+  title: string;
+  body: string;
+  tone: "amber" | "blue" | "green" | "red";
+  primaryHref: string;
+  primaryLabel: string;
+  secondaryHref?: string;
+  secondaryLabel?: string;
+  meta?: string;
 };
 
 async function getAssignedAccountManager(jobSeekerId: string): Promise<AccountManagerSummary | null> {
@@ -54,6 +71,145 @@ async function getAssignedAccountManager(jobSeekerId: string): Promise<AccountMa
   return null;
 }
 
+function formatShortDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function buildIntakeStatusView(intakeState: IntakeStateRecord): IntakeViewModel {
+  const capacityLabel = intakeState.capacity_month
+    ? formatCapacityMonthLabel(intakeState.capacity_month)
+    : null;
+  const previewExpiryLabel = formatShortDate(intakeState.preview_expires_at);
+
+  switch (intakeState.status) {
+    case "approved_payment_pending":
+      return {
+        eyebrow: "Spot Reserved",
+        title: "Your onboarding spot is reserved.",
+        body: "Finish your registration payment to unlock live applications, outreach, and account manager execution.",
+        tone: "green",
+        primaryHref: "/portal/billing",
+        primaryLabel: "Finish Billing Setup",
+        secondaryHref: "/portal/profile",
+        secondaryLabel: "Review Profile",
+        meta: capacityLabel ? `Reserved against ${capacityLabel} capacity.` : undefined,
+      };
+    case "waitlisted":
+      return {
+        eyebrow: "Waitlist",
+        title: "You are in the next review window.",
+        body: "This month's onboarding spots are currently full. We will reach back out as soon as a real account manager slot opens.",
+        tone: "blue",
+        primaryHref: "/portal/profile",
+        primaryLabel: "Review Your Profile",
+        secondaryHref: "/portal/billing",
+        secondaryLabel: "View Billing",
+        meta: capacityLabel ? `Current capacity window: ${capacityLabel}.` : undefined,
+      };
+    case "rejected":
+      return {
+        eyebrow: "Not Approved",
+        title: "We could not approve this search yet.",
+        body: "Your current profile is not approved for a managed onboarding spot. You can still update your profile and billing details while we reassess future intake.",
+        tone: "red",
+        primaryHref: "/portal/profile",
+        primaryLabel: "Update Profile",
+        secondaryHref: "/portal/billing",
+        secondaryLabel: "View Billing",
+      };
+    case "approved_preview":
+      return {
+        eyebrow: "Strategy Preview",
+        title: "Your strategy preview slot is approved.",
+        body: "Your account manager can now prepare your resume audit, target-role plan, and kickoff notes. Live applications and outreach still wait until registration funding is confirmed.",
+        tone: "green",
+        primaryHref: "/portal/billing",
+        primaryLabel: "View Conversion Options",
+        secondaryHref: "/portal/profile",
+        secondaryLabel: "Review Profile",
+        meta: capacityLabel ? `Reserved against ${capacityLabel} preview capacity.` : undefined,
+      };
+    case "preview_active":
+      return {
+        eyebrow: "Strategy Preview",
+        title: "Your strategy preview is live.",
+        body: "Your account manager is in the planning window now. Convert to full service to move into live applications and outreach.",
+        tone: "green",
+        primaryHref: "/portal/billing",
+        primaryLabel: "Convert to Full Service",
+        secondaryHref: "/portal/profile",
+        secondaryLabel: "Review Profile",
+        meta: previewExpiryLabel
+          ? `Preview window ends on ${previewExpiryLabel}.`
+          : undefined,
+      };
+    case "preview_expired":
+      return {
+        eyebrow: "Preview Expired",
+        title: "Your preview window has ended.",
+        body: "Complete your registration payment to reserve a spot and move into live search execution.",
+        tone: "amber",
+        primaryHref: "/portal/billing",
+        primaryLabel: "Convert to Full Service",
+        secondaryHref: "/portal/profile",
+        secondaryLabel: "Review Profile",
+        meta: previewExpiryLabel ? `Preview ended on ${previewExpiryLabel}.` : undefined,
+      };
+    case "submitted":
+    case "pending_review":
+    default:
+      return {
+        eyebrow: "Pending Review",
+        title: "Your onboarding is under review.",
+        body: "We review fit before a spot is reserved. Our team will confirm whether a dedicated account manager can take your search this month.",
+        tone: "amber",
+        primaryHref: "/portal/billing",
+        primaryLabel: "Review Billing",
+        secondaryHref: "/portal/profile",
+        secondaryLabel: "Review Profile",
+      };
+  }
+}
+
+function toneClasses(tone: IntakeViewModel["tone"]) {
+  switch (tone) {
+    case "green":
+      return {
+        shell: "border-green-200 bg-green-50",
+        eyebrow: "text-green-700",
+        body: "text-green-900/85",
+        button: "bg-green-600 hover:bg-green-700",
+      };
+    case "blue":
+      return {
+        shell: "border-blue-200 bg-blue-50",
+        eyebrow: "text-blue-700",
+        body: "text-blue-900/85",
+        button: "bg-blue-600 hover:bg-blue-700",
+      };
+    case "red":
+      return {
+        shell: "border-red-200 bg-red-50",
+        eyebrow: "text-red-700",
+        body: "text-red-900/85",
+        button: "bg-red-600 hover:bg-red-700",
+      };
+    case "amber":
+    default:
+      return {
+        shell: "border-amber-200 bg-amber-50",
+        eyebrow: "text-amber-700",
+        body: "text-amber-900/85",
+        button: "bg-amber-600 hover:bg-amber-700",
+      };
+  }
+}
+
 export default async function PortalPage() {
   const user = await getCurrentUser();
   // Layout already handles redirect, but guard for safety
@@ -73,6 +229,74 @@ export default async function PortalPage() {
   // Redirect to onboarding if new user (hasn't completed onboarding and hasn't skipped)
   if (jobSeeker && !jobSeeker.onboarding_completed_at && !skippedOnboarding) {
     redirect("/portal/onboarding");
+  }
+
+  const intakeState = await getIntakeStateByJobSeekerId(user.id);
+  const accountManager = await getAssignedAccountManager(user.id);
+
+  if (
+    intakeState &&
+    [
+      "submitted",
+      "pending_review",
+      "waitlisted",
+      "rejected",
+      "approved_payment_pending",
+      "approved_preview",
+      "preview_active",
+      "preview_expired",
+    ].includes(intakeState.status)
+  ) {
+    const view = buildIntakeStatusView(intakeState);
+    const tone = toneClasses(view.tone);
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className={`rounded-3xl border p-8 shadow-sm ${tone.shell}`}>
+          <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${tone.eyebrow}`}>
+            {view.eyebrow}
+          </p>
+          <h1 className="mt-3 text-3xl font-bold text-gray-900">{view.title}</h1>
+          <p className={`mt-4 max-w-2xl text-base leading-relaxed ${tone.body}`}>
+            {view.body}
+          </p>
+          {view.meta && <p className={`mt-3 text-sm ${tone.body}`}>{view.meta}</p>}
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href={view.primaryHref}
+              className={`inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold text-white transition-colors ${tone.button}`}
+            >
+              {view.primaryLabel}
+            </Link>
+            {view.secondaryHref && view.secondaryLabel && (
+              <Link
+                href={view.secondaryHref}
+                className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                {view.secondaryLabel}
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {accountManager && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900">Assigned Account Manager</h2>
+            <p className="mt-3 font-medium text-gray-900">
+              {accountManager.name || "Assigned account manager"}
+            </p>
+            {accountManager.email && (
+              <p className="text-sm text-gray-600">{accountManager.email}</p>
+            )}
+            <p className="mt-3 text-sm text-gray-500">
+              Your search owner has been attached to this onboarding slot. Live execution
+              begins once your current intake status allows it.
+            </p>
+          </div>
+        )}
+      </div>
+    );
   }
 
   // Get application stats
@@ -138,7 +362,6 @@ export default async function PortalPage() {
     ).length;
   }
 
-  const accountManager = await getAssignedAccountManager(user.id);
   const profileCompletion = jobSeeker?.profile_completion ?? 0;
 
   // Determine pipeline stage

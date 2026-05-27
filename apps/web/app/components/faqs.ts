@@ -1,5 +1,21 @@
 export const FAQS = [
   {
+    q: "What is the 7-day strategy preview?",
+    a: "It is a short planning engagement before full paid execution. You get a resume audit, a target-role plan, and an optional kickoff call. Live applications, recruiter outreach, and ongoing account manager execution only begin after you convert to full service.",
+  },
+  {
+    q: "Can I combine the strategy preview with the registration discount?",
+    a: "No. The preview and the direct-signup discount are separate paths. If you want the lower registration price, sign up directly with a valid referral or promo code. If you want the preview first, you convert later at the standard plan price.",
+  },
+  {
+    q: "How do referral discounts work?",
+    a: "A valid seeker referral code gives the new client 20% off Essentials or 25% off Premium on the registration fee. Admin promo codes can also apply those registration discounts when active.",
+  },
+  {
+    q: "What do I get for referring someone?",
+    a: "After your referral is approved and completes their first registration payment, you earn a 5% registration credit. That credit is applied against your own registration balance, subject to the program rules in your portal.",
+  },
+  {
     q: "What if I don't land a job?",
     a: "Your registration fee covers the work we do on your behalf — building your search strategy, running applications, and recruiter outreach. If you don't receive an accepted offer, no success commission is ever charged. We're financially incentivized to get you placed.",
   },

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import CapacityNotice, { type CapacityNoticeSummary } from "../CapacityNotice";
 import ScrollReveal from "../ScrollReveal";
 
 function PricingItem({
@@ -40,7 +41,11 @@ function PricingItem({
   );
 }
 
-export default function PricingSection() {
+export default function PricingSection({
+  capacitySummary,
+}: {
+  capacitySummary?: CapacityNoticeSummary | null;
+}) {
   return (
     <section id="pricing" className="py-20 sm:py-28">
       <ScrollReveal>
@@ -52,9 +57,28 @@ export default function PricingSection() {
             Simple pricing. Real execution.
           </h2>
           <p className="text-center text-gray-500 max-w-2xl mx-auto mb-16">
-            Choose your plan and how to pay. Both plans support 1 to 3 installments
-            completed within 1 month.
+            Choose your plan and your path. Sign up directly with a valid code for
+            discounted registration pricing, or start with a 7-day strategy preview
+            before you commit to live execution.
           </p>
+
+          {capacitySummary && (
+            <CapacityNotice
+              summary={capacitySummary}
+              variant="outline"
+              compact
+              className="mb-10 max-w-2xl mx-auto"
+            />
+          )}
+
+          <div className="mb-10 rounded-2xl border border-orange-200 bg-orange-50 px-6 py-5 text-center max-w-3xl mx-auto">
+            <p className="text-sm font-semibold text-orange-900">
+              Direct signup offer: 20% off Essentials and 25% off Premium with a valid promo or referral code.
+            </p>
+            <p className="mt-2 text-sm text-orange-800">
+              Need more confidence first? Start with a 7-day strategy preview for resume audit, role strategy, and kickoff planning before converting to full service.
+            </p>
+          </div>
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {/* Tier 1 — Essentials */}

@@ -239,12 +239,20 @@ export default function BillingAdminClient({
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Billing</h1>
-        <a
-          href="/dashboard/billing/settings"
-          className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Payment Settings
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href="/dashboard/billing/settings/promo-codes"
+            className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Promo Codes
+          </a>
+          <a
+            href="/dashboard/billing/settings"
+            className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Payment Settings
+          </a>
+        </div>
       </div>
 
       {/* Stats row */}

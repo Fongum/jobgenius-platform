@@ -28,9 +28,14 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const userType = url.searchParams.get("userType") === "am" ? "am" : "job_seeker";
+  const offerCode = url.searchParams.get("offerCode")?.trim().toUpperCase() || null;
 
   const origin = process.env.NEXT_PUBLIC_APP_URL || `${url.protocol}//${url.host}`;
-  const redirectTo = `${origin}/api/auth/oauth/google/callback?userType=${userType}`;
+  const redirectParams = new URLSearchParams({ userType });
+  if (offerCode) {
+    redirectParams.set("offerCode", offerCode);
+  }
+  const redirectTo = `${origin}/api/auth/oauth/google/callback?${redirectParams.toString()}`;
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

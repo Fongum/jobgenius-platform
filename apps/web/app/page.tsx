@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getPublicCapacitySummary } from "@/lib/intake";
 import MarketingShell from "./components/MarketingShell";
 import { FAQS } from "./components/faqs";
 import {
@@ -9,6 +10,7 @@ import {
   HowItWorksSection,
   WhatWeDoSection,
   StatsSection,
+  RolePathsSection,
   AiHumanSection,
   InterviewPrepSection,
   ReferralSection,
@@ -29,8 +31,8 @@ const faqJsonLd = {
   })),
 };
 
-export default function HomePage() {
-  const cookieStore = cookies();
+export default async function HomePage() {
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get("jg_access_token")?.value;
   const userType = cookieStore.get("jg_user_type")?.value;
 
@@ -41,26 +43,29 @@ export default function HomePage() {
     redirect("/dashboard");
   }
 
+  const capacitySummary = await getPublicCapacitySummary();
+
   return (
     <MarketingShell>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
-      <HeroSection />
+      <HeroSection capacitySummary={capacitySummary} />
       <CompaniesStrip />
       <PainPointSection />
       <HowItWorksSection />
       <WhatWeDoSection />
       <StatsSection />
+      <RolePathsSection />
       <AiHumanSection />
       <InterviewPrepSection />
       <ReferralSection />
       <NetworkSection />
-      <PricingSection />
+      <PricingSection capacitySummary={capacitySummary} />
       <TestimonialsSection />
       <FaqSection />
-      <FinalCtaSection />
+      <FinalCtaSection capacitySummary={capacitySummary} />
     </MarketingShell>
   );
 }

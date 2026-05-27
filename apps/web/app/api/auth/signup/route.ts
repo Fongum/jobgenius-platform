@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { signUp, signIn } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import type { UserType } from "@/lib/auth";
+import { normalizeOfferCode } from "@/lib/offers";
 import { enforceRateLimit } from "@/lib/rate-limit";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
@@ -34,6 +35,7 @@ type SignUpPayload = {
   userType?: UserType;
   inviteToken?: string;
   referralCode?: string;
+  offerCode?: string;
   resume?: ResumePrefillPayload;
 };
 
@@ -68,7 +70,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, password, name, userType = "am", inviteToken, referralCode, resume } = payload;
+  const {
+    email,
+    password,
+    name,
+    userType = "am",
+    inviteToken,
+    referralCode,
+    offerCode,
+    resume,
+  } = payload;
+  const normalizedOfferCode = normalizeOfferCode(offerCode ?? referralCode);
 
   const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "unknown";
 
@@ -153,6 +165,7 @@ export async function POST(request: Request) {
   // Apply parsed-resume prefill to the new job seeker (best-effort, non-fatal)
   if (result.user?.userType === "job_seeker" && resume) {
     const updates: Record<string, unknown> = {};
+    if (normalizedOfferCode) updates.offer_code = normalizedOfferCode;
     if (resume.phone && typeof resume.phone === "string") updates.phone = resume.phone;
     if (resume.linkedin_url && typeof resume.linkedin_url === "string") {
       updates.linkedin_url = resume.linkedin_url;
@@ -176,6 +189,15 @@ export async function POST(request: Request) {
       if (prefillError) {
         console.error("Resume prefill on signup failed (non-fatal):", prefillError);
       }
+    }
+  } else if (result.user?.userType === "job_seeker" && normalizedOfferCode) {
+    const { error: offerCodeError } = await supabaseAdmin
+      .from("job_seekers")
+      .update({ offer_code: normalizedOfferCode })
+      .eq("id", result.user.id);
+
+    if (offerCodeError) {
+      console.error("Offer code save on signup failed (non-fatal):", offerCodeError);
     }
   }
 
@@ -221,10 +243,10 @@ export async function POST(request: Request) {
   }
 
   // Process referral (job_seeker signups only, non-fatal)
-  if (result.user?.userType === "job_seeker" && referralCode) {
+  if (result.user?.userType === "job_seeker" && normalizedOfferCode) {
     try {
       const { getReferrerByCode, createReferral } = await import("@/lib/referrals");
-      const referrerId = await getReferrerByCode(referralCode);
+      const referrerId = await getReferrerByCode(normalizedOfferCode);
       const newSeekerId = result.user.id;
       if (referrerId && referrerId !== newSeekerId) {
         await createReferral(referrerId, newSeekerId);

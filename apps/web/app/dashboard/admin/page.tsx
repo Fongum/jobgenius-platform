@@ -132,6 +132,18 @@ export default async function AdminPage() {
         <h2 className="font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
           <Link
+            href="/dashboard/admin/intake"
+            className="px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors"
+          >
+            Review Intake Queue
+          </Link>
+          <Link
+            href="/dashboard/admin/capacity"
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Adjust AM Capacity
+          </Link>
+          <Link
             href="/dashboard/admin/accounts?action=create"
             className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
           >

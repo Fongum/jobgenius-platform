@@ -27,7 +27,7 @@ interface RegistrationFlexRequest {
 }
 
 interface InstallmentPlanStepProps {
-  planType: "essentials" | "premium";
+  registrationFee: number;
   onContinue: () => void;
   onBack: () => void;
   showBackButton?: boolean;
@@ -100,12 +100,12 @@ function buildInstallmentDraft(
 }
 
 export default function InstallmentPlanStep({
-  planType,
+  registrationFee,
   onContinue,
   onBack,
   showBackButton = true,
 }: InstallmentPlanStepProps) {
-  const totalFee = planType === "premium" ? 1000 : 500;
+  const totalFee = registrationFee;
   const today = useMemo(() => startOfToday(), []);
 
   const [count, setCount] = useState<number>(1);

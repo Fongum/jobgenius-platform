@@ -1,7 +1,12 @@
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+import { getIntakeStateByJobSeekerId } from "@/lib/intake";
 import OnboardingWizard from "./OnboardingWizard";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: { code?: string };
+}) {
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -18,11 +23,24 @@ export default async function OnboardingPage() {
     .eq("doc_type", "resume")
     .order("uploaded_at", { ascending: false });
 
+  const intakeState = await getIntakeStateByJobSeekerId(user.id);
+
   return (
     <OnboardingWizard
       profile={profile || {}}
       documents={documents || []}
       userEmail={user.email}
+      initialOfferCode={searchParams?.code ?? null}
+      initialIntakeState={
+        intakeState
+          ? {
+              selectedPlan: intakeState.selected_plan,
+              offerPath: intakeState.offer_path,
+              submittedCode: intakeState.submitted_code,
+              previewAgreedAt: intakeState.preview_agreed_at,
+            }
+          : null
+      }
     />
   );
 }
