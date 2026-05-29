@@ -1,5 +1,6 @@
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { supabaseAdmin } from "@/lib/auth";
+import { detectCareerPageSource } from "@/lib/career-page-sources";
 
 /**
  * GET /api/am/career-pages
@@ -77,29 +78,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // Auto-detect ATS type from URL
-  let atsType = body.ats_type ?? "unknown";
-  let boardToken = body.board_token ?? null;
-  const url = body.career_url.toLowerCase();
-
-  if (url.includes("greenhouse.io") || url.includes("boards-api.greenhouse.io")) {
-    atsType = "greenhouse";
-    // Extract board token: boards.greenhouse.io/{token}/jobs
-    const ghMatch = url.match(/greenhouse\.io\/(?:embed\/)?(?:boards\/)?([a-z0-9_-]+)/i);
-    if (ghMatch) boardToken = ghMatch[1];
-  } else if (url.includes("lever.co")) {
-    atsType = "lever";
-    const leverMatch = url.match(/lever\.co\/([a-z0-9_-]+)/i);
-    if (leverMatch) boardToken = leverMatch[1];
-  } else if (url.includes("ashbyhq.com")) {
-    atsType = "ashby";
-    const ashbyMatch = url.match(/ashbyhq\.com\/([a-z0-9_-]+)/i);
-    if (ashbyMatch) boardToken = ashbyMatch[1];
-  } else if (url.includes("workday.com") || url.includes("myworkday")) {
-    atsType = "workday";
-  } else if (url.includes("icims.com")) {
-    atsType = "icims";
-  }
+  const detected = detectCareerPageSource(body.career_url);
+  const atsType = body.ats_type ?? detected.atsType;
+  const boardToken = body.board_token ?? detected.boardToken;
 
   const { data, error } = await supabaseAdmin
     .from("company_career_pages")

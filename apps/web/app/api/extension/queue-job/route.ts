@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
-import { buildMatchExplanation } from "@/lib/matching/explanations";
+import {
+  buildAdjacentOpportunity,
+  buildMatchExplanation,
+} from "@/lib/matching/explanations";
+import { resolveQueueCategory } from "@/lib/queue-categories";
 
 /**
  * POST /api/extension/queue-job
@@ -109,6 +113,12 @@ export async function POST(request: Request) {
       .eq("job_post_id", job_post_id)
       .maybeSingle();
 
+    const { data: seeker } = await supabaseAdmin
+      .from("job_seekers")
+      .select("match_threshold")
+      .eq("id", job_seeker_id)
+      .maybeSingle();
+
     const explanation = buildMatchExplanation(matchScore?.reasons, {
       score: matchScore?.score ?? null,
       confidence: matchScore?.confidence ?? null,
@@ -126,6 +136,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const adjacent = buildAdjacentOpportunity(matchScore?.reasons, {
+      score: matchScore?.score ?? null,
+      confidence: matchScore?.confidence ?? null,
+      recommendation: matchScore?.recommendation ?? null,
+      threshold: seeker?.match_threshold ?? 60,
+    });
+    const queueCategory = resolveQueueCategory({
+      defaultCategory: "matched",
+      adjacentEligible: adjacent.eligible,
+    });
+
     // Insert into application_queue
     const nowIso = new Date().toISOString();
     const { data: queuedItem, error: insertError } = await supabaseAdmin
@@ -134,7 +155,7 @@ export async function POST(request: Request) {
         job_post_id,
         job_seeker_id,
         status: "QUEUED",
-        category: "matched",
+        category: queueCategory,
         updated_at: nowIso,
       })
       .select("id, job_seeker_id, job_post_id")

@@ -8,18 +8,25 @@ export default async function AdminPage() {
   const isSuperAdmin = user.role === "superadmin";
 
   // Get counts
-  const { count: amCount } = await supabaseAdmin
+  const { count: activeAmCount } = await supabaseAdmin
     .from("account_managers")
-    .select("id", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true })
+    .not("auth_id", "is", null);
 
   const { count: adminCount } = await supabaseAdmin
     .from("account_managers")
     .select("id", { count: "exact", head: true })
+    .not("auth_id", "is", null)
     .in("role", ["admin", "superadmin"]);
 
   const { count: seekerCount } = await supabaseAdmin
     .from("job_seekers")
     .select("id", { count: "exact", head: true });
+
+  const { count: activeSeekerCount } = await supabaseAdmin
+    .from("job_seekers")
+    .select("id", { count: "exact", head: true })
+    .not("auth_id", "is", null);
 
   const { count: assignedCount } = await supabaseAdmin
     .from("job_seeker_assignments")
@@ -93,9 +100,13 @@ export default async function AdminPage() {
           href="/dashboard/admin/accounts"
           className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
         >
-          <div className="text-sm font-medium text-gray-500">Account Managers</div>
-          <div className="mt-1 text-3xl font-bold text-gray-900">{amCount ?? 0}</div>
-          <div className="text-xs text-gray-400 mt-1">{adminCount ?? 0} admins</div>
+          <div className="text-sm font-medium text-gray-500">User Accounts</div>
+          <div className="mt-1 text-3xl font-bold text-gray-900">
+            {(activeAmCount ?? 0) + (activeSeekerCount ?? 0)}
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            {activeAmCount ?? 0} AMs • {adminCount ?? 0} admins
+          </div>
         </Link>
 
         <Link
@@ -168,6 +179,12 @@ export default async function AdminPage() {
             className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
           >
             Create Account Manager
+          </Link>
+          <Link
+            href="/dashboard/admin/accounts"
+            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Manage User Accounts
           </Link>
           <Link
             href="/dashboard/admin/assignments"

@@ -6,6 +6,8 @@ type AuditAction =
   | "account.approve"
   | "account.reject"
   | "account.update"
+  | "account.convert"
+  | "account.delete"
   | "assignment.create"
   | "assignment.delete"
   | "assignment.bulk"

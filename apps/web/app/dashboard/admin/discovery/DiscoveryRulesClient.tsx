@@ -48,6 +48,10 @@ function sourceLabel(source: Source) {
   return `${source.name} (${source.source_type})`;
 }
 
+function sourceSupportsPolicies(source: Source) {
+  return source.source_type !== "feed";
+}
+
 export default function DiscoveryRulesClient({
   policies,
   sources,
@@ -72,10 +76,14 @@ export default function DiscoveryRulesClient({
     () => sources.filter((source) => source.enabled),
     [sources]
   );
+  const policyEligibleSources = useMemo(
+    () => enabledSources.filter(sourceSupportsPolicies),
+    [enabledSources]
+  );
   const hasSources = sources.length > 0;
 
   const [createForm, setCreateForm] = useState<CreatePolicyDraft>({
-    source_names: enabledSources[0]?.name ? [enabledSources[0].name] : [],
+    source_names: policyEligibleSources[0]?.name ? [policyEligibleSources[0].name] : [],
     job_title: "",
     location: "",
     run_frequency_hours: 24,
@@ -113,7 +121,7 @@ export default function DiscoveryRulesClient({
   function selectAllCreateSources() {
     setCreateForm((prev) => ({
       ...prev,
-      source_names: enabledSources.map((source) => source.name),
+      source_names: policyEligibleSources.map((source) => source.name),
     }));
   }
 
@@ -339,10 +347,10 @@ export default function DiscoveryRulesClient({
                 </div>
               </div>
               <div className="border rounded-lg p-2 max-h-44 overflow-auto space-y-2 bg-white">
-                {enabledSources.length === 0 ? (
+                {policyEligibleSources.length === 0 ? (
                   <p className="text-xs text-gray-500">No enabled sources.</p>
                 ) : (
-                  enabledSources.map((source) => (
+                  policyEligibleSources.map((source) => (
                     <label
                       key={source.name}
                       className="flex items-center gap-2 text-sm text-gray-700"
@@ -360,6 +368,10 @@ export default function DiscoveryRulesClient({
               <p className="mt-1 text-xs text-gray-500">
                 {createForm.source_names.length} source
                 {createForm.source_names.length === 1 ? "" : "s"} selected.
+              </p>
+              <p className="mt-2 text-xs text-amber-700">
+                ATS feed sources like Greenhouse, Lever, Ashby, Workday, and SmartRecruiters
+                are company-specific and should be run directly, not through title/location policies.
               </p>
             </div>
             <div className="md:col-span-2">
@@ -414,7 +426,7 @@ export default function DiscoveryRulesClient({
             </label>
             <button
               onClick={createPolicy}
-              disabled={creating || !hasSources || enabledSources.length === 0}
+              disabled={creating || !hasSources || policyEligibleSources.length === 0}
               className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
             >
               {creating ? "Creating..." : "Create Policy"}
@@ -479,11 +491,16 @@ export default function DiscoveryRulesClient({
                           }
                           className="w-full px-2 py-1 border rounded text-sm"
                         >
-                          {sources.map((source) => (
+                          {sources
+                            .filter(
+                              (source) =>
+                                sourceSupportsPolicies(source) || source.name === draft.source_name
+                            )
+                            .map((source) => (
                             <option key={source.name} value={source.name}>
                               {sourceLabel(source)}
                             </option>
-                          ))}
+                            ))}
                         </select>
                       ) : (
                         policy.source_name

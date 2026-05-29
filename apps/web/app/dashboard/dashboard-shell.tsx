@@ -63,6 +63,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     title: "Performance",
     items: [
       { href: "/dashboard/performance", label: "My Performance", icon: "chart" },
+      { href: "/dashboard/me/payslips", label: "My Payslips", icon: "credit-card" },
     ],
   },
   {
@@ -78,7 +79,7 @@ const ADMIN_NAV_SECTION: NavSection = {
   adminOnly: true,
   items: [
     { href: "/dashboard/admin", label: "Admin Overview", icon: "shield", exact: true },
-    { href: "/dashboard/admin/accounts", label: "Account Managers", icon: "user-cog" },
+    { href: "/dashboard/admin/accounts", label: "User Accounts", icon: "user-cog" },
     { href: "/dashboard/admin/job-seekers", label: "All Job Seekers", icon: "users-all" },
     { href: "/dashboard/admin/hiring-partners", label: "Hiring Requests", icon: "briefcase" },
     { href: "/dashboard/admin/intake", label: "Intake Queue", icon: "queue" },
@@ -92,6 +93,8 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/voice", label: "Voice Automation", icon: "phone" },
     { href: "/dashboard/admin/reports", label: "Report Settings", icon: "document" },
     { href: "/dashboard/admin/referrals", label: "Referrals", icon: "gift" },
+    { href: "/dashboard/admin/payroll", label: "Payroll", icon: "credit-card", exact: true },
+    { href: "/dashboard/admin/payroll/periods", label: "Pay Periods", icon: "calendar" },
     { href: "/dashboard/billing", label: "Billing", icon: "credit-card" },
   ],
 };

@@ -9,7 +9,7 @@ import { crawlCareerPages } from '@/lib/careerPageCrawler';
  * Also callable from GitHub Actions with Authorization: Bearer <CRON_SECRET>.
  *
  * 1. Fetches from all external job APIs (12 providers)
- * 2. Crawls monitored company career pages (Greenhouse/Lever/Ashby)
+ * 2. Crawls monitored company career pages (Greenhouse/Lever/Ashby/Workday/SmartRecruiters)
  *
  * Auth: checked via CRON_SECRET env var. In development (NODE_ENV !== 'production'),
  * requests from localhost are allowed without a secret.

@@ -2,6 +2,11 @@ import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logActivity } from "@/lib/feedback-loop";
+import {
+  buildAdjacentOpportunity,
+  buildMatchExplanation,
+} from "@/lib/matching/explanations";
+import { resolveQueueCategory } from "@/lib/queue-categories";
 
 type EnqueuePayload = {
   job_post_id?: string;
@@ -75,11 +80,57 @@ export async function POST(request: Request) {
     });
   }
 
+  const [{ data: matchScore }, { data: seeker }] = await Promise.all([
+    supabaseServer
+      .from("job_match_scores")
+      .select("score, confidence, recommendation, reasons")
+      .eq("job_seeker_id", payload.job_seeker_id)
+      .eq("job_post_id", payload.job_post_id)
+      .maybeSingle(),
+    supabaseServer
+      .from("job_seekers")
+      .select("match_threshold")
+      .eq("id", payload.job_seeker_id)
+      .maybeSingle(),
+  ]);
+
+  const explanation = buildMatchExplanation(matchScore?.reasons, {
+    score: matchScore?.score ?? null,
+    confidence: matchScore?.confidence ?? null,
+    recommendation: matchScore?.recommendation ?? null,
+  });
+
+  if (explanation.queueBlocked) {
+    return Response.json(
+      {
+        success: false,
+        error:
+          explanation.queueBlockReason ||
+          "This match is blocked from queueing.",
+        queue_blocked: true,
+        reason: explanation.queueBlockCode,
+      },
+      { status: 400 }
+    );
+  }
+
+  const adjacent = buildAdjacentOpportunity(matchScore?.reasons, {
+    score: matchScore?.score ?? null,
+    confidence: matchScore?.confidence ?? null,
+    recommendation: matchScore?.recommendation ?? null,
+    threshold: seeker?.match_threshold ?? 60,
+  });
+  const queueCategory = resolveQueueCategory({
+    requestedCategory: payload.category,
+    defaultCategory: "manual",
+    adjacentEligible: adjacent.eligible,
+  });
+
   const { data, error } = await supabaseServer.from("application_queue").insert({
     job_post_id: payload.job_post_id,
     job_seeker_id: payload.job_seeker_id,
     status: "QUEUED",
-    category: payload.category ?? "manual",
+    category: queueCategory,
     updated_at: new Date().toISOString(),
   }).select("id").single();
 
@@ -95,7 +146,7 @@ export async function POST(request: Request) {
     eventType: "job_queued",
     title: "Job queued for application",
     description: `Manually queued by AM`,
-    meta: { queue_id: data?.id, job_post_id: payload.job_post_id, category: payload.category ?? "manual" },
+    meta: { queue_id: data?.id, job_post_id: payload.job_post_id, category: queueCategory },
     refType: "application_queue",
     refId: data?.id,
   }).catch((err) => console.error("[queue:enqueue] activity log failed:", err));
@@ -114,5 +165,4 @@ export async function POST(request: Request) {
 
   return Response.json({ success: true });
 }
-
 

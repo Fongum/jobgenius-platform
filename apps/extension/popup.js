@@ -325,6 +325,104 @@ async function triggerRunnerNow() {
   updateRunnerUI(true);
 }
 
+function renderMatchedJobCard(job, options = {}) {
+  const numericScore = Number(job.score);
+  const hasScore = Number.isFinite(numericScore) && numericScore >= 0;
+  const scoreClass = hasScore
+    ? (numericScore >= 80 ? "high" : numericScore >= 60 ? "medium" : "low")
+    : "low";
+  const cardClass = job.needs_attention
+    ? "score-medium"
+    : (hasScore ? (numericScore >= 80 ? "score-high" : numericScore >= 60 ? "score-medium" : "score-low") : "score-low");
+  const recLabel = job.recommendation === "strong_match"
+    ? "Strong"
+    : job.recommendation === "good_match"
+      ? "Good"
+      : job.recommendation
+        ? "Fair"
+        : "Unrated";
+  const recColor = job.recommendation === "strong_match"
+    ? "#166534"
+    : job.recommendation === "good_match"
+      ? "#1e40af"
+      : "#92400e";
+  const scoreLabel = hasScore ? `${Math.round(numericScore)}%` : "--";
+  const summaryItems = Array.isArray(job.score_summary) ? job.score_summary.slice(0, 2) : [];
+  const blockerItems = Array.isArray(job.score_blockers) ? job.score_blockers.slice(0, 2) : [];
+  const laneBadge = options.adjacent
+    ? '<span style="font-size:8px;padding:1px 4px;background:#fef3c7;border-radius:3px;color:#92400e">Adjacent</span>'
+    : "";
+
+  let actionHtml;
+  if (job.queue_status === "NEEDS_ATTENTION") {
+    if (job.run_id) {
+      actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge" style="background:#fff7ed;color:#9a3412">Needs Attention</span><button class="btn btn-secondary btn-sm" onclick="resumeJob('${job.run_id}', '${encodeURIComponent(job.url || "")}')" style="width:auto;padding:3px 8px;font-size:9px">Resume</button></div>`;
+    } else {
+      actionHtml = '<span class="queue-badge" style="background:#fff7ed;color:#9a3412">Needs Attention</span>';
+    }
+  } else if (job.queue_status === "APPLIED" || job.queue_status === "COMPLETED") {
+    actionHtml = '<span class="queue-badge" style="background:#dcfce7;color:#166534">Applied</span>';
+  } else if (job.queue_status === "RUNNING") {
+    actionHtml = '<span class="queue-badge" style="background:#dbeafe;color:#1e40af">Running</span>';
+  } else if (job.queue_status === "QUEUED" || job.queue_status === "READY" || job.queue_status === "RETRYING") {
+    const eTitle = encodeURIComponent(job.title || "");
+    const eCo = encodeURIComponent(job.company || "");
+    const eLoc = encodeURIComponent(job.location || "");
+    actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">${job.queue_status}</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
+  } else if (job.queue_status) {
+    actionHtml = `<span class="queue-badge">${job.queue_status}</span>`;
+  } else if (job.queue_blocked) {
+    actionHtml = `<span class="queue-badge" style="background:#fee2e2;color:#991b1b" title="${sanitizeText(job.queue_block_reason || "Blocked from queueing")}">Blocked</span>`;
+  } else {
+    const eTitle = encodeURIComponent(job.title || "");
+    const eCo = encodeURIComponent(job.company || "");
+    const eLoc = encodeURIComponent(job.location || "");
+    actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
+  }
+
+  const attentionReason = job.needs_attention_reason
+    ? `<div style="font-size:9px;color:#9a3412;margin-top:4px">Reason: ${sanitizeText(formatAttentionReason(job.needs_attention_reason))}</div>`
+    : "";
+  const attentionError = job.last_error
+    ? `<div style="font-size:9px;color:#92400e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${sanitizeText(job.last_error)}">${sanitizeText(job.last_error)}</div>`
+    : "";
+  const summaryHtml = summaryItems.length > 0
+    ? `<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${summaryItems.map((item) => `<div style="font-size:9px;color:#4b5563">${sanitizeText(item)}</div>`).join("")}</div>`
+    : "";
+  const blockerHtml = blockerItems.length > 0
+    ? `<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${blockerItems.map((item) => `<div style="font-size:9px;color:#b45309">${sanitizeText(item)}</div>`).join("")}</div>`
+    : "";
+  const queueBlockHtml = job.queue_blocked && !job.queue_status && job.queue_block_reason
+    ? `<div style="font-size:9px;color:#991b1b;margin-top:4px">${sanitizeText(job.queue_block_reason)}</div>`
+    : "";
+  const adjacentReasonHtml = options.adjacent && job.adjacent_reason
+    ? `<div style="font-size:9px;color:#92400e;margin-top:4px">${sanitizeText(job.adjacent_reason)}</div>`
+    : "";
+
+  return `
+    <div class="job-card ${cardClass}">
+      <div class="title" title="${sanitizeText(job.title)}">
+        <a href="${sanitizeText(job.url)}" target="_blank" style="color:inherit;text-decoration:none">${sanitizeText(job.title)}</a>
+      </div>
+      <div class="meta">${sanitizeText(job.company || "Unknown")} ${job.location ? " - " + sanitizeText(job.location) : ""}</div>
+      <div style="display:flex;gap:4px;margin-top:2px;flex-wrap:wrap">
+        ${job.work_type ? `<span style="font-size:8px;padding:1px 4px;background:#f3f4f6;border-radius:3px;color:#6b7280;text-transform:capitalize">${sanitizeText(job.work_type)}</span>` : ""}
+        <span style="font-size:8px;padding:1px 4px;background:#ede9fe;border-radius:3px;color:${recColor}">${recLabel}</span>
+        ${job.confidence === "high" ? '<span style="font-size:8px;padding:1px 4px;background:#dbeafe;border-radius:3px;color:#1e40af">High Conf.</span>' : ""}
+        ${laneBadge}
+      </div>
+      ${adjacentReasonHtml}
+      ${summaryHtml}
+      ${blockerHtml}
+      ${queueBlockHtml}
+      ${job.queue_status === "NEEDS_ATTENTION" ? attentionReason + attentionError : ""}
+      <div class="bottom">
+        <span class="score-badge ${scoreClass}">${scoreLabel}</span>
+        ${actionHtml}
+      </div>
+    </div>`;
+}
+
 async function loadMatchedJobs() {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !authToken || !activeSeekerId) {
@@ -346,10 +444,11 @@ async function loadMatchedJobs() {
 
     const data = await response.json();
     const jobs = data.jobs || [];
+    const adjacentJobs = data.adjacent_jobs || [];
     const threshold = data.threshold || 50;
     const attentionJobs = jobs.filter((j) => j.needs_attention || j.queue_status === "NEEDS_ATTENTION");
 
-    if (jobs.length === 0) {
+    if (jobs.length === 0 && adjacentJobs.length === 0) {
       els.matchedJobsList.innerHTML = `
         <div class="empty-state">
           <div>No matched jobs above ${threshold}% threshold.</div>
@@ -368,7 +467,7 @@ async function loadMatchedJobs() {
 
     const headerHtml = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:6px">
-        <span style="font-size:10px;color:#166534">${jobs.length} jobs tracked (${attentionJobs.length} need attention)</span>
+        <span style="font-size:10px;color:#166534">${jobs.length} matched jobs tracked (${attentionJobs.length} need attention${adjacentJobs.length ? `, ${adjacentJobs.length} adjacent to review` : ""})</span>
         <div style="display:flex;gap:4px">
           ${queueableJobs.length > 0 ? `<button class="btn btn-secondary btn-sm" onclick="queueAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Queue All (${queueableJobs.length})</button>` : ""}
           ${applyableJobs.length > 0 ? `<button class="btn btn-apply btn-sm" onclick="applyAllJobs()" style="width:auto;padding:2px 8px;font-size:9px">Apply All (${applyableJobs.length})</button>` : ""}
@@ -376,93 +475,24 @@ async function loadMatchedJobs() {
         </div>
       </div>`;
 
-    const jobsHtml = jobs.map((job) => {
-      const numericScore = Number(job.score);
-      const hasScore = Number.isFinite(numericScore) && numericScore >= 0;
-      const scoreClass = hasScore
-        ? (numericScore >= 80 ? "high" : numericScore >= 60 ? "medium" : "low")
-        : "low";
-      const cardClass = job.needs_attention
-        ? "score-medium"
-        : (hasScore ? (numericScore >= 80 ? "score-high" : numericScore >= 60 ? "score-medium" : "score-low") : "score-low");
-      const recLabel = job.recommendation === "strong_match"
-        ? "Strong"
-        : job.recommendation === "good_match"
-          ? "Good"
-          : job.recommendation
-            ? "Fair"
-            : "Unrated";
-      const recColor = job.recommendation === "strong_match"
-        ? "#166534"
-        : job.recommendation === "good_match"
-          ? "#1e40af"
-          : "#92400e";
-      const scoreLabel = hasScore ? `${Math.round(numericScore)}%` : "--";
-      const summaryItems = Array.isArray(job.score_summary) ? job.score_summary.slice(0, 2) : [];
-      const blockerItems = Array.isArray(job.score_blockers) ? job.score_blockers.slice(0, 2) : [];
-
-      let actionHtml;
-      if (job.queue_status === "NEEDS_ATTENTION") {
-        if (job.run_id) {
-          actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge" style="background:#fff7ed;color:#9a3412">Needs Attention</span><button class="btn btn-secondary btn-sm" onclick="resumeJob('${job.run_id}', '${encodeURIComponent(job.url || "")}')" style="width:auto;padding:3px 8px;font-size:9px">Resume</button></div>`;
-        } else {
-          actionHtml = '<span class="queue-badge" style="background:#fff7ed;color:#9a3412">Needs Attention</span>';
-        }
-      } else if (job.queue_status === "APPLIED" || job.queue_status === "COMPLETED") {
-        actionHtml = '<span class="queue-badge" style="background:#dcfce7;color:#166534">Applied</span>';
-      } else if (job.queue_status === "RUNNING") {
-        actionHtml = '<span class="queue-badge" style="background:#dbeafe;color:#1e40af">Running</span>';
-      } else if (job.queue_status === "QUEUED" || job.queue_status === "READY" || job.queue_status === "RETRYING") {
-        const eTitle = encodeURIComponent(job.title || ""); const eCo = encodeURIComponent(job.company || ""); const eLoc = encodeURIComponent(job.location || "");
-        actionHtml = `<div style="display:flex;gap:4px;align-items:center"><span class="queue-badge">${job.queue_status}</span><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
-      } else if (job.queue_status) {
-        actionHtml = `<span class="queue-badge">${job.queue_status}</span>`;
-      } else if (job.queue_blocked) {
-        actionHtml = `<span class="queue-badge" style="background:#fee2e2;color:#991b1b" title="${sanitizeText(job.queue_block_reason || "Blocked from queueing")}">Blocked</span>`;
-      } else {
-        const eTitle = encodeURIComponent(job.title || ""); const eCo = encodeURIComponent(job.company || ""); const eLoc = encodeURIComponent(job.location || "");
-        actionHtml = `<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="queueJob('${job.id}')" style="width:auto;padding:3px 8px;font-size:9px">Queue</button><button class="btn btn-apply btn-sm" onclick="applyJob('${job.id}','${eTitle}','${eCo}','${eLoc}')" style="width:auto;padding:3px 8px;font-size:9px">Apply</button></div>`;
-      }
-
-      const attentionReason = job.needs_attention_reason
-        ? `<div style="font-size:9px;color:#9a3412;margin-top:4px">Reason: ${sanitizeText(formatAttentionReason(job.needs_attention_reason))}</div>`
-        : "";
-      const attentionError = job.last_error
-        ? `<div style="font-size:9px;color:#92400e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${sanitizeText(job.last_error)}">${sanitizeText(job.last_error)}</div>`
-        : "";
-      const summaryHtml = summaryItems.length > 0
-        ? `<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${summaryItems.map((item) => `<div style="font-size:9px;color:#4b5563">${sanitizeText(item)}</div>`).join("")}</div>`
-        : "";
-      const blockerHtml = blockerItems.length > 0
-        ? `<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${blockerItems.map((item) => `<div style="font-size:9px;color:#b45309">${sanitizeText(item)}</div>`).join("")}</div>`
-        : "";
-      const queueBlockHtml = job.queue_blocked && !job.queue_status && job.queue_block_reason
-        ? `<div style="font-size:9px;color:#991b1b;margin-top:4px">${sanitizeText(job.queue_block_reason)}</div>`
-        : "";
-
-      return `
-        <div class="job-card ${cardClass}">
-          <div class="title" title="${sanitizeText(job.title)}">
-            <a href="${sanitizeText(job.url)}" target="_blank" style="color:inherit;text-decoration:none">${sanitizeText(job.title)}</a>
-          </div>
-          <div class="meta">${sanitizeText(job.company || "Unknown")} ${job.location ? " - " + sanitizeText(job.location) : ""}</div>
-          <div style="display:flex;gap:4px;margin-top:2px">
-            ${job.work_type ? `<span style="font-size:8px;padding:1px 4px;background:#f3f4f6;border-radius:3px;color:#6b7280;text-transform:capitalize">${sanitizeText(job.work_type)}</span>` : ""}
-            <span style="font-size:8px;padding:1px 4px;background:#ede9fe;border-radius:3px;color:${recColor}">${recLabel}</span>
-            ${job.confidence === "high" ? '<span style="font-size:8px;padding:1px 4px;background:#dbeafe;border-radius:3px;color:#1e40af">High Conf.</span>' : ""}
-          </div>
-          ${summaryHtml}
-          ${blockerHtml}
-          ${queueBlockHtml}
-          ${job.queue_status === "NEEDS_ATTENTION" ? attentionReason + attentionError : ""}
-          <div class="bottom">
-            <span class="score-badge ${scoreClass}">${scoreLabel}</span>
-            ${actionHtml}
-          </div>
+    const primarySectionHtml = jobs.length > 0
+      ? jobs.map((job) => renderMatchedJobCard(job)).join("")
+      : `
+        <div class="empty-state" style="margin-bottom:8px">
+          <div>No jobs cleared the ${threshold}% threshold right now.</div>
+          <div style="font-size:10px;color:#9ca3af;margin-top:4px">Review the adjacent opportunities below instead of lowering the threshold blindly.</div>
         </div>`;
-    }).join("");
+    const adjacentSectionHtml = adjacentJobs.length > 0
+      ? `
+        <div style="margin-top:8px;padding:6px 8px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;color:#92400e">Adjacent opportunities</div>
+          <div style="font-size:9px;color:#a16207;margin-top:2px">These did not clear the main threshold, but they still show strong underlying fit. Review them manually before queueing.</div>
+        </div>
+        ${adjacentJobs.map((job) => renderMatchedJobCard(job, { adjacent: true })).join("")}
+      `
+      : "";
 
-    els.matchedJobsList.innerHTML = headerHtml + jobsHtml;
+    els.matchedJobsList.innerHTML = headerHtml + primarySectionHtml + adjacentSectionHtml;
   } catch (error) {
     els.matchedJobsList.innerHTML = '<div class="empty-state">Error loading jobs.</div>';
     console.error("Matched jobs error:", error);

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { hasJobSeekerAccess } from "@/lib/am-access";
-import { buildMatchExplanation } from "@/lib/matching/explanations";
+import {
+  buildAdjacentOpportunity,
+  buildMatchExplanation,
+} from "@/lib/matching/explanations";
+import { resolveQueueCategory } from "@/lib/queue-categories";
 
 // GET: Get queue items for a seeker
 export async function GET(request: Request) {
@@ -103,6 +107,12 @@ export async function POST(request: Request) {
     .eq("job_post_id", job_post_id)
     .maybeSingle();
 
+  const { data: seeker } = await supabaseAdmin
+    .from("job_seekers")
+    .select("match_threshold")
+    .eq("id", job_seeker_id)
+    .maybeSingle();
+
   const explanation = buildMatchExplanation(matchScore?.reasons, {
     score: matchScore?.score ?? null,
     confidence: matchScore?.confidence ?? null,
@@ -120,13 +130,25 @@ export async function POST(request: Request) {
     );
   }
 
+  const adjacent = buildAdjacentOpportunity(matchScore?.reasons, {
+    score: matchScore?.score ?? null,
+    confidence: matchScore?.confidence ?? null,
+    recommendation: matchScore?.recommendation ?? null,
+    threshold: seeker?.match_threshold ?? 60,
+  });
+  const queueCategory = resolveQueueCategory({
+    requestedCategory: category,
+    defaultCategory: "manual",
+    adjacentEligible: adjacent.eligible,
+  });
+
   const { data, error } = await supabaseAdmin
     .from("application_queue")
     .insert({
       job_seeker_id,
       job_post_id,
       status: "QUEUED",
-      category: category || "manual",
+      category: queueCategory,
     })
     .select()
     .single();

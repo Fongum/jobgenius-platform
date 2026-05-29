@@ -124,7 +124,7 @@ export default function CareerPagesClient() {
         <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
           <h3 className="font-semibold mb-3">Add Career Page</h3>
           <p className="text-xs text-gray-500 mb-3">
-            Paste a Greenhouse, Lever, or Ashby careers page URL. ATS type and board token are auto-detected.
+            Paste a Greenhouse, Lever, Ashby, Workday, or SmartRecruiters careers page URL. ATS type and board token are auto-detected.
           </p>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
@@ -143,7 +143,7 @@ export default function CareerPagesClient() {
                 type="url"
                 value={careerUrl}
                 onChange={(e) => setCareerUrl(e.target.value)}
-                placeholder="e.g., https://boards.greenhouse.io/stripe"
+                placeholder="e.g., https://jobs.smartrecruiters.com/Stripe"
                 className="w-full px-3 py-2 border rounded-md text-sm"
               />
             </div>

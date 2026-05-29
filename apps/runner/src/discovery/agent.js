@@ -19,6 +19,10 @@ const POLL_INTERVAL_MS = parseInt(process.env.DISCOVERY_POLL_INTERVAL_MS || '300
 const MAX_CONCURRENT_SCRAPES = parseInt(process.env.DISCOVERY_MAX_CONCURRENT || '2', 10);
 const DEFAULT_MAX_PAGES = parseInt(process.env.DISCOVERY_MAX_PAGES || '5', 10);
 const DEFAULT_MAX_JOBS = parseInt(process.env.DISCOVERY_MAX_JOBS || '50', 10);
+const DEFAULT_MAX_ZERO_YIELD_PAGES = parseInt(process.env.DISCOVERY_MAX_ZERO_YIELD_PAGES || '1', 10);
+const DEFAULT_MAX_DESCRIPTION_FETCHES = parseInt(process.env.DISCOVERY_MAX_DESCRIPTION_FETCHES || '20', 10);
+const DEFAULT_PAGE_TIMEOUT_MS = parseInt(process.env.DISCOVERY_PAGE_TIMEOUT_MS || '30000', 10);
+const DEFAULT_SCROLL_DELAY_MS = parseInt(process.env.DISCOVERY_SCROLL_DELAY_MS || '1000', 10);
 const SOURCE_CACHE_TTL_MS = parseInt(process.env.DISCOVERY_SOURCE_CACHE_TTL_MS || '300000', 10); // 5 minutes
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -109,6 +113,53 @@ async function resolveSourceForSearch(search) {
   }
 
   return inlineSource;
+}
+
+function asPositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(`${value ?? ''}`, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function asBoolean(value, fallback) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') return true;
+    if (value.toLowerCase() === 'false') return false;
+  }
+  return fallback;
+}
+
+function resolveDiscoveryConfig(source, search, options = {}) {
+  const filterConfig = search?.filters?.discovery_config && typeof search.filters.discovery_config === 'object'
+    ? search.filters.discovery_config
+    : {};
+  const sourceConfig = source?.discovery_config && typeof source.discovery_config === 'object'
+    ? source.discovery_config
+    : {};
+  const merged = {
+    ...sourceConfig,
+    ...filterConfig,
+    ...options,
+  };
+
+  return {
+    maxPages: asPositiveInteger(merged.maxPages ?? merged.max_pages, DEFAULT_MAX_PAGES),
+    maxJobs: asPositiveInteger(merged.maxJobs ?? merged.max_jobs, DEFAULT_MAX_JOBS),
+    maxZeroYieldPages: asPositiveInteger(
+      merged.maxZeroYieldPages ?? merged.max_zero_yield_pages,
+      DEFAULT_MAX_ZERO_YIELD_PAGES
+    ),
+    maxDescriptionFetches: asPositiveInteger(
+      merged.maxDescriptionFetches ?? merged.max_description_fetches,
+      DEFAULT_MAX_DESCRIPTION_FETCHES
+    ),
+    scrollDelay: asPositiveInteger(merged.scrollDelay ?? merged.scroll_delay_ms, DEFAULT_SCROLL_DELAY_MS),
+    pageTimeout: asPositiveInteger(merged.pageTimeout ?? merged.page_timeout_ms, DEFAULT_PAGE_TIMEOUT_MS),
+    fetchDescriptions: asBoolean(merged.fetchDescriptions ?? merged.fetch_descriptions, true),
+    headless: asBoolean(merged.headless, true),
+  };
 }
 
 /**
@@ -209,13 +260,11 @@ export async function processSearch(search) {
       if (!search.search_url) {
         throw new Error(`Missing search URL for scraper source: ${source.name}`);
       }
+      const discoveryConfig = resolveDiscoveryConfig(source, search);
 
       // Existing Playwright path
       result = await scrapeJobs(source, search.search_url, {
-        maxPages: DEFAULT_MAX_PAGES,
-        maxJobs: DEFAULT_MAX_JOBS,
-        headless: true,
-        fetchDescriptions: true
+        ...discoveryConfig
       });
     } else {
       // API/Feed adapter path
@@ -228,13 +277,14 @@ export async function processSearch(search) {
       const safeFilters = search.filters && typeof search.filters === 'object'
         ? search.filters
         : {};
+      const discoveryConfig = resolveDiscoveryConfig(source, search);
 
       const jobs = await adapter.fetchJobs(source, {
         searchUrl: search.search_url,
         keywords: search.keywords,
         location: search.location,
         ...safeFilters,
-        maxJobs: DEFAULT_MAX_JOBS,
+        maxJobs: discoveryConfig.maxJobs,
       });
 
       result = {
@@ -243,6 +293,9 @@ export async function processSearch(search) {
         jobs_new: 0,
         jobs_updated: 0,
         pages_scraped: 0,
+        metadata: {
+          max_jobs: discoveryConfig.maxJobs
+        },
         jobs,
       };
     }
@@ -253,8 +306,18 @@ export async function processSearch(search) {
     if (result.jobs.length > 0) {
       const saveResult = await api.saveDiscoveredJobs(runId, result.jobs);
       result.jobs_new = saveResult.saved;
-      result.jobs_updated = 0; // Could track updates in the future
-      logLine({ level: 'INFO', step: 'DISCOVERY', msg: `Saved ${saveResult.saved} new jobs, ${saveResult.duplicates} duplicates` });
+      result.jobs_updated = saveResult.updated;
+      result.metadata = {
+        ...(result.metadata || {}),
+        jobs_unchanged: saveResult.unchanged,
+        save_duplicates: saveResult.duplicates,
+        save_errors: saveResult.errors,
+      };
+      logLine({
+        level: 'INFO',
+        step: 'DISCOVERY',
+        msg: `Saved ${saveResult.saved} new jobs, ${saveResult.updated} updated, ${saveResult.unchanged} unchanged`
+      });
     }
 
     // Complete the run
@@ -274,6 +337,7 @@ export async function processSearch(search) {
         jobs_updated: 0,
         pages_scraped: 0,
         error_message: error.message,
+        metadata: {},
         jobs: []
       }).catch(() => {});
     }
@@ -301,15 +365,13 @@ export async function runOnce(sourceName, searchUrl, options = {}) {
   }
 
   const sourceType = source.source_type || 'scraper';
+  const discoveryConfig = resolveDiscoveryConfig(source, null, options);
   let result;
 
   if (sourceType === 'scraper') {
     // Existing Playwright path
     result = await scrapeJobs(source, searchUrl, {
-      maxPages: options.maxPages || DEFAULT_MAX_PAGES,
-      maxJobs: options.maxJobs || DEFAULT_MAX_JOBS,
-      headless: options.headless !== false,
-      fetchDescriptions: options.fetchDescriptions !== false
+      ...discoveryConfig
     });
   } else {
     // API/Feed adapter path
@@ -320,7 +382,7 @@ export async function runOnce(sourceName, searchUrl, options = {}) {
 
     const jobs = await adapter.fetchJobs(source, {
       searchUrl,
-      maxJobs: options.maxJobs || DEFAULT_MAX_JOBS,
+      maxJobs: discoveryConfig.maxJobs,
       ...options,
     });
 
@@ -330,6 +392,9 @@ export async function runOnce(sourceName, searchUrl, options = {}) {
       jobs_new: 0,
       jobs_updated: 0,
       pages_scraped: 0,
+      metadata: {
+        max_jobs: discoveryConfig.maxJobs
+      },
       jobs,
     };
   }
@@ -338,7 +403,18 @@ export async function runOnce(sourceName, searchUrl, options = {}) {
   if (options.save !== false && result.jobs.length > 0) {
     const saveResult = await api.saveDiscoveredJobs(null, result.jobs);
     result.jobs_new = saveResult.saved;
-    logLine({ level: 'INFO', step: 'DISCOVERY', msg: `Saved ${saveResult.saved} jobs` });
+    result.jobs_updated = saveResult.updated;
+    result.metadata = {
+      ...(result.metadata || {}),
+      jobs_unchanged: saveResult.unchanged,
+      save_duplicates: saveResult.duplicates,
+      save_errors: saveResult.errors,
+    };
+    logLine({
+      level: 'INFO',
+      step: 'DISCOVERY',
+      msg: `Saved ${saveResult.saved} new jobs, ${saveResult.updated} updated, ${saveResult.unchanged} unchanged`
+    });
   }
 
   return result;
