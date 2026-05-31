@@ -5,6 +5,7 @@ import {
   scoreAssessment,
 } from "@/lib/learning/assessment";
 import { generateQuizQuestions } from "@/lib/portal/ai-quiz-generator";
+import { submitAiOutput, markPublished } from "@/lib/ai-outputs";
 
 function mapTrackCategoryToQuizType(category: string | null | undefined) {
   switch (category) {
@@ -172,6 +173,24 @@ export async function POST(
   const titleTarget = targetSkill || (typeof track.title === "string" ? track.title : "Learning Track");
   const now = new Date().toISOString();
 
+  // Shadow audit log; auto-approved to preserve current UX.
+  const audit = await submitAiOutput({
+    kind: "lesson",
+    payload: {
+      questions,
+      title: `Diagnostic: ${titleTarget}`,
+      quizType,
+      targetSkill,
+      focusSkills,
+      count: questions.length,
+    },
+    refType: "learning_tracks",
+    refId: params.trackId,
+    seekerId: auth.user.id,
+    createdBy: auth.user.id,
+    autoApprove: true,
+  });
+
   const { data: assessment, error } = await supabaseAdmin
     .from("learning_assessments")
     .insert({
@@ -193,6 +212,11 @@ export async function POST(
   if (error || !assessment) {
     return Response.json({ error: "Failed to create diagnostic." }, { status: 500 });
   }
+
+  void markPublished(audit.id, {
+    refType: "learning_assessments",
+    refId: assessment.id,
+  });
 
   return Response.json(
     { diagnostic: serializeAssessment(assessment as Record<string, unknown>) },

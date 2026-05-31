@@ -1,10 +1,22 @@
 /**
- * Outreach Reply Classifier + AI Draft Generator
+ * Outreach Reply Classifier + Draft Generator
  *
- * Classifies incoming recruiter replies and generates draft responses.
+ * Two paths:
+ *   - classifyReply / generateDraftReply      (sync, regex+template — safe fallback)
+ *   - classifyReplyWithAi / generateDraftReplyWithAi (async, LLM via chatWithLogging)
+ *
+ * The webhook prefers the AI versions and falls back to regex on LLM error
+ * or when OpenAI is not configured. AI drafts persist via submitAiOutput
+ * (kind='outreach_draft', status='pending') so an AM approves before sending.
  */
 
 import { supabaseServer } from "@/lib/supabase/server";
+import { chatWithLogging } from "@/lib/ai-logging";
+import { OPENAI_MODEL, isOpenAIConfigured } from "@/lib/openai";
+import { submitAiOutput } from "@/lib/ai-outputs";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("reply-classifier");
 
 export type ReplyClassification =
   | "positive_interest"
@@ -139,8 +151,6 @@ export async function processOutreachReply(messageId: string) {
     job_posts: { id: string; title: string; company: string } | null;
   };
 
-  const classification = classifyReply(msg.subject ?? "", msg.body ?? "");
-
   // Get seeker name
   const { data: seeker } = await supabaseServer
     .from("job_seekers")
@@ -148,15 +158,57 @@ export async function processOutreachReply(messageId: string) {
     .eq("id", thread.job_seeker_id)
     .single();
 
-  const draftReply = generateDraftReply({
-    classification,
-    seekerName: seeker?.full_name ?? "the candidate",
-    company: thread.outreach_recruiters?.company ?? thread.job_posts?.company ?? "the company",
-    recruiterName: thread.outreach_recruiters?.name ?? "there",
-    roleTitle: thread.job_posts?.title,
+  const seekerName = seeker?.full_name ?? "the candidate";
+  const recruiterName = thread.outreach_recruiters?.name ?? "there";
+  const company =
+    thread.outreach_recruiters?.company ?? thread.job_posts?.company ?? "the company";
+  const roleTitle = thread.job_posts?.title;
+
+  // Try LLM first; regex is the safety net.
+  const aiResult = await classifyReplyWithAi({
+    subject: msg.subject ?? "",
+    body: msg.body ?? "",
+    seekerName,
+    company,
+    recruiterName,
+    roleTitle,
   });
 
-  // Update message with classification and draft
+  const classification = aiResult?.classification ?? classifyReply(msg.subject ?? "", msg.body ?? "");
+  const draftReply =
+    aiResult?.draft ??
+    generateDraftReply({
+      classification,
+      seekerName,
+      company,
+      recruiterName,
+      roleTitle,
+    });
+
+  // If the LLM produced a draft, stage it for AM review via the HITL pipeline.
+  if (aiResult?.draft) {
+    await submitAiOutput({
+      kind: "outreach_draft",
+      payload: {
+        type: "email",
+        body: aiResult.draft,
+        subject: `Re: ${msg.subject ?? "(no subject)"}`,
+        classification,
+        in_reply_to_message_id: messageId,
+        thread_id: thread.id,
+        recruiter_name: recruiterName,
+        company,
+      },
+      refType: "outreach_messages",
+      refId: messageId,
+      seekerId: thread.job_seeker_id,
+      autoApprove: false,
+      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    });
+  }
+
+  // Update message with classification + the draft text (kept for the
+  // legacy bell preview path; the canonical reviewable copy lives in ai_outputs).
   await supabaseServer
     .from("outreach_messages")
     .update({
@@ -166,5 +218,115 @@ export async function processOutreachReply(messageId: string) {
     })
     .eq("id", messageId);
 
-  return { classification, draftReply };
+  return { classification, draftReply, source: aiResult ? "llm" : "regex" };
+}
+
+// ─── LLM variants ───────────────────────────────────────────
+
+const CLASSIFY_SYSTEM_PROMPT = `You are triaging an inbound recruiter reply. Output strict JSON:
+{
+  "classification": "positive_interest" | "scheduling" | "follow_up" | "rejection" | "info_request" | "out_of_office" | "other",
+  "draft_response": string | null,   // null for out_of_office or when no reply is warranted
+  "reasoning": string                  // one short sentence
+}
+
+Rules:
+- 'positive_interest': clear forward-momentum language (impressed, great fit, move forward, next step).
+- 'scheduling': asking to set up a call/interview/availability.
+- 'rejection': polite no, position filled, going with another candidate.
+- 'info_request': asks for resume, salary expectations, more details.
+- 'out_of_office': auto-reply or vacation notice.
+- 'follow_up': checking in, circling back, any update.
+- 'other': none of the above.
+
+For draft_response:
+- 120-160 words, plain text (no markdown).
+- Greet by recruiter name; sign off with the SEEKER's name.
+- For scheduling: propose 2-3 time-slot placeholders the AM will fill in.
+- For info_request: confirm what we'll send and by when.
+- For rejection: thank them, ask to stay in touch.
+- For follow_up: confirm continued interest, ask for next-step clarity.
+- For out_of_office: return null.`;
+
+export interface LlmReplyInput {
+  subject: string;
+  body: string;
+  seekerName: string;
+  company: string;
+  recruiterName: string;
+  roleTitle?: string | null;
+}
+
+export interface LlmReplyResult {
+  classification: ReplyClassification;
+  draft: string | null;
+  reasoning: string;
+}
+
+const VALID_CLASSIFICATIONS: ReplyClassification[] = [
+  "positive_interest",
+  "scheduling",
+  "follow_up",
+  "rejection",
+  "info_request",
+  "out_of_office",
+  "other",
+];
+
+export async function classifyReplyWithAi(
+  input: LlmReplyInput
+): Promise<LlmReplyResult | null> {
+  if (!isOpenAIConfigured()) return null;
+
+  try {
+    const userContent = [
+      `SEEKER: ${input.seekerName}`,
+      `RECRUITER: ${input.recruiterName} @ ${input.company}`,
+      input.roleTitle ? `ROLE: ${input.roleTitle}` : "",
+      `INBOUND SUBJECT: ${input.subject || "(none)"}`,
+      `INBOUND BODY:\n${(input.body || "").slice(0, 2500)}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const response = await chatWithLogging(
+      {
+        model: OPENAI_MODEL,
+        temperature: 0.3,
+        max_tokens: 600,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: CLASSIFY_SYSTEM_PROMPT },
+          { role: "user", content: userContent },
+        ],
+      },
+      {
+        functionName: "classifyReplyWithAi",
+        route: "outreach/webhook/resend",
+        meta: { recruiter: input.recruiterName, company: input.company },
+      }
+    );
+    const text = response.choices[0]?.message?.content;
+    if (!text) return null;
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const classification = VALID_CLASSIFICATIONS.includes(
+      parsed.classification as ReplyClassification
+    )
+      ? (parsed.classification as ReplyClassification)
+      : "other";
+    const draft =
+      typeof parsed.draft_response === "string" && parsed.draft_response.trim()
+        ? parsed.draft_response
+        : null;
+    return {
+      classification,
+      draft,
+      reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
+    };
+  } catch (err) {
+    log.warn("classifyReplyWithAi failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }

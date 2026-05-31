@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { enforceOpsRateLimit } from "@/lib/rate-limit-presets";
 import { supabaseServer } from "@/lib/supabase/server";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import {
@@ -408,6 +409,9 @@ async function dispatch(payload: DispatchPayload) {
 }
 
 export async function POST(request: Request) {
+  const rl = await enforceOpsRateLimit(request);
+  if (!rl.allowed) return rl.response;
+
   const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
@@ -424,6 +428,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const rl = await enforceOpsRateLimit(request);
+  if (!rl.allowed) return rl.response;
+
   const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return NextResponse.json({ success: false, error: auth.error }, { status: 401 });

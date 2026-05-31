@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { enforceOpsRateLimit } from "@/lib/rate-limit-presets";
 
 const OPS_API_KEY = process.env.OPS_API_KEY;
 
@@ -8,6 +9,9 @@ const OPS_API_KEY = process.env.OPS_API_KEY;
  * has no active queue items or runs.
  */
 export async function POST(request: Request) {
+  const rl = await enforceOpsRateLimit(request);
+  if (!rl.allowed) return rl.response;
+
   const key = request.headers.get("x-ops-key") ?? "";
   if (!OPS_API_KEY || key !== OPS_API_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

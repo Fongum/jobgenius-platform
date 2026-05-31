@@ -1,4 +1,5 @@
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { enforceBackgroundRateLimit } from "@/lib/rate-limit-presets";
 import { supabaseServer } from "@/lib/supabase/server";
 import { computeMatchScore, parseJobPost } from "@/lib/matching";
 import { tailorResume } from "@/lib/resume-tailor";
@@ -1780,6 +1781,17 @@ async function runVoiceFollowup(payload: Record<string, unknown>) {
   await runVoiceDispatch(payload);
 }
 
+async function runDiagnoseFailure(payload: Record<string, unknown>) {
+  const runId = typeof payload.run_id === "string" ? payload.run_id : null;
+  if (!runId) {
+    throw new Error("DIAGNOSE_FAILURE requires payload.run_id");
+  }
+  // Lazy import keeps Next from pulling the Vision-LLM module into other
+  // routes that don't need it.
+  const { diagnoseRunFailure } = await import("@/lib/failure-diagnosis");
+  await diagnoseRunFailure({ runId });
+}
+
 async function handleJob(job: BackgroundJobRow) {
   if (!job.payload || typeof job.payload !== "object" || Array.isArray(job.payload)) {
     throw new Error("Invalid payload.");
@@ -1817,12 +1829,18 @@ async function handleJob(job: BackgroundJobRow) {
     case "VOICE_FOLLOWUP":
       await runVoiceFollowup(job.payload);
       return;
+    case "DIAGNOSE_FAILURE":
+      await runDiagnoseFailure(job.payload);
+      return;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
   }
 }
 
 async function runJobs(request: Request) {
+  const rl = await enforceBackgroundRateLimit(request);
+  if (!rl.allowed) return rl.response;
+
   const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return Response.json({ success: false, error: auth.error }, { status: 401 });

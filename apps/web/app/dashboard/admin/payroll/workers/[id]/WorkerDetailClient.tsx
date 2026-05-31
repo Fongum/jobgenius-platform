@@ -613,12 +613,29 @@ function ContractsTab({
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">
-          Payslip history
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <span className="text-sm font-semibold text-gray-900">Payslip history</span>
+          <Link
+            href="/dashboard/admin/payroll/periods"
+            className="text-xs font-medium text-blue-600 hover:text-blue-700"
+          >
+            + Generate payslip →
+          </Link>
         </div>
         {payslips.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-gray-400">
-            No payslips yet. Generate them from a pay period.
+            No payslips yet.
+            <br />
+            <Link
+              href="/dashboard/admin/payroll/periods"
+              className="mt-3 inline-block px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+            >
+              Open Pay Periods to generate
+            </Link>
+            <p className="mt-3 text-[11px] text-gray-400">
+              Payslips are generated per pay period from each worker&apos;s base
+              salary + bonuses & deductions.
+            </p>
           </div>
         ) : (
           <table className="w-full text-sm">

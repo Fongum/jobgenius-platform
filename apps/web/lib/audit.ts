@@ -1,4 +1,5 @@
 import { createLogger } from "@/lib/logger";
+import { supabaseAdmin } from "@/lib/auth";
 
 const log = createLogger("audit");
 
@@ -37,18 +38,23 @@ type AuditAction =
 export interface AuditParams {
   adminId: string;
   adminEmail?: string;
+  adminRole?: string;
   action: AuditAction;
   targetType?: string;
   targetId?: string;
   details?: Record<string, unknown>;
+  ip?: string;
+  userAgent?: string;
 }
 
 /**
- * Log an admin action as structured JSON.
- * In production Vercel captures these via console output; they are queryable
- * in Vercel Logs by filtering on module:"audit".
+ * Log an admin action.
  *
- * Non-blocking — never throws.
+ * Writes both:
+ *   1. Structured console JSON (queryable in Vercel Logs by module:"audit")
+ *   2. A row in `audit_logs` (migration 078) for persistent forensics.
+ *
+ * Non-blocking — never throws. DB insert failures are logged and swallowed.
  */
 export async function logAdminAction(params: AuditParams): Promise<void> {
   try {
@@ -61,6 +67,29 @@ export async function logAdminAction(params: AuditParams): Promise<void> {
       ...params.details,
     });
   } catch {
-    // Swallow — audit logging must never break the request
+    // Swallow console failure
+  }
+
+  try {
+    const { error } = await supabaseAdmin.from("audit_logs").insert({
+      actor_id: params.adminId,
+      actor_email: params.adminEmail ?? null,
+      actor_role: params.adminRole ?? null,
+      action: params.action,
+      target_type: params.targetType ?? null,
+      target_id: params.targetId ?? null,
+      details: params.details ?? {},
+      ip: params.ip ?? null,
+      user_agent: params.userAgent ?? null,
+    });
+    if (error) {
+      // Persist failure to console so we can detect it without breaking the request.
+      log.warn("audit_logs insert failed", { action: params.action, error: error.message });
+    }
+  } catch (err) {
+    log.warn("audit_logs insert threw", {
+      action: params.action,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }

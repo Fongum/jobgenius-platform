@@ -80,6 +80,7 @@ export default function PayslipDetailClient({
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [payBusy, setPayBusy] = useState(false);
   const [hasProof, setHasProof] = useState(Boolean(initialPayslip.proof_storage_path));
+  const [copied, setCopied] = useState(false);
 
   const editable = payslip.status === "draft";
   const currency = payslip.currency || worker?.currency || "USD";
@@ -249,6 +250,17 @@ export default function PayslipDetailClient({
     }
   }
 
+  async function copyWorkerLink() {
+    try {
+      const url = `${window.location.origin}/dashboard/me/payslips`;
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy link.");
+    }
+  }
+
   async function viewProof() {
     const res = await fetch(`/api/admin/payroll/payslips/${payslip.id}/proof`, {
       cache: "no-store",
@@ -278,15 +290,37 @@ export default function PayslipDetailClient({
             {period?.label ?? ""} · Status{" "}
             <span className="font-medium">{payslip.status}</span>
           </p>
+          <div className="mt-1">
+            {payslip.acknowledged_at ? (
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                Signed by worker on {fmtDate(payslip.acknowledged_at)}
+              </span>
+            ) : payslip.status !== "draft" ? (
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                Awaiting worker signature
+              </span>
+            ) : null}
+          </div>
         </div>
-        <a
-          href={`/api/admin/payroll/payslips/${payslip.id}/pdf`}
-          target="_blank"
-          rel="noreferrer"
-          className="px-3 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
-        >
-          Download PDF
-        </a>
+        <div className="flex items-center gap-2">
+          {payslip.status !== "draft" && (
+            <button
+              onClick={copyWorkerLink}
+              className="px-3 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+              title="Copy a link you can send to the worker. They sign in and see their payslips."
+            >
+              {copied ? "Copied!" : "Copy worker link"}
+            </button>
+          )}
+          <a
+            href={`/api/admin/payroll/payslips/${payslip.id}/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
+          >
+            Download PDF
+          </a>
+        </div>
       </div>
 
       {error && (

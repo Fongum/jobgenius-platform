@@ -21,8 +21,32 @@ type StrategyResult = {
 };
 
 /**
- * Determine the best retry strategy based on failure context
+ * Determine the best retry strategy based on failure context.
+ *
+ * Hybrid approach:
+ *   1. Rule-based mapping (below) handles known failure classes.
+ *   2. When `effectiveStrategies` is provided AND a strategy has been tried
+ *      >= MIN_SAMPLE_SIZE times for this ATS, the empirically best one wins
+ *      (provided it hasn't been used in this run already).
+ *
+ * Callers that want learned behaviour pass effectiveStrategies from
+ * getEffectiveStrategies(atsType). Without it, behaviour is identical to
+ * before this change.
  */
+const MIN_SAMPLE_SIZE = 10;
+const STRATEGIES: RetryStrategy[] = [
+  "same",
+  "skip_optional",
+  "simplified_fields",
+  "alt_resume",
+  "different_session",
+];
+
+export type EffectiveStrategiesMap = Record<
+  string,
+  { total: number; successes: number }
+>;
+
 export function determineRetryStrategy(input: {
   errorCode?: string | null;
   lastError?: string | null;
@@ -30,9 +54,37 @@ export function determineRetryStrategy(input: {
   atsType?: string | null;
   attemptNumber: number;
   previousStrategies?: string[];
+  effectiveStrategies?: EffectiveStrategiesMap;
 }): StrategyResult {
   const { errorCode, lastError, failedStep, attemptNumber, previousStrategies = [] } = input;
   const error = `${errorCode ?? ""} ${lastError ?? ""}`.toLowerCase();
+
+  // Empirical pick (when we have enough signal). We rank strategies by
+  // success rate, require MIN_SAMPLE_SIZE trials per strategy, and skip
+  // any strategy already tried on this run.
+  if (input.effectiveStrategies) {
+    const ranked = STRATEGIES.map((strategy) => {
+      const stats = input.effectiveStrategies?.[strategy];
+      if (!stats || stats.total < MIN_SAMPLE_SIZE) return null;
+      return {
+        strategy,
+        rate: stats.successes / stats.total,
+        total: stats.total,
+      };
+    })
+      .filter((x): x is { strategy: RetryStrategy; rate: number; total: number } => x !== null)
+      .filter((x) => !previousStrategies.includes(x.strategy))
+      .sort((a, b) => b.rate - a.rate || b.total - a.total);
+
+    if (ranked.length > 0) {
+      const best = ranked[0];
+      return {
+        strategy: best.strategy,
+        changes: { empirical: true, success_rate: Math.round(best.rate * 1000) / 10 },
+        reason: `Empirically best for this ATS: ${best.strategy} (${(best.rate * 100).toFixed(1)}% over ${best.total} trials)`,
+      };
+    }
+  }
 
   // Session/auth failures → fresh session
   if (error.includes("session") || error.includes("login") || error.includes("auth") ||

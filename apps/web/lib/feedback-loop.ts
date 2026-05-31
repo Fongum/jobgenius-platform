@@ -6,6 +6,18 @@
  */
 
 import { supabaseServer } from "@/lib/supabase/server";
+import { updateMatchOutcome, type MatchOutcome } from "@/lib/learned-ranker";
+
+function feedbackTypeToMatchOutcome(
+  feedbackType: string
+): MatchOutcome | null {
+  if (feedbackType === "application_rejected" || feedbackType === "interview_rejected") {
+    return "rejection";
+  }
+  if (feedbackType === "ghosted") return "ghosted";
+  if (feedbackType === "withdrawn") return "rejection";
+  return null; // ats_failure et al. — not a ranking signal
+}
 
 export type FeedbackType =
   | "application_rejected"
@@ -88,6 +100,19 @@ export async function recordFeedback(input: RecordFeedbackInput) {
   tryAutoAdjustWeights(input.jobSeekerId).catch((err) =>
     console.error("[feedback-loop] auto weight adjustment failed:", err)
   );
+
+  // Stamp the learned-ranker outcome on the (seeker, job_post) feature row,
+  // when we have a job_post_id and the feedback maps to a meaningful label.
+  if (input.jobPostId) {
+    const outcome = feedbackTypeToMatchOutcome(input.feedbackType);
+    if (outcome) {
+      void updateMatchOutcome({
+        jobSeekerId: input.jobSeekerId,
+        jobPostId: input.jobPostId,
+        outcome,
+      });
+    }
+  }
 
   return data;
 }

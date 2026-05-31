@@ -7,6 +7,13 @@ import {
   type JobSeekerProfile,
   type JobPost,
 } from "@/lib/matching";
+import {
+  recordMatchFeatures,
+  featuresFromBreakdown,
+  blendScore,
+  readBlendAlpha,
+  getActiveModel,
+} from "@/lib/learned-ranker";
 
 type RunAllPayload = {
   job_seeker_ids?: string[];
@@ -169,6 +176,11 @@ export async function POST(request: Request) {
     }
   }
 
+  // Optionally blend the learned ranker into the heuristic. Fetched once
+  // up front; no-op when RANKER_BLEND_ALPHA is unset/0.
+  const blendAlpha = readBlendAlpha();
+  const activeModel = blendAlpha > 0 ? await getActiveModel() : null;
+
   // Score each seeker against each job
   for (const seekerData of seekers) {
     const seeker: JobSeekerProfile = {
@@ -236,22 +248,48 @@ export async function POST(request: Request) {
         };
 
         const matchResult = computeMatchScore(seeker, job, weights);
+        const features = featuresFromBreakdown(matchResult.component_scores, weights);
+        const finalScore = activeModel
+          ? blendScore({
+              heuristic: matchResult.score,
+              features,
+              weights: activeModel.weights,
+              alpha: blendAlpha,
+            })
+          : matchResult.score;
 
         await supabaseServer.from("job_match_scores").upsert(
           {
             job_post_id: post.id,
             job_seeker_id: seeker.id,
-            score: matchResult.score,
+            score: finalScore,
             confidence: matchResult.confidence,
             recommendation: matchResult.recommendation,
             reasons: {
               ...matchResult.reasons,
               component_scores: matchResult.component_scores,
+              ...(activeModel
+                ? {
+                    learned: {
+                      model_id: activeModel.id,
+                      version: activeModel.version,
+                      alpha: blendAlpha,
+                      heuristic: matchResult.score,
+                    },
+                  }
+                : {}),
             },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "job_post_id,job_seeker_id" }
         );
+
+        void recordMatchFeatures({
+          jobSeekerId: seeker.id,
+          jobPostId: post.id,
+          heuristicScore: matchResult.score,
+          features,
+        });
 
         totalScored++;
       } catch (err) {

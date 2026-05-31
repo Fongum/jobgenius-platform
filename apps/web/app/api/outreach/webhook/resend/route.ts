@@ -3,6 +3,57 @@ import { scoreReplySentiment, sentimentLabel } from "@/lib/outreach-intelligence
 import { canTransitionOutreachState, type OutreachMessageState } from "@/lib/outreach-state";
 import { classifyReply, generateDraftReply } from "@/lib/outreach-reply-classifier";
 import { supabaseServer } from "@/lib/supabase/server";
+import { verifySvixSignature } from "@/lib/webhooks/svix-signature";
+
+/**
+ * Verify the inbound Resend webhook.
+ *
+ * Preferred: Svix HMAC signature (svix-id / svix-timestamp / svix-signature
+ * headers) verified against OUTREACH_WEBHOOK_SECRET. Resend signs webhooks
+ * via Svix; this is the standard.
+ *
+ * Legacy: a plain string compare against OUTREACH_WEBHOOK_LEGACY_SECRET
+ * for the x-webhook-secret header. Kept ONLY during transition; set the
+ * env var to remove the legacy path entirely.
+ *
+ * If neither env var is set we allow the request (matching prior behaviour)
+ * but log a warning so this never silently degrades in production.
+ */
+async function authenticateResendWebhook(
+  request: Request
+): Promise<{ ok: true; rawBody: string } | { ok: false; status: number; reason: string }> {
+  const rawBody = await request.text();
+
+  const svixSecret = process.env.OUTREACH_WEBHOOK_SECRET;
+  if (svixSecret) {
+    const result = verifySvixSignature({
+      rawBody,
+      headers: request.headers,
+      secret: svixSecret,
+    });
+    if (result.valid) {
+      return { ok: true, rawBody };
+    }
+    // Fall through to legacy only if explicitly enabled.
+  }
+
+  const legacySecret = process.env.OUTREACH_WEBHOOK_LEGACY_SECRET;
+  if (legacySecret) {
+    const provided = request.headers.get("x-webhook-secret");
+    if (provided && provided === legacySecret) {
+      return { ok: true, rawBody };
+    }
+  }
+
+  if (!svixSecret && !legacySecret) {
+    console.warn(
+      "[resend-webhook] Neither OUTREACH_WEBHOOK_SECRET nor OUTREACH_WEBHOOK_LEGACY_SECRET set; accepting unauthenticated webhook."
+    );
+    return { ok: true, rawBody };
+  }
+
+  return { ok: false, status: 401, reason: "Unauthorized." };
+}
 
 function resolveMessageId(payload: Record<string, unknown>) {
   const data = (payload.data ?? payload) as Record<string, unknown>;
@@ -51,17 +102,14 @@ function extractReplyText(payload: Record<string, unknown>) {
 }
 
 export async function POST(request: Request) {
-  const secret = process.env.OUTREACH_WEBHOOK_SECRET;
-  if (secret) {
-    const provided = request.headers.get("x-webhook-secret");
-    if (provided !== secret) {
-      return Response.json({ success: false, error: "Unauthorized." }, { status: 401 });
-    }
+  const auth = await authenticateResendWebhook(request);
+  if (!auth.ok) {
+    return Response.json({ success: false, error: auth.reason }, { status: auth.status });
   }
 
   let payload: Record<string, unknown>;
   try {
-    payload = await request.json();
+    payload = JSON.parse(auth.rawBody) as Record<string, unknown>;
   } catch {
     return Response.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
   }

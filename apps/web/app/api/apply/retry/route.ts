@@ -1,8 +1,15 @@
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseServer } from "@/lib/supabase/server";
-import { determineRetryStrategy, recordRetryStrategy } from "@/lib/smart-retry";
+import {
+  determineRetryStrategy,
+  getEffectiveStrategies,
+  recordRetryStrategy,
+  type RetryStrategy,
+} from "@/lib/smart-retry";
 import { logActivity } from "@/lib/feedback-loop";
+import { transitionRun } from "@/lib/runState";
+import { pickArm, retryBanditKey } from "@/lib/bandit";
 
 type RetryPayload = {
   run_id?: string;
@@ -37,7 +44,7 @@ export async function POST(request: Request) {
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
     .select(
-      "id, queue_id, ats_type, current_step, job_seeker_id, attempt_count, max_retries, claim_token"
+      "id, queue_id, ats_type, current_step, job_seeker_id, attempt_count, max_retries, claim_token, status"
     )
     .eq("id", payload.run_id)
     .single();
@@ -67,6 +74,14 @@ export async function POST(request: Request) {
     }
   }
 
+  const transition = transitionRun(run.status, "RETRY");
+  if (!transition.ok) {
+    return Response.json(
+      { success: false, error: transition.reason, current_status: run.status },
+      { status: 409 }
+    );
+  }
+
   const nowIso = new Date().toISOString();
   const nextAttempt = (run.attempt_count ?? 0) + 1;
   if (nextAttempt > (run.max_retries ?? 2)) {
@@ -76,25 +91,68 @@ export async function POST(request: Request) {
     );
   }
 
-  // Determine smart retry strategy based on failure context
-  const { data: prevStrategies } = await supabaseServer
-    .from("retry_strategies")
-    .select("strategy")
-    .eq("run_id", run.id);
+  // Determine smart retry strategy based on failure context.
+  // Three signals stacked: bandit > empirical > rules.
+  const [{ data: prevStrategies }, effectiveStrategies] = await Promise.all([
+    supabaseServer
+      .from("retry_strategies")
+      .select("strategy")
+      .eq("run_id", run.id),
+    run.ats_type ? getEffectiveStrategies(run.ats_type) : Promise.resolve({}),
+  ]);
 
-  const retryResult = determineRetryStrategy({
+  const previousStrategiesList = (prevStrategies ?? []).map((s) => s.strategy as string);
+  const allArms: RetryStrategy[] = [
+    "same",
+    "skip_optional",
+    "simplified_fields",
+    "alt_resume",
+    "different_session",
+  ];
+  const availableArms = allArms.filter((a) => !previousStrategiesList.includes(a));
+
+  // Bandit picks across whatever's still available. With <2 arms there's
+  // nothing to choose; fall back to the rules path entirely.
+  let banditPick: Awaited<ReturnType<typeof pickArm>> | null = null;
+  if (availableArms.length >= 2 && run.ats_type) {
+    const errorClass =
+      ((run as Record<string, unknown>).last_error_code as string | null) ?? "GENERIC";
+    banditPick = await pickArm({
+      key: retryBanditKey(run.ats_type, errorClass),
+      arms: availableArms,
+      runId: run.id,
+      context: { attempt: nextAttempt, previous: previousStrategiesList },
+    });
+  }
+
+  const rulesResult = determineRetryStrategy({
     errorCode: (run as Record<string, unknown>).last_error_code as string | null,
     lastError: (run as Record<string, unknown>).last_error as string | null,
     failedStep: run.current_step,
     atsType: run.ats_type,
     attemptNumber: nextAttempt,
-    previousStrategies: (prevStrategies ?? []).map((s) => s.strategy),
+    previousStrategies: previousStrategiesList,
+    effectiveStrategies,
   });
+
+  const retryResult = banditPick
+    ? {
+        strategy: banditPick.arm as RetryStrategy,
+        changes: {
+          bandit: true,
+          decision: banditPick.decision,
+          trial_id: banditPick.trialId,
+          rules_would_pick: rulesResult.strategy,
+          ...rulesResult.changes,
+        },
+        reason: `Bandit ${banditPick.decision}: ${banditPick.arm} (rules suggested ${rulesResult.strategy})`,
+      }
+    : rulesResult;
 
   const { error } = await supabaseServer
     .from("application_runs")
     .update({
-      status: "RETRYING",
+      status: transition.to,
       step_attempts: 0,
       last_error: null,
       last_error_code: null,
@@ -106,7 +164,8 @@ export async function POST(request: Request) {
       retry_changes: retryResult.changes,
       updated_at: nowIso,
     })
-    .eq("id", run.id);
+    .eq("id", run.id)
+    .eq("status", transition.from); // race guard
 
   if (error) {
     return Response.json(

@@ -1,6 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import {
-  resolveHostAutomationRule,
+  resolveHostAutomationRuleAsync,
   type ResolvedHostAutomationRule,
 } from "@/lib/apply-host-rules";
 
@@ -167,7 +167,7 @@ export async function buildApplyAutomationHints(
   args: BuildAutomationHintsArgs
 ): Promise<ApplyAutomationHints> {
   const ats = normalizeAtsType(args.atsType);
-  const hostRule = resolveHostAutomationRule(args.jobUrl);
+  const hostRule = await resolveHostAutomationRuleAsync(args.jobUrl);
   const urlHost = hostRule.url_host;
   const signatures = await loadSignatures(ats, urlHost);
   const { blockers, counts } = summarizeBlockers(signatures);

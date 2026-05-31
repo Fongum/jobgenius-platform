@@ -1,9 +1,13 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { enforceOpsRateLimit } from "@/lib/rate-limit-presets";
 
 type Pair = { job_seeker_id: string; job_post_id: string };
 
 async function runRetention(request: Request) {
+  const rl = await enforceOpsRateLimit(request);
+  if (!rl.allowed) return rl.response;
+
   const auth = requireOpsAuth(request.headers, request.url);
   if (!auth.ok) {
     return Response.json({ success: false, error: auth.error }, { status: 401 });

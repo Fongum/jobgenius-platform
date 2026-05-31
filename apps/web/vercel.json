@@ -11,6 +11,22 @@
     {
       "path": "/api/cron/profile-nudge",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/drain-background",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/drain-notifications",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/run-canaries",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/detect-drift",
+      "schedule": "10 7 * * *"
     }
   ]
 }

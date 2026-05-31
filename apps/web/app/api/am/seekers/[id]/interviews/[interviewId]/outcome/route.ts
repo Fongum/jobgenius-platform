@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { hasJobSeekerAccess } from "@/lib/am-access";
 import { logActivity, recordFeedback } from "@/lib/feedback-loop";
+import { updateMatchOutcome, type MatchOutcome } from "@/lib/learned-ranker";
 
 interface RouteParams {
   params: { id: string; interviewId: string };
@@ -47,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   // Verify interview belongs to this seeker
   const { data: interview } = await supabaseAdmin
     .from("interviews")
-    .select("id, job_seeker_id")
+    .select("id, job_seeker_id, job_post_id")
     .eq("id", interviewId)
     .eq("job_seeker_id", seekerId)
     .single();
@@ -143,6 +144,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if (outcome === "rejected" || outcome === "ghosted") {
     recordFeedback({
       jobSeekerId: seekerId,
+      jobPostId: interview.job_post_id ?? undefined,
       interviewId,
       feedbackType: outcome === "rejected" ? "interview_rejected" : "ghosted",
       rejectionReason: rejection_reason || undefined,
@@ -150,6 +152,26 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       source: "am_recorded",
       createdBy: amId,
     }).catch((err) => console.error("[interview:outcome] feedback recording failed:", err));
+  }
+
+  // Stamp the learned-ranker outcome on the (seeker, job_post) feature row.
+  // Mapping: hired → offer, offer_extended → interview, rejected/ghosted/declined → rejection.
+  if (interview.job_post_id) {
+    const rankerOutcome: MatchOutcome | null =
+      outcome === "hired"
+        ? "offer"
+        : outcome === "offer_extended"
+        ? "interview"
+        : outcome === "rejected" || outcome === "ghosted" || outcome === "declined"
+        ? "rejection"
+        : null;
+    if (rankerOutcome) {
+      void updateMatchOutcome({
+        jobSeekerId: seekerId,
+        jobPostId: interview.job_post_id,
+        outcome: rankerOutcome,
+      });
+    }
   }
 
   return NextResponse.json({ interview: updated });

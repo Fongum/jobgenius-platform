@@ -7,6 +7,7 @@ import {
   type PayComponentKind,
   type PayComponentCategory,
 } from "@/lib/payroll";
+import { sendNotification, NOTIFICATION_CATEGORIES } from "@/lib/notify";
 
 const PAYSLIP_STATUSES = ["draft", "issued", "paid"] as const;
 
@@ -171,5 +172,65 @@ export async function PATCH(
     return NextResponse.json({ error: "Failed to update payslip." }, { status: 500 });
   }
 
+  // Notify the worker on real status transitions (best-effort; non-blocking).
+  if (body.status === "issued" && payslip.status !== "issued") {
+    void notifyWorkerForPayslip(id, NOTIFICATION_CATEGORIES.payslip_awaiting_sign);
+  }
+  if (body.status === "paid" && payslip.status !== "paid") {
+    void notifyWorkerForPayslip(id, NOTIFICATION_CATEGORIES.payslip_paid);
+  }
+
   return NextResponse.json({ payslip: data });
+}
+
+async function notifyWorkerForPayslip(
+  payslipId: string,
+  category:
+    | typeof NOTIFICATION_CATEGORIES.payslip_awaiting_sign
+    | typeof NOTIFICATION_CATEGORIES.payslip_paid
+): Promise<void> {
+  const { data: payslip } = await supabaseAdmin
+    .from("payslips")
+    .select("net_pay, currency, worker_id, pay_period_id")
+    .eq("id", payslipId)
+    .maybeSingle();
+  if (!payslip) return;
+
+  const { data: worker } = await supabaseAdmin
+    .from("payroll_workers")
+    .select("account_manager_id, full_name")
+    .eq("id", payslip.worker_id)
+    .maybeSingle();
+  if (!worker?.account_manager_id) return;
+
+  const { data: period } = await supabaseAdmin
+    .from("pay_periods")
+    .select("label")
+    .eq("id", payslip.pay_period_id)
+    .maybeSingle();
+
+  const periodLabel = period?.label ?? "your pay period";
+  const subject =
+    category === NOTIFICATION_CATEGORIES.payslip_awaiting_sign
+      ? `Your payslip for ${periodLabel} is ready to sign`
+      : `Your payslip for ${periodLabel} has been paid`;
+  const body =
+    category === NOTIFICATION_CATEGORIES.payslip_awaiting_sign
+      ? `Hi ${worker.full_name ?? ""}, your payslip is available. Please review and acknowledge it at your convenience.`
+      : `Hi ${worker.full_name ?? ""}, your payslip has been marked paid.`;
+
+  await sendNotification({
+    userId: worker.account_manager_id,
+    userType: "am",
+    category,
+    subject,
+    body,
+    linkUrl: "/dashboard/me/payslips",
+    channel: "both",
+    payload: {
+      payslip_id: payslipId,
+      net_pay: payslip.net_pay,
+      currency: payslip.currency,
+    },
+  });
 }

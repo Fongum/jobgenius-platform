@@ -152,6 +152,8 @@ export interface Payslip {
   payment_reference: string | null;
   proof_storage_path: string | null;
   pdf_storage_path: string | null;
+  acknowledged_at: string | null;
+  acknowledged_ip: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;

@@ -9,6 +9,9 @@ import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { applicationAckEmail } from "@/lib/email-templates/application-ack";
 import { recordAdapterEvent } from "@/lib/adapter-health";
 import { logActivity } from "@/lib/feedback-loop";
+import { transitionRun } from "@/lib/runState";
+import { findLatestPendingTrialForRun, recordOutcome } from "@/lib/bandit";
+import { updateMatchOutcome } from "@/lib/learned-ranker";
 
 type CompletePayload = {
   run_id?: string;
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
     .select(
-      "id, queue_id, job_seeker_id, job_post_id, ats_type, current_step, claim_token"
+      "id, queue_id, job_seeker_id, job_post_id, ats_type, current_step, claim_token, status"
     )
     .eq("id", payload.run_id)
     .single();
@@ -74,12 +77,20 @@ export async function POST(request: Request) {
     }
   }
 
+  const transition = transitionRun(run.status, "COMPLETE");
+  if (!transition.ok) {
+    return Response.json(
+      { success: false, error: transition.reason, current_status: run.status },
+      { status: 409 }
+    );
+  }
+
   const nowIso = new Date().toISOString();
 
   const { error } = await supabaseServer
     .from("application_runs")
     .update({
-      status: "APPLIED",
+      status: transition.to,
       needs_attention_reason: null,
       last_seen_url: payload.last_seen_url ?? null,
       locked_at: null,
@@ -87,7 +98,8 @@ export async function POST(request: Request) {
       claim_token: null,
       updated_at: nowIso,
     })
-    .eq("id", run.id);
+    .eq("id", run.id)
+    .eq("status", transition.from); // race guard
 
   if (error) {
     return Response.json(
@@ -313,6 +325,20 @@ export async function POST(request: Request) {
     outcome: "success",
     step: run.current_step ?? undefined,
   }).catch((err) => console.error("[apply:complete] adapter health event failed:", err));
+
+  // Close the bandit loop: if this run had a pending retry trial, mark it
+  // a success so the next pickArm has fresh signal.
+  findLatestPendingTrialForRun(run.id, "retry:")
+    .then((trial) => trial && recordOutcome({ trialId: trial.trialId, outcome: "success" }))
+    .catch((err) => console.error("[apply:complete] bandit outcome failed:", err));
+
+  // Stamp the learned-ranker outcome on the (seeker, job_post) feature row.
+  // 'applied' is a positive-leaning signal; interview/offer events upgrade it later.
+  void updateMatchOutcome({
+    jobSeekerId: run.job_seeker_id,
+    jobPostId: run.job_post_id,
+    outcome: "applied",
+  });
 
   // Log to seeker activity feed (non-blocking)
   logActivity(run.job_seeker_id, {
