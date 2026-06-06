@@ -33,7 +33,28 @@ type AuditAction =
   | "voice.playbook_create"
   | "voice.playbook_update"
   | "voice.dispatch"
-  | "reports.settings_update";
+  | "reports.settings_update"
+  | "people.employee_create"
+  | "people.employee_update"
+  | "people.onboarding_submit"
+  | "people.onboarding_review"
+  | "people.policy_acknowledge"
+  | "people.scorecard_update"
+  | "people.scorecard_acknowledge"
+  | "people.probation_review_update"
+  | "people.disciplinary_record_update"
+  | "people.leadership_recalculate"
+  | "people.leadership_course_update"
+  | "people.leadership_trial_update"
+  | "people.leader_of_month_update"
+  | "people.accepted_offer_update"
+  | "people.bonus_update"
+  | "people.social_fund_expense_update"
+  | "people.social_event_update"
+  | "people.social_election_update"
+  | "people.social_candidate_update"
+  | "people.social_vote_cast"
+  | "people.social_term_update";
 
 export interface AuditParams {
   adminId: string;

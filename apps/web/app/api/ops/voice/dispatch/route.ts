@@ -113,7 +113,7 @@ async function autoTargetsForOnboarding(limit: number): Promise<DispatchTarget[]
   return targets;
 }
 
-async function autoTargetsForInterviewPrep(
+async function autoTargetsForInterviewWarmup(
   limit: number,
   windowHours: number
 ): Promise<DispatchTarget[]> {
@@ -195,7 +195,7 @@ async function autoTargetsForInterviewPrep(
       fullName,
       accountManagerId:
         typeof row.account_manager_id === "string" ? row.account_manager_id : null,
-      callType: "interview_prep",
+      callType: "interview_warmup",
     });
 
     if (targets.length >= limit) {
@@ -295,8 +295,8 @@ async function resolveTargets(payload: DispatchPayload): Promise<DispatchTarget[
   if (normalizedCallType === "onboarding") {
     return autoTargetsForOnboarding(limit);
   }
-  if (normalizedCallType === "interview_prep") {
-    return autoTargetsForInterviewPrep(limit, windowHours);
+  if (normalizedCallType === "interview_warmup") {
+    return autoTargetsForInterviewWarmup(limit, windowHours);
   }
 
   return [];
@@ -350,7 +350,7 @@ async function dispatch(payload: DispatchPayload) {
     const { data: voiceCall, error } = await supabaseServer
       .from("voice_calls")
       .insert({
-        provider: "bland",
+        provider: "retell",
         direction: "outbound",
         call_type: target.callType,
         status: "queued",
@@ -358,7 +358,7 @@ async function dispatch(payload: DispatchPayload) {
         lead_submission_id: target.leadSubmissionId,
         account_manager_id: target.accountManagerId,
         playbook_id: playbook.id,
-        from_number: process.env.BLAND_DEFAULT_FROM_NUMBER ?? null,
+        from_number: process.env.RETELL_DEFAULT_FROM_NUMBER ?? null,
         to_number: target.phoneNumber,
         contact_name: target.fullName,
         task,

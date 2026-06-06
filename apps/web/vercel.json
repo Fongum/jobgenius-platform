@@ -17,6 +17,10 @@
       "schedule": "15 7 * * *"
     },
     {
+      "path": "/api/cron/people-ops-reminders",
+      "schedule": "18 7 * * *"
+    },
+    {
       "path": "/api/cron/drain-notifications",
       "schedule": "20 7 * * *"
     },

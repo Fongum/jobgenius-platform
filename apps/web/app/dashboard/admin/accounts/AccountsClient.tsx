@@ -29,6 +29,8 @@ function formatRoleLabel(role: string | null | undefined) {
   const normalized = normalizeAMRole(role);
   if (normalized === "superadmin") return "Super Admin";
   if (normalized === "admin") return "Admin";
+  if (normalized === "ops_manager") return "Operations Manager";
+  if (normalized === "accountant") return "Accountant";
   return "Account Manager";
 }
 
@@ -341,7 +343,7 @@ export default function AccountsClient({
           onClick={() => setIsCreating((value) => !value)}
           className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
         >
-          {isCreating ? "Cancel" : "Create Account Manager"}
+          {isCreating ? "Cancel" : "Create Staff Account"}
         </button>
       </div>
 
@@ -364,7 +366,7 @@ export default function AccountsClient({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <h2 className="font-semibold text-amber-800">
-              {pendingCount} Pending Account Manager Approval{pendingCount !== 1 ? "s" : ""}
+              {pendingCount} Pending Staff Approval{pendingCount !== 1 ? "s" : ""}
             </h2>
           </div>
           <div className="space-y-2">
@@ -411,7 +413,7 @@ export default function AccountsClient({
 
       {isCreating && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Create New Account Manager</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Create New Staff Account</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
@@ -451,13 +453,15 @@ export default function AccountsClient({
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               >
                 <option value="am">Account Manager</option>
+                <option value="ops_manager">Operations Manager</option>
+                <option value="accountant">Accountant</option>
                 <option value="admin">Admin</option>
                 {isSuperAdmin && <option value="superadmin">Super Admin</option>}
               </select>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Admin-created account managers are approved immediately.
+            Admin-created internal staff accounts are approved immediately.
           </p>
           <button
             onClick={createAccount}
@@ -625,6 +629,10 @@ export default function AccountsClient({
                                     ? "bg-purple-100 text-purple-800"
                                     : normalizedRole === "admin"
                                     ? "bg-blue-100 text-blue-800"
+                                    : normalizedRole === "ops_manager"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : normalizedRole === "accountant"
+                                    ? "bg-amber-100 text-amber-800"
                                     : "bg-gray-100 text-gray-600"
                                 }`}
                               >
@@ -712,6 +720,8 @@ export default function AccountsClient({
                                   className="text-sm border rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-400"
                                 >
                                   <option value="am">Account Manager</option>
+                                  <option value="ops_manager">Operations Manager</option>
+                                  <option value="accountant">Accountant</option>
                                   <option value="admin">Admin</option>
                                   {isSuperAdmin && <option value="superadmin">Super Admin</option>}
                                 </select>

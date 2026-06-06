@@ -1,12 +1,22 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
-import { isAdminRole } from "@/lib/auth/roles";
+import { isAdminRole, isFinanceRole, isPeopleManagerRole } from "@/lib/auth/roles";
 import { RunMatchingButton, TopOppQueueButton } from "./DashboardActions";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) return null;
   const isAdmin = isAdminRole(user.role);
+
+  if (user.userType === "am" && !isAdmin) {
+    if (isPeopleManagerRole(user.role)) {
+      redirect("/dashboard/people");
+    }
+    if (isFinanceRole(user.role)) {
+      redirect("/dashboard/finance");
+    }
+  }
 
   // Get assigned job seekers
   const { data: assignments } = await supabaseAdmin

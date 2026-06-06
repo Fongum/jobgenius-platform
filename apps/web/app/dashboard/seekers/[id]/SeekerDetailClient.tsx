@@ -396,6 +396,7 @@ const TABS = [
   { id: "jobs", label: "Jobs" },
   { id: "applications", label: "Applications" },
   { id: "screening", label: "Screening" },
+  { id: "facts", label: "Facts" },
   { id: "debug", label: "Debug" },
   { id: "activity", label: "Activity" },
   { id: "feedback", label: "Feedback" },
@@ -571,6 +572,9 @@ export default function SeekerDetailClient({
           )}
           {activeTab === "screening" && (
             <ScreeningAnswersTab seekerId={seeker.id} initialAnswers={initialScreeningAnswers} />
+          )}
+          {activeTab === "facts" && (
+            <ClientFactsTab seekerId={seeker.id} />
           )}
           {activeTab === "debug" && (
             <DebugScreenshotsTab screenshots={failureScreenshots} runs={runs} />
@@ -4170,6 +4174,173 @@ function FeedbackTab({ seekerId }: { seekerId: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Client Facts Tab (Confirmed-Fact Ledger) ───────────────────────
+type FactRow = {
+  fact_key: string;
+  label: string;
+  category: string;
+  sensitivity: string;
+  value_type: string;
+  value: string | null;
+  provenance: string | null;
+  confirmed_at: string | null;
+  expires_at: string | null;
+  resolution: { status: string; reason?: string };
+};
+
+function ClientFactsTab({ seekerId }: { seekerId: string }) {
+  const [facts, setFacts] = useState<FactRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/am/seekers/${seekerId}/facts`)
+      .then((r) => (r.ok ? r.json() : { facts: [] }))
+      .then((d) => setFacts(d.facts ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [seekerId]);
+
+  async function save(factKey: string) {
+    if (!editValue.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/am/seekers/${seekerId}/facts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fact_key: factKey, value: editValue.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      const { fact, resolution } = await res.json();
+      setFacts((prev) =>
+        prev.map((f) =>
+          f.fact_key === factKey
+            ? {
+                ...f,
+                value: fact.fact_value,
+                provenance: fact.provenance,
+                confirmed_at: fact.confirmed_at,
+                expires_at: fact.expires_at,
+                resolution,
+              }
+            : f
+        )
+      );
+      setEditingKey(null);
+    } catch {
+      alert("Failed to save fact");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function badge(r: FactRow["resolution"]): [string, string] {
+    if (r.status === "confirmed") return ["bg-green-100 text-green-700", "Confirmed"];
+    if (r.status === "escalate") return ["bg-red-100 text-red-700", "Escalate"];
+    const label =
+      r.reason === "stale" ? "Stale" : r.reason === "missing" ? "Missing" : "Needs confirmation";
+    return ["bg-amber-100 text-amber-700", label];
+  }
+
+  if (loading) {
+    return <div className="text-sm text-gray-400 py-8 text-center">Loading client facts…</div>;
+  }
+
+  const categories = Array.from(new Set(facts.map((f) => f.category)));
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900">Client Facts</h3>
+        <p className="text-sm text-gray-500 mt-1">
+          The confirmed-fact ledger. Automation may only assert <strong>Confirmed</strong> facts;
+          sensitive items need fresh client confirmation, and legal/EEO items always escalate.
+          <span className="text-gray-400"> (Shadow mode — not yet enforced on the runner.)</span>
+        </p>
+      </div>
+
+      {categories.map((cat) => (
+        <div key={cat}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{cat}</h4>
+          <div className="divide-y border rounded-lg bg-white">
+            {facts
+              .filter((f) => f.category === cat)
+              .map((f) => {
+                const [cls, label] = badge(f.resolution);
+                const isLegal = f.sensitivity === "legal";
+                return (
+                  <div key={f.fact_key} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-gray-900">{f.label}</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${cls}`}>{label}</span>
+                          {f.sensitivity !== "standard" && (
+                            <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                              {f.sensitivity}
+                            </span>
+                          )}
+                        </div>
+                        {editingKey === f.fact_key ? (
+                          <div className="mt-2 flex gap-2">
+                            <input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              placeholder="Confirmed value"
+                              className="flex-1 px-3 py-1.5 border rounded text-sm"
+                            />
+                            <button
+                              onClick={() => save(f.fact_key)}
+                              disabled={saving}
+                              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {saving ? "Saving…" : "Save"}
+                            </button>
+                            <button
+                              onClick={() => setEditingKey(null)}
+                              className="px-3 py-1.5 text-gray-500 text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600 mt-0.5">
+                            {f.value ? f.value : <span className="text-gray-400">— not set —</span>}
+                            {f.provenance ? (
+                              <span className="text-xs text-gray-400"> · {f.provenance}</span>
+                            ) : null}
+                          </p>
+                        )}
+                        {isLegal && (
+                          <p className="text-xs text-red-500 mt-1">
+                            Legal/EEO — automation never answers this; route to client / escalation.
+                          </p>
+                        )}
+                      </div>
+                      {editingKey !== f.fact_key && !isLegal && (
+                        <button
+                          onClick={() => {
+                            setEditingKey(f.fact_key);
+                            setEditValue(f.value ?? "");
+                          }}
+                          className="text-sm text-blue-600 hover:text-blue-800 flex-shrink-0"
+                        >
+                          {f.value ? "Update" : "Confirm"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

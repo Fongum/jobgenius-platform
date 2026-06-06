@@ -55,6 +55,10 @@ export default function LoginPage() {
           <h2 className="mt-6 text-center text-2xl font-semibold text-gray-900">
             Sign in to your account
           </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Job seeker login is only for active clients with portal access. New leads should
+            start by sending their resume and contact details.
+          </p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -122,9 +126,9 @@ export default function LoginPage() {
           </div>
 
           <div className="text-center text-sm text-gray-600">
-            Don&apos;t have an account?{" "}
+            Need to start the process?{" "}
             <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign up
+              Send your details
             </Link>
           </div>
         </form>

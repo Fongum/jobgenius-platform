@@ -1,4 +1,4 @@
-import { normalizeAMRole } from "@/lib/auth/roles";
+import { AM_ROLE_VALUES, normalizeAMRole } from "@/lib/auth/roles";
 import { supabaseAdmin } from "@/lib/auth";
 
 export type ManagedUserType = "am" | "job_seeker";
@@ -312,8 +312,8 @@ export async function updateAccountManagerRole(params: {
   const updates: Record<string, unknown> = {};
 
   if (role !== undefined) {
-    const validRoles = ["am", "admin", "superadmin"];
-    if (!validRoles.includes(role)) {
+    const validRoles = [...AM_ROLE_VALUES];
+    if (!validRoles.some((validRole) => validRole === role)) {
       throw new AdminAccountManagementError(400, "Invalid role.");
     }
     if (role === "superadmin" && !isSuperAdmin(actor.role)) {

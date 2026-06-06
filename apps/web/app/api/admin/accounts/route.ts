@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
+import { AM_ROLE_VALUES } from "@/lib/auth/roles";
 
 /**
  * POST /api/admin/accounts
- * Create a new account manager account
+ * Create a new internal staff account
  */
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -31,9 +32,9 @@ export async function POST(request: Request) {
     }
 
     // Validate role
-    const validRoles = ["am", "admin", "superadmin"];
+    const validRoles = [...AM_ROLE_VALUES];
     const targetRole = role || "am";
-    if (!validRoles.includes(targetRole)) {
+    if (!validRoles.some((validRole) => validRole === targetRole)) {
       return NextResponse.json(
         { error: "Invalid role." },
         { status: 400 }

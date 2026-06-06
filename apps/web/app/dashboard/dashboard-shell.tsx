@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { isAdminRole, normalizeAMRole } from "@/lib/auth/roles";
+import {
+  isAdminRole,
+  isFinanceRole,
+  isPeopleManagerRole,
+  normalizeAMRole,
+} from "@/lib/auth/roles";
 
 interface NavItem {
   href: string;
@@ -23,6 +28,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     title: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "home", exact: true },
+      { href: "/dashboard/copilot", label: "Control Center", icon: "chart", exact: true },
       { href: "/dashboard/today", label: "Today", icon: "inbox", exact: true },
       { href: "/dashboard/notifications", label: "Notifications", icon: "alert", exact: true },
     ],
@@ -69,6 +75,18 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "My Work",
+    items: [
+      { href: "/dashboard/me/work", label: "Employee Hub", icon: "briefcase" },
+      { href: "/dashboard/me/onboarding", label: "Onboarding", icon: "check" },
+      { href: "/dashboard/me/performance", label: "Scorecards", icon: "chart" },
+      { href: "/dashboard/me/probation", label: "Probation", icon: "clock" },
+      { href: "/dashboard/me/career", label: "Career Path", icon: "academic" },
+      { href: "/dashboard/me/bonuses", label: "Bonuses", icon: "gift" },
+      { href: "/dashboard/me/social", label: "Social Fund", icon: "calendar" },
+    ],
+  },
+  {
     title: "Learning",
     items: [
       { href: "/dashboard/learning", label: "Learning Tracks", icon: "academic" },
@@ -89,6 +107,7 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/assignments", label: "Assignments", icon: "link" },
     { href: "/dashboard/admin/broadcast", label: "Broadcast", icon: "megaphone" },
     { href: "/dashboard/admin/analytics", label: "Analytics", icon: "analytics" },
+    { href: "/dashboard/admin/notifications", label: "Internal Notifications", icon: "alert" },
     { href: "/dashboard/admin/application-analytics", label: "App Analytics", icon: "analytics" },
     { href: "/dashboard/admin/adapter-health", label: "Adapter Health", icon: "analytics" },
     { href: "/dashboard/admin/ai-usage", label: "AI Usage", icon: "analytics" },
@@ -107,6 +126,29 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/payroll", label: "Payroll", icon: "credit-card", exact: true },
     { href: "/dashboard/admin/payroll/periods", label: "Pay Periods", icon: "calendar" },
     { href: "/dashboard/billing", label: "Billing", icon: "credit-card" },
+  ],
+};
+
+const PEOPLE_NAV_SECTION: NavSection = {
+  title: "People Ops",
+  items: [
+    { href: "/dashboard/people", label: "People Overview", icon: "users-all", exact: true },
+    { href: "/dashboard/people/employees", label: "Employees", icon: "users" },
+    { href: "/dashboard/people/onboarding", label: "Onboarding Queue", icon: "queue" },
+    { href: "/dashboard/people/scorecards", label: "Scorecards", icon: "chart" },
+    { href: "/dashboard/people/probation", label: "Probation", icon: "clock" },
+    { href: "/dashboard/people/discipline", label: "Discipline", icon: "alert" },
+    { href: "/dashboard/people/leadership", label: "Leadership", icon: "academic" },
+    { href: "/dashboard/people/social-leads", label: "Social Leads", icon: "calendar" },
+  ],
+};
+
+const FINANCE_NAV_SECTION: NavSection = {
+  title: "Finance",
+  items: [
+    { href: "/dashboard/finance", label: "Finance Overview", icon: "credit-card", exact: true },
+    { href: "/dashboard/finance/bonuses", label: "Bonuses", icon: "gift" },
+    { href: "/dashboard/finance/social-fund", label: "Social Fund", icon: "calendar" },
   ],
 };
 
@@ -319,6 +361,8 @@ export default function DashboardShell({
   const bellRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = isAdminRole(userRole);
+  const canAccessPeople = isPeopleManagerRole(userRole);
+  const canAccessFinance = isFinanceRole(userRole) || canAccessPeople;
 
   // Close bell panel on outside click
   useEffect(() => {
@@ -363,10 +407,27 @@ export default function DashboardShell({
   const navSections = useMemo(() => {
     if (isAdmin) {
       const [overviewSection, ...remainingSections] = BASE_NAV_SECTIONS;
-      return [overviewSection, ADMIN_NAV_SECTION, ...remainingSections];
+      return [
+        overviewSection,
+        ADMIN_NAV_SECTION,
+        FINANCE_NAV_SECTION,
+        PEOPLE_NAV_SECTION,
+        ...remainingSections,
+      ];
+    }
+    if (canAccessPeople) {
+      const [overviewSection, ...remainingSections] = BASE_NAV_SECTIONS;
+      return [overviewSection, PEOPLE_NAV_SECTION, FINANCE_NAV_SECTION, ...remainingSections];
+    }
+    if (canAccessFinance) {
+      return BASE_NAV_SECTIONS.filter((section) =>
+        ["Overview", "My Work", "Performance"].includes(section.title)
+      ).flatMap((section, index) =>
+        index === 0 ? [section, FINANCE_NAV_SECTION] : [section]
+      );
     }
     return BASE_NAV_SECTIONS;
-  }, [isAdmin]);
+  }, [canAccessFinance, canAccessPeople, isAdmin]);
 
   async function dismissAnnouncement(id: string) {
     setAmNotifications((prev) =>
@@ -398,6 +459,10 @@ export default function DashboardShell({
       ? "Super Admin"
       : normalizedRole === "admin"
       ? "Admin"
+      : normalizedRole === "ops_manager"
+      ? "Operations Manager"
+      : normalizedRole === "accountant"
+      ? "Accountant"
       : "Account Manager";
 
   return (

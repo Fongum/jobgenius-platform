@@ -18,9 +18,16 @@ CREATE TABLE am_task_dismissals (
   UNIQUE (am_id, task_key, action)
 );
 
-CREATE INDEX idx_am_task_dismissals_am_active
+-- Partial-index predicates must be immutable, so split the hot paths:
+--   1. resolved tasks
+--   2. snoozed tasks with a non-null wake-up time
+CREATE INDEX idx_am_task_dismissals_am_resolve
   ON am_task_dismissals (am_id, task_key)
-  WHERE action = 'resolve' OR snooze_until > now();
+  WHERE action = 'resolve';
+
+CREATE INDEX idx_am_task_dismissals_am_snooze
+  ON am_task_dismissals (am_id, task_key, snooze_until)
+  WHERE action = 'snooze' AND snooze_until IS NOT NULL;
 
 ALTER TABLE am_task_dismissals ENABLE ROW LEVEL SECURITY;
 
@@ -126,19 +133,19 @@ WITH raw_tasks AS (
     om.id::text                                  AS source_id,
     'outreach_reply:' || om.id::text             AS task_key,
     'Reply needs review'                         AS title,
-    rt.subject                                   AS body,
+    COALESCE(om.subject, '(no subject)')         AS body,
     7                                            AS priority,
     om.replied_at                                AS due_at,
     '/dashboard/outreach/threads/' || rt.id::text AS link_url,
     jsonb_build_object(
-      'classification', om.reply_classification,
-      'ai_draft_status', om.ai_draft_status
+      'classification', to_jsonb(om) ->> 'reply_classification',
+      'ai_draft_status', COALESCE(to_jsonb(om) ->> 'ai_draft_status', 'none')
     )                                            AS meta,
     om.replied_at                                AS created_at
   FROM outreach_messages om
   JOIN recruiter_threads rt ON rt.id = om.recruiter_thread_id
   JOIN job_seeker_assignments jsa ON jsa.job_seeker_id = rt.job_seeker_id
-  WHERE om.ai_draft_status = 'generated'
+  WHERE COALESCE(to_jsonb(om) ->> 'ai_draft_status', 'none') = 'generated'
     AND om.replied_at IS NOT NULL
 
   UNION ALL
@@ -149,21 +156,22 @@ WITH raw_tasks AS (
     'interview_upcoming'::text                   AS kind,
     i.id::text                                   AS source_id,
     'interview_upcoming:' || i.id::text          AS task_key,
-    'Interview: ' || COALESCE(i.company, 'company tbd') AS title,
+    'Interview: ' || COALESCE(jp.company, 'company tbd') AS title,
     'Scheduled ' || i.scheduled_at::text         AS body,
     6                                            AS priority,
     i.scheduled_at                               AS due_at,
     '/dashboard/interviews/' || i.id::text       AS link_url,
     jsonb_build_object(
-      'company', i.company,
-      'role', i.role,
+      'company', jp.company,
+      'role', jp.title,
       'scheduled_at', i.scheduled_at
     )                                            AS meta,
     i.created_at                                 AS created_at
   FROM interviews i
+  LEFT JOIN job_posts jp ON jp.id = i.job_post_id
   JOIN job_seeker_assignments jsa ON jsa.job_seeker_id = i.job_seeker_id
   WHERE i.scheduled_at BETWEEN now() AND now() + interval '48 hours'
-    AND COALESCE(i.confirmation_status, 'pending') <> 'confirmed'
+    AND COALESCE(i.status::text, 'pending_candidate') <> 'confirmed'
 )
 SELECT
   rt.*

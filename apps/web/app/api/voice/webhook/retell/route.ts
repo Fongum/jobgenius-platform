@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import {
-  normalizeBlandWebhookPayload,
-  verifyBlandWebhookSignature,
-} from "@/lib/voice/bland";
+  normalizeRetellWebhookPayload,
+  verifyRetellWebhookSignature,
+} from "@/lib/voice/retell";
 import { supabaseServer } from "@/lib/supabase/server";
 import {
   appendVoiceConversationNote,
@@ -36,22 +36,28 @@ type VoiceCallRow = {
   voice_playbooks: VoicePlaybookJoin | VoicePlaybookJoin[] | null;
 };
 
+const VOICE_CALL_SELECT = `
+  id,
+  provider_call_id,
+  call_type,
+  status,
+  direction,
+  job_seeker_id,
+  lead_submission_id,
+  account_manager_id,
+  from_number,
+  to_number,
+  playbook_id,
+  call_started_at,
+  voice_playbooks (
+    id,
+    escalation_rules
+  )
+`;
+
 function asRecord(value: unknown): JsonRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as JsonRecord;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function readNestedString(record: JsonRecord, keys: string[]): string | null {
-  let current: unknown = record;
-  for (const key of keys) {
-    if (!current || typeof current !== "object" || Array.isArray(current)) return null;
-    current = (current as JsonRecord)[key];
-  }
-  return readString(current);
 }
 
 function normalizePlaybook(value: VoiceCallRow["voice_playbooks"]) {
@@ -71,15 +77,8 @@ function isTerminalStatus(status: string) {
   ].includes(status);
 }
 
-function inferCallTypeFromPayload(payload: JsonRecord): VoiceCallType {
-  const requestData = asRecord(payload.request_data ?? payload.data);
-  const maybe =
-    normalizeVoiceCallType(requestData.call_type) ||
-    normalizeVoiceCallType(readNestedString(payload, ["request_data", "call_type"])) ||
-    normalizeVoiceCallType(readNestedString(payload, ["data", "request_data", "call_type"])) ||
-    null;
-
-  return maybe ?? "check_in";
+function inferCallTypeFromMetadata(metadata: JsonRecord): VoiceCallType {
+  return normalizeVoiceCallType(metadata.call_type) ?? "check_in";
 }
 
 async function findActivePlaybookId(callType: VoiceCallType) {
@@ -98,24 +97,7 @@ async function findActivePlaybookId(callType: VoiceCallType) {
 async function findVoiceCallByProviderCallId(providerCallId: string) {
   const { data, error } = await supabaseServer
     .from("voice_calls")
-    .select(`
-      id,
-      provider_call_id,
-      call_type,
-      status,
-      direction,
-      job_seeker_id,
-      lead_submission_id,
-      account_manager_id,
-      from_number,
-      to_number,
-      playbook_id,
-      call_started_at,
-      voice_playbooks (
-        id,
-        escalation_rules
-      )
-    `)
+    .select(VOICE_CALL_SELECT)
     .eq("provider_call_id", providerCallId)
     .limit(1)
     .maybeSingle();
@@ -145,7 +127,7 @@ async function maybeCreateInboundVoiceCall(params: {
   const { data, error } = await supabaseServer
     .from("voice_calls")
     .insert({
-      provider: "bland",
+      provider: "retell",
       provider_call_id: params.providerCallId,
       direction: "inbound",
       call_type: params.callType,
@@ -158,24 +140,7 @@ async function maybeCreateInboundVoiceCall(params: {
       request_payload: {},
       response_payload: {},
     })
-    .select(`
-      id,
-      provider_call_id,
-      call_type,
-      status,
-      direction,
-      job_seeker_id,
-      lead_submission_id,
-      account_manager_id,
-      from_number,
-      to_number,
-      playbook_id,
-      call_started_at,
-      voice_playbooks (
-        id,
-        escalation_rules
-      )
-    `)
+    .select(VOICE_CALL_SELECT)
     .single();
 
   if (error || !data) {
@@ -187,7 +152,9 @@ async function maybeCreateInboundVoiceCall(params: {
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
-  if (!verifyBlandWebhookSignature(rawBody, request.headers)) {
+
+  // Fail-closed signature verification.
+  if (!verifyRetellWebhookSignature(rawBody, request.headers)) {
     return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
   }
 
@@ -198,14 +165,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const normalized = normalizeBlandWebhookPayload(payload);
-  const fallbackStatus = normalized.status ?? "initiated";
-  const callType = inferCallTypeFromPayload(payload);
+  const normalized = normalizeRetellWebhookPayload(payload);
 
-  let voiceCall =
-    normalized.providerCallId
-      ? await findVoiceCallByProviderCallId(normalized.providerCallId)
-      : null;
+  // ----------------------------------------------------------------
+  // Idempotency: insert the event first. The partial unique index on
+  // (provider, provider_event_id) rejects duplicate webhook deliveries.
+  // ----------------------------------------------------------------
+  const { data: eventRow, error: eventError } = await supabaseServer
+    .from("voice_call_events")
+    .insert({
+      voice_call_id: null,
+      provider: "retell",
+      provider_call_id: normalized.providerCallId,
+      provider_event_id: normalized.providerEventId,
+      event_type: normalized.eventType,
+      event_status: normalized.status,
+      payload,
+      received_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (eventError) {
+    // 23505 = unique_violation -> already processed this exact event.
+    if ((eventError as { code?: string }).code === "23505") {
+      return NextResponse.json({ success: true, duplicate: true });
+    }
+    return NextResponse.json(
+      { success: false, error: "Failed to record voice event." },
+      { status: 500 }
+    );
+  }
+
+  const eventId = (eventRow?.id as string | undefined) ?? null;
+
+  const fallbackStatus = normalized.status ?? "initiated";
+  const callType = inferCallTypeFromMetadata(normalized.metadata);
+
+  let voiceCall = normalized.providerCallId
+    ? await findVoiceCallByProviderCallId(normalized.providerCallId)
+    : null;
 
   if (!voiceCall) {
     voiceCall = await maybeCreateInboundVoiceCall({
@@ -218,16 +217,13 @@ export async function POST(request: Request) {
     });
   }
 
-  await supabaseServer.from("voice_call_events").insert({
-    voice_call_id: voiceCall?.id ?? null,
-    provider: "bland",
-    provider_call_id: normalized.providerCallId,
-    provider_event_id: normalized.providerEventId,
-    event_type: normalized.eventType,
-    event_status: normalized.status,
-    payload,
-    received_at: new Date().toISOString(),
-  });
+  // Backfill the event with its resolved voice_call_id.
+  if (eventId && voiceCall?.id) {
+    await supabaseServer
+      .from("voice_call_events")
+      .update({ voice_call_id: voiceCall.id })
+      .eq("id", eventId);
+  }
 
   if (!voiceCall) {
     return NextResponse.json({ success: true, ignored: true });
@@ -247,10 +243,6 @@ export async function POST(request: Request) {
   const newStatus = escalation.requiresEscalation
     ? "escalated"
     : (normalized.status ?? voiceCall.status ?? "initiated");
-  const recordingUrl =
-    readString(payload.recording_url) ||
-    readNestedString(payload, ["analysis", "recording_url"]) ||
-    null;
 
   await supabaseServer
     .from("voice_calls")
@@ -259,12 +251,13 @@ export async function POST(request: Request) {
       summary: normalized.summary ?? undefined,
       disposition: normalized.disposition ?? undefined,
       transcript: normalized.transcript ?? undefined,
-      recording_url: recordingUrl ?? undefined,
+      recording_url: normalized.recordingUrl ?? undefined,
       requires_escalation: escalation.requiresEscalation,
       escalation_reason: escalation.reasons.join(", ") || null,
       response_payload: payload,
       call_started_at:
-        voiceCall.call_started_at ?? (["initiated", "ringing", "in_progress"].includes(newStatus) ? nowIso : null),
+        voiceCall.call_started_at ??
+        (["initiated", "ringing", "in_progress"].includes(newStatus) ? nowIso : null),
       call_ended_at: isTerminalStatus(newStatus) ? nowIso : null,
       updated_at: nowIso,
     })
@@ -276,7 +269,7 @@ export async function POST(request: Request) {
       jobSeekerId: voiceCall.job_seeker_id,
       leadSubmissionId: voiceCall.lead_submission_id,
       reason: "User requested no upsell calls during voice conversation.",
-      source: "bland_webhook",
+      source: "retell_webhook",
       createdByAmId: voiceCall.account_manager_id,
     });
   }
@@ -287,11 +280,7 @@ export async function POST(request: Request) {
     Boolean(normalized.disposition) ||
     isTerminalStatus(newStatus);
 
-  if (
-    shouldLogConversation &&
-    voiceCall.job_seeker_id &&
-    voiceCall.account_manager_id
-  ) {
+  if (shouldLogConversation && voiceCall.job_seeker_id && voiceCall.account_manager_id) {
     await appendVoiceConversationNote({
       jobSeekerId: voiceCall.job_seeker_id,
       accountManagerId: voiceCall.account_manager_id,
@@ -300,9 +289,21 @@ export async function POST(request: Request) {
       summary: normalized.summary,
       disposition: normalized.disposition,
       escalationReason: escalation.reasons.join(", ") || null,
-      recordingUrl,
+      recordingUrl: normalized.recordingUrl,
       providerCallId: normalized.providerCallId,
     });
+  }
+
+  // Advance lead lifecycle for terminal lead-qualification calls.
+  if (
+    voiceCall.lead_submission_id &&
+    normalizedCallType === "lead_qualification" &&
+    isTerminalStatus(newStatus)
+  ) {
+    await supabaseServer
+      .from("lead_intake_submissions")
+      .update({ last_call_at: nowIso, updated_at: nowIso })
+      .eq("id", voiceCall.lead_submission_id);
   }
 
   return NextResponse.json({ success: true });

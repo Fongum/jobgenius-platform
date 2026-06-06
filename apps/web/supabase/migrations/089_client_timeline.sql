@@ -51,7 +51,7 @@ SELECT
   '/dashboard/outreach/threads/' || rt.id::text    AS link,
   jsonb_build_object(
     'direction', om.direction,
-    'classification', om.reply_classification,
+    'classification', to_jsonb(om) ->> 'reply_classification',
     'status', om.status
   )                                                 AS meta
 FROM outreach_messages om
@@ -64,16 +64,17 @@ SELECT
   i.job_seeker_id                                  AS job_seeker_id,
   'interview'::text                                AS kind,
   COALESCE(i.scheduled_at, i.created_at)           AS at,
-  COALESCE('Interview: ' || i.company, 'Interview') AS title,
-  COALESCE(i.role, NULL)                           AS body,
+  COALESCE('Interview: ' || jp.company, 'Interview') AS title,
+  COALESCE(jp.title, NULL)                         AS body,
   '/dashboard/interviews/' || i.id::text           AS link,
   jsonb_build_object(
-    'company', i.company,
-    'role', i.role,
-    'confirmation_status', i.confirmation_status,
+    'company', jp.company,
+    'role', jp.title,
+    'confirmation_status', i.status,
     'scheduled_at', i.scheduled_at
   )                                                 AS meta
 FROM interviews i
+LEFT JOIN job_posts jp ON jp.id = i.job_post_id
 
 UNION ALL
 

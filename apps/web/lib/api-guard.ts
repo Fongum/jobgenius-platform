@@ -11,7 +11,7 @@ const PUBLIC_API_EXACT = new Set([
   "/api/portal/gmail/callback",
   "/api/outreach/webhook/resend",
   "/api/marketing/lead",
-  "/api/voice/webhook/bland",
+  "/api/voice/webhook/retell",
 ]);
 
 const PUBLIC_API_PREFIXES = ["/api/outreach/track/open/", "/api/recruiter/respond/"];

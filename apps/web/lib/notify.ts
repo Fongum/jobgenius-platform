@@ -31,10 +31,90 @@ export const NOTIFICATION_CATEGORIES = {
   interview_confirmed: "interview_confirmed",
   contract_sent: "contract_sent",
   ai_output_rejected: "ai_output_rejected",
+  people_ops_review_digest: "people_ops_review_digest",
+  social_lead_election_closing: "social_lead_election_closing",
+  employee_scorecard_finalized: "employee_scorecard_finalized",
+  employee_leadership_course_eligible: "employee_leadership_course_eligible",
+  employee_leadership_course_updated: "employee_leadership_course_updated",
+  employee_leadership_trial_updated: "employee_leadership_trial_updated",
+  employee_probation_review_updated: "employee_probation_review_updated",
+  employee_leader_of_month_selected: "employee_leader_of_month_selected",
+  employee_social_candidate_approved: "employee_social_candidate_approved",
+  employee_social_lead_selected: "employee_social_lead_selected",
+  employee_social_nominations_open: "employee_social_nominations_open",
+  employee_social_voting_open: "employee_social_voting_open",
+  employee_offer_verified: "employee_offer_verified",
+  people_bonus_pending_approval: "people_bonus_pending_approval",
+  employee_bonus_payable_this_month: "employee_bonus_payable_this_month",
+  employee_bonus_updated: "employee_bonus_updated",
+  employee_social_fund_contribution_added: "employee_social_fund_contribution_added",
 } as const;
 
 export type NotificationCategory =
   (typeof NOTIFICATION_CATEGORIES)[keyof typeof NOTIFICATION_CATEGORIES];
+
+export const INTERNAL_OPERATIONS_NOTIFICATION_CATEGORIES = [
+  NOTIFICATION_CATEGORIES.people_ops_review_digest,
+  NOTIFICATION_CATEGORIES.social_lead_election_closing,
+  NOTIFICATION_CATEGORIES.employee_scorecard_finalized,
+  NOTIFICATION_CATEGORIES.employee_leadership_course_eligible,
+  NOTIFICATION_CATEGORIES.employee_leadership_course_updated,
+  NOTIFICATION_CATEGORIES.employee_leadership_trial_updated,
+  NOTIFICATION_CATEGORIES.employee_probation_review_updated,
+  NOTIFICATION_CATEGORIES.employee_leader_of_month_selected,
+  NOTIFICATION_CATEGORIES.employee_social_candidate_approved,
+  NOTIFICATION_CATEGORIES.employee_social_lead_selected,
+  NOTIFICATION_CATEGORIES.employee_social_nominations_open,
+  NOTIFICATION_CATEGORIES.employee_social_voting_open,
+  NOTIFICATION_CATEGORIES.employee_offer_verified,
+  NOTIFICATION_CATEGORIES.people_bonus_pending_approval,
+  NOTIFICATION_CATEGORIES.employee_bonus_payable_this_month,
+  NOTIFICATION_CATEGORIES.employee_bonus_updated,
+  NOTIFICATION_CATEGORIES.employee_social_fund_contribution_added,
+] as const;
+
+export function getNotificationCategoryLabel(category: string): string {
+  switch (category) {
+    case NOTIFICATION_CATEGORIES.people_ops_review_digest:
+      return "People Ops review digest";
+    case NOTIFICATION_CATEGORIES.social_lead_election_closing:
+      return "Social Lead closing reminder";
+    case NOTIFICATION_CATEGORIES.employee_scorecard_finalized:
+      return "Scorecard finalized";
+    case NOTIFICATION_CATEGORIES.employee_leadership_course_eligible:
+      return "Leadership course eligible";
+    case NOTIFICATION_CATEGORIES.employee_leadership_course_updated:
+      return "Leadership course updated";
+    case NOTIFICATION_CATEGORIES.employee_leadership_trial_updated:
+      return "Leadership trial updated";
+    case NOTIFICATION_CATEGORIES.employee_probation_review_updated:
+      return "Probation review updated";
+    case NOTIFICATION_CATEGORIES.employee_leader_of_month_selected:
+      return "Leader of the Month selected";
+    case NOTIFICATION_CATEGORIES.employee_social_candidate_approved:
+      return "Social Lead candidate approved";
+    case NOTIFICATION_CATEGORIES.employee_social_lead_selected:
+      return "Social Lead selected";
+    case NOTIFICATION_CATEGORIES.employee_social_nominations_open:
+      return "Social nominations open";
+    case NOTIFICATION_CATEGORIES.employee_social_voting_open:
+      return "Social voting open";
+    case NOTIFICATION_CATEGORIES.employee_offer_verified:
+      return "Accepted offer verified";
+    case NOTIFICATION_CATEGORIES.people_bonus_pending_approval:
+      return "Bonus pending approval";
+    case NOTIFICATION_CATEGORIES.employee_bonus_payable_this_month:
+      return "Bonus payable this month";
+    case NOTIFICATION_CATEGORIES.employee_bonus_updated:
+      return "Bonus updated";
+    case NOTIFICATION_CATEGORIES.employee_social_fund_contribution_added:
+      return "Social fund contribution added";
+    default:
+      return category
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (value) => value.toUpperCase());
+  }
+}
 
 export interface SendNotificationInput {
   userId: string;

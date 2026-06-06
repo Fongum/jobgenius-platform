@@ -15,6 +15,8 @@ import { chatWithLogging } from "@/lib/ai-logging";
 import { OPENAI_MODEL, isOpenAIConfigured } from "@/lib/openai";
 import { submitAiOutput } from "@/lib/ai-outputs";
 import { createLogger } from "@/lib/logger";
+import { decide, recordDecision, routeDecision } from "@/lib/consultant/decision-engine";
+import { scoreScamSignals } from "@/lib/consultant/scam-detector";
 
 const log = createLogger("reply-classifier");
 
@@ -132,7 +134,7 @@ export async function processOutreachReply(messageId: string) {
   const { data: msg } = await supabaseServer
     .from("outreach_messages")
     .select(`
-      id, subject, body, direction,
+      id, subject, body, direction, from_email,
       outreach_threads (
         id, job_seeker_id,
         outreach_recruiters (id, name, company),
@@ -217,6 +219,45 @@ export async function processOutreachReply(messageId: string) {
       ai_draft_status: draftReply ? "generated" : "none",
     })
     .eq("id", messageId);
+
+  // Decision Engine (shadow): scam first → escalate; otherwise Ask when the message
+  // hinges on unconfirmed client facts. Non-blocking — never breaks reply processing.
+  try {
+    const scam = scoreScamSignals({
+      subject: msg.subject,
+      body: msg.body,
+      senderEmail: (msg as { from_email?: string | null }).from_email,
+    });
+
+    if (scam.isLikelyScam) {
+      const decision = await decide({
+        jobSeekerId: thread.job_seeker_id,
+        subjectType: "recruiter_message",
+        subjectRef: messageId,
+        scam: true,
+        scamRedFlags: scam.redFlags,
+      });
+      const decisionId = await recordDecision(decision);
+      await routeDecision(decision, decisionId);
+    } else if (classification === "info_request" || classification === "scheduling") {
+      const requiredFactKeys =
+        classification === "scheduling"
+          ? ["availability"]
+          : ["work_authorization", "requires_sponsorship", "salary_expectations"];
+      const decision = await decide({
+        jobSeekerId: thread.job_seeker_id,
+        subjectType: "recruiter_message",
+        subjectRef: messageId,
+        requiredFactKeys,
+      });
+      if (decision.verdict !== "act") {
+        const decisionId = await recordDecision(decision);
+        await routeDecision(decision, decisionId);
+      }
+    }
+  } catch (err) {
+    console.error("[outreach-reply] decision hook failed:", err);
+  }
 
   return { classification, draftReply, source: aiResult ? "llm" : "regex" };
 }
