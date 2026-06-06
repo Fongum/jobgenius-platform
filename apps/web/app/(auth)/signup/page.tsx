@@ -56,7 +56,7 @@ function JobSeekerSubmittedState({
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
               1
             </span>
-            <p>HubSpot keeps the lead record and your resume details together.</p>
+            <p>We save your resume and contact details together as one application.</p>
           </div>
           <div className="flex items-start gap-3">
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
@@ -64,8 +64,8 @@ function JobSeekerSubmittedState({
             </span>
             <p>
               {result.voiceCallQueued
-                ? "Retell has been queued to qualify your search by phone."
-                : "Retell qualification will run as soon as the active playbook picks you up."}
+                ? "We will call you shortly to understand your timing, target roles, and how urgent your search is."
+                : "We will reach out by phone to understand your timing, target roles, and how urgent your search is."}
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -341,7 +341,7 @@ function SignUpForm() {
 
   const jobSeekerSteps = [
     "We capture your resume, contact details, and any promo or referral code.",
-    "Retell qualifies timing, role fit, and urgency before we ever ask you to use the app.",
+    "We give you a call to confirm your timing, role fit, and urgency before we ever ask you to use the app.",
     "An account manager reviews the lead and reaches out to book your consultation.",
     "After payment, we activate JobGenius and collect the deeper search preferences inside the app.",
   ];
