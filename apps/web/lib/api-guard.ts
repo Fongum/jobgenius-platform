@@ -12,11 +12,13 @@ const PUBLIC_API_EXACT = new Set([
   "/api/portal/gmail/callback",
   "/api/outreach/webhook/resend",
   "/api/marketing/lead",
+  "/api/marketing/hire-intake",
   "/api/voice/webhook/retell",
 ]);
 
 const PUBLIC_API_PREFIXES = [
   "/api/public/",
+  "/api/auth/oauth/",
   "/api/outreach/track/open/",
   "/api/recruiter/respond/",
 ];
