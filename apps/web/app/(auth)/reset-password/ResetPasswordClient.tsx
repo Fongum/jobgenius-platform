@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -14,8 +14,26 @@ export default function ResetPasswordClient() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Check if we have a reset token (from email link)
-  const accessToken = searchParams.get("access_token");
+  // Supabase's recovery flow returns the session in the URL *hash*
+  // (#access_token=...&type=recovery), or an error hash on a bad/expired link
+  // (#error=access_denied&error_code=otp_expired). The hash is not available to
+  // useSearchParams, so read it from window.location on the client.
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState("");
+
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const tokenFromHash = hash.get("access_token");
+    const tokenFromQuery = searchParams.get("access_token");
+    if (tokenFromHash || tokenFromQuery) {
+      setAccessToken(tokenFromHash ?? tokenFromQuery);
+    }
+    const errDescription = hash.get("error_description") || hash.get("error");
+    if (errDescription) {
+      setLinkError(decodeURIComponent(errDescription.replace(/\+/g, " ")));
+    }
+  }, [searchParams]);
+
   const isResetMode = !!accessToken;
 
   const handleRequestReset = async (e: React.FormEvent) => {
@@ -187,6 +205,12 @@ export default function ResetPasswordClient() {
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleRequestReset}>
+          {linkError && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded">
+              Your reset link is invalid or has expired. Request a new one below.
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
