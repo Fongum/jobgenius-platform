@@ -386,7 +386,7 @@ export async function getEmployeeByAccountManagerId(
       account_manager:account_managers!employees_account_manager_id_fkey(
         id, name, email, role
       ),
-      supervisor:employees!employees_supervisor_employee_id_fkey(
+      supervisor:employees!supervisor_employee_id(
         id,
         worker:payroll_workers!employees_worker_id_fkey(full_name)
       ),
@@ -448,7 +448,7 @@ export async function listPeopleEmployees(): Promise<EmployeeListRow[]> {
       account_manager:account_managers!employees_account_manager_id_fkey(
         id, name, email, role
       ),
-      supervisor:employees!employees_supervisor_employee_id_fkey(
+      supervisor:employees!supervisor_employee_id(
         id,
         worker:payroll_workers!employees_worker_id_fkey(full_name)
       ),
@@ -541,7 +541,7 @@ export async function listOnboardingQueue(): Promise<OnboardingQueueRow[]> {
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -602,7 +602,7 @@ export async function listMonthlyScorecards(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -664,7 +664,7 @@ export async function listLeadershipEligibilityRecords(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -730,7 +730,7 @@ export async function listDisciplinaryRecords(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -782,7 +782,7 @@ export async function listLeadershipCourseEnrollments(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -833,7 +833,7 @@ export async function listLeadershipTrials(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -884,7 +884,7 @@ export async function listLeaderOfMonthAwards(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -941,7 +941,7 @@ export async function listAcceptedOfferRecords(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -952,13 +952,13 @@ export async function listAcceptedOfferRecords(
       job_seeker:job_seekers!accepted_offer_records_job_seeker_id_fkey(
         id, full_name, email
       ),
-      assigned_account_manager:account_managers!accepted_offer_records_assigned_account_manager_id_fkey(
+      assigned_account_manager:account_managers!assigned_account_manager_id(
         id, name, email
       ),
-      application_submitted_by:account_managers!accepted_offer_records_application_submitted_by_account_manager_id_fkey(
+      application_submitted_by:account_managers!application_submitted_by_account_manager_id(
         id, name, email
       ),
-      interview_managed_by:account_managers!accepted_offer_records_interview_managed_by_account_manager_id_fkey(
+      interview_managed_by:account_managers!interview_managed_by_account_manager_id(
         id, name, email
       )
     `
@@ -996,7 +996,7 @@ export async function listEmployeeBonusRecords(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1014,7 +1014,7 @@ export async function listEmployeeBonusRecords(
           account_manager:account_managers!employees_account_manager_id_fkey(
             id, name, email, role
           ),
-          supervisor:employees!employees_supervisor_employee_id_fkey(
+          supervisor:employees!supervisor_employee_id(
             id,
             worker:payroll_workers!employees_worker_id_fkey(full_name)
           ),
@@ -1025,13 +1025,13 @@ export async function listEmployeeBonusRecords(
         job_seeker:job_seekers!accepted_offer_records_job_seeker_id_fkey(
           id, full_name, email
         ),
-        assigned_account_manager:account_managers!accepted_offer_records_assigned_account_manager_id_fkey(
+        assigned_account_manager:account_managers!assigned_account_manager_id(
           id, name, email
         ),
-        application_submitted_by:account_managers!accepted_offer_records_application_submitted_by_account_manager_id_fkey(
+        application_submitted_by:account_managers!application_submitted_by_account_manager_id(
           id, name, email
         ),
-        interview_managed_by:account_managers!accepted_offer_records_interview_managed_by_account_manager_id_fkey(
+        interview_managed_by:account_managers!interview_managed_by_account_manager_id(
           id, name, email
         )
       ),
@@ -1082,7 +1082,7 @@ export async function listSocialFundContributions(): Promise<SocialFundContribut
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1100,7 +1100,7 @@ export async function listSocialFundContributions(): Promise<SocialFundContribut
           account_manager:account_managers!employees_account_manager_id_fkey(
             id, name, email, role
           ),
-          supervisor:employees!employees_supervisor_employee_id_fkey(
+          supervisor:employees!supervisor_employee_id(
             id,
             worker:payroll_workers!employees_worker_id_fkey(full_name)
           ),
@@ -1111,13 +1111,13 @@ export async function listSocialFundContributions(): Promise<SocialFundContribut
         job_seeker:job_seekers!accepted_offer_records_job_seeker_id_fkey(
           id, full_name, email
         ),
-        assigned_account_manager:account_managers!accepted_offer_records_assigned_account_manager_id_fkey(
+        assigned_account_manager:account_managers!assigned_account_manager_id(
           id, name, email
         ),
-        application_submitted_by:account_managers!accepted_offer_records_application_submitted_by_account_manager_id_fkey(
+        application_submitted_by:account_managers!application_submitted_by_account_manager_id(
           id, name, email
         ),
-        interview_managed_by:account_managers!accepted_offer_records_interview_managed_by_account_manager_id_fkey(
+        interview_managed_by:account_managers!interview_managed_by_account_manager_id(
           id, name, email
         )
       )
@@ -1157,7 +1157,7 @@ export async function listSocialFundExpenses(): Promise<SocialFundExpenseRow[]> 
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1173,7 +1173,7 @@ export async function listSocialFundExpenses(): Promise<SocialFundExpenseRow[]> 
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1220,7 +1220,7 @@ export async function listSocialEvents(): Promise<SocialEventRow[]> {
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1308,7 +1308,7 @@ export async function listSocialLeadCandidates(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1324,7 +1324,7 @@ export async function listSocialLeadCandidates(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1413,7 +1413,7 @@ export async function listSocialLeadVotes(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1429,7 +1429,7 @@ export async function listSocialLeadVotes(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
@@ -1480,7 +1480,7 @@ export async function listSocialLeadTerms(
         account_manager:account_managers!employees_account_manager_id_fkey(
           id, name, email, role
         ),
-        supervisor:employees!employees_supervisor_employee_id_fkey(
+        supervisor:employees!supervisor_employee_id(
           id,
           worker:payroll_workers!employees_worker_id_fkey(full_name)
         ),
