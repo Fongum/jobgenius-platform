@@ -30,7 +30,9 @@ export default async function AdminBillingPage() {
         .limit(200),
       supabaseAdmin
         .from("job_seeker_contracts")
-        .select("*, job_seekers(id, full_name, email, plan_type)")
+        .select(
+          "*, job_seekers!job_seeker_contracts_job_seeker_id_fkey(id, full_name, email, plan_type)"
+        )
         .order("created_at", { ascending: false })
         .limit(200),
       supabaseAdmin
