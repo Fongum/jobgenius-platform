@@ -6,6 +6,7 @@ const PUBLIC_API_EXACT = new Set([
   "/api/auth/login",
   "/api/auth/signup",
   "/api/auth/reset-password",
+  "/api/auth/parse-resume",
   "/api/extension/auth",
   "/api/interview-confirm",
   "/api/portal/gmail/callback",
@@ -14,7 +15,11 @@ const PUBLIC_API_EXACT = new Set([
   "/api/voice/webhook/retell",
 ]);
 
-const PUBLIC_API_PREFIXES = ["/api/outreach/track/open/", "/api/recruiter/respond/"];
+const PUBLIC_API_PREFIXES = [
+  "/api/public/",
+  "/api/outreach/track/open/",
+  "/api/recruiter/respond/",
+];
 
 function isExplicitPublicApiPath(pathname: string) {
   if (PUBLIC_API_EXACT.has(pathname)) {
