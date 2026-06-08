@@ -131,6 +131,7 @@ function SignUpForm() {
   const [parsedResume, setParsedResume] = useState<ParsedResume | null>(null);
   const [parsedRawText, setParsedRawText] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState("");
+  const [resumeNotice, setResumeNotice] = useState("");
   const [capacitySummary, setCapacitySummary] = useState<PublicCapacityResponse | null>(null);
   const [leadSubmission, setLeadSubmission] = useState<LeadSubmissionResult | null>(null);
 
@@ -171,6 +172,7 @@ function SignUpForm() {
 
   const handleResumeUpload = async (file: File) => {
     setResumeError("");
+    setResumeNotice("");
     setResumeParsing(true);
     setResumeFile(file);
     setResumeFileName(file.name);
@@ -178,15 +180,27 @@ function SignUpForm() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/auth/parse-resume", { method: "POST", body: fd });
+      const res = await fetch("/api/public/parse-resume", { method: "POST", body: fd });
       const data = await res.json();
 
       if (!res.ok) {
         setParsedResume(null);
         setParsedRawText(null);
-        setResumeError(
-          data.error || "We could not auto-fill that file, but we can still send it to the team."
-        );
+        const rawError =
+          typeof data?.error === "string" ? data.error : "We could not read that file.";
+        const isSoftFailure =
+          res.status === 401 ||
+          res.status >= 500 ||
+          /auth/i.test(rawError) ||
+          /temporar/i.test(rawError);
+
+        if (isSoftFailure) {
+          setResumeNotice(
+            "Resume attached. Auto-fill is unavailable right now, but you can keep going."
+          );
+        } else {
+          setResumeError(rawError);
+        }
         return;
       }
 
@@ -200,7 +214,9 @@ function SignUpForm() {
     } catch {
       setParsedResume(null);
       setParsedRawText(null);
-      setResumeError("Upload failed. You can try again, or keep going if the file is already attached.");
+      setResumeNotice(
+        "Resume attached. Auto-fill is unavailable right now, but you can keep going."
+      );
     } finally {
       setResumeParsing(false);
     }
@@ -223,6 +239,7 @@ function SignUpForm() {
     setParsedResume(null);
     setParsedRawText(null);
     setResumeError("");
+    setResumeNotice("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -647,6 +664,9 @@ function SignUpForm() {
                         </div>
                       )}
 
+                      {resumeNotice && (
+                        <p className="mt-2 text-xs text-amber-700">{resumeNotice}</p>
+                      )}
                       {resumeError && <p className="mt-2 text-xs text-red-600">{resumeError}</p>}
                     </div>
                   </div>
