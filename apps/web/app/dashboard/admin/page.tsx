@@ -48,10 +48,10 @@ export default async function AdminPage() {
     .select("id", { count: "exact", head: true })
     .not("status", "in", "(closed,rejected)");
 
-  const { count: unassignedCount } = await supabaseAdmin
-    .from("job_seekers")
+  const { count: leadQueueCount } = await supabaseAdmin
+    .from("lead_intake_submissions")
     .select("id", { count: "exact", head: true })
-    .is("id", null); // This won't work, need a different approach
+    .in("status", ["new", "qualified", "nurture"]);
 
   // Get unassigned seekers count properly
   const { data: allSeekerIds } = await supabaseAdmin
@@ -95,7 +95,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-7">
         <Link
           href="/dashboard/admin/accounts"
           className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
@@ -105,7 +105,7 @@ export default async function AdminPage() {
             {(activeAmCount ?? 0) + (activeSeekerCount ?? 0)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
-            {activeAmCount ?? 0} AMs • {adminCount ?? 0} admins
+            {activeAmCount ?? 0} AMs | {adminCount ?? 0} admins
           </div>
         </Link>
 
@@ -143,6 +143,15 @@ export default async function AdminPage() {
         </Link>
 
         <Link
+          href="/dashboard/admin/leads"
+          className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="text-sm font-medium text-gray-500">Lead Queue</div>
+          <div className="mt-1 text-3xl font-bold text-fuchsia-600">{leadQueueCount ?? 0}</div>
+          <div className="text-xs text-gray-400 mt-1">Website and imported leads</div>
+        </Link>
+
+        <Link
           href="/dashboard/admin/hiring-partners"
           className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
         >
@@ -156,6 +165,12 @@ export default async function AdminPage() {
       <div className="bg-white rounded-lg shadow p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
+          <Link
+            href="/dashboard/admin/leads"
+            className="px-4 py-2 bg-fuchsia-600 text-white text-sm font-medium rounded-lg hover:bg-fuchsia-700 transition-colors"
+          >
+            Review Lead Queue
+          </Link>
           <Link
             href="/dashboard/admin/hiring-partners"
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"

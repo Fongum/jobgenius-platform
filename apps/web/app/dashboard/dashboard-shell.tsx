@@ -101,6 +101,7 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin", label: "Admin Overview", icon: "shield", exact: true },
     { href: "/dashboard/admin/accounts", label: "User Accounts", icon: "user-cog" },
     { href: "/dashboard/admin/job-seekers", label: "All Job Seekers", icon: "users-all" },
+    { href: "/dashboard/admin/leads", label: "Lead Queue", icon: "phone" },
     { href: "/dashboard/admin/hiring-partners", label: "Hiring Requests", icon: "briefcase" },
     { href: "/dashboard/admin/intake", label: "Intake Queue", icon: "queue" },
     { href: "/dashboard/admin/capacity", label: "AM Capacity", icon: "chart" },

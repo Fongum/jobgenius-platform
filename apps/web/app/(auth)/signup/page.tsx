@@ -45,8 +45,8 @@ function JobSeekerSubmittedState({
       </div>
       <h2 className="mt-4 text-2xl font-semibold text-gray-900">You are in the queue.</h2>
       <p className="mt-2 text-sm leading-6 text-gray-600">
-        We have your resume and contact details. The next step is qualification, not portal
-        setup.
+        We have your resume and contact details. Your lead is now visible to the internal team
+        for qualification and follow-up.
       </p>
 
       <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -56,7 +56,7 @@ function JobSeekerSubmittedState({
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
               1
             </span>
-            <p>We save your resume and contact details together as one application.</p>
+            <p>Your details land in our internal lead queue with your resume attached.</p>
           </div>
           <div className="flex items-start gap-3">
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
@@ -64,15 +64,15 @@ function JobSeekerSubmittedState({
             </span>
             <p>
               {result.voiceCallQueued
-                ? "We will call you shortly to understand your timing, target roles, and how urgent your search is."
-                : "We will reach out by phone to understand your timing, target roles, and how urgent your search is."}
+                ? "Our qualification call has been queued so we can confirm timing, role fit, and urgency."
+                : "Our team will reach out by phone to confirm timing, role fit, and urgency."}
             </p>
           </div>
           <div className="flex items-start gap-3">
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
               3
             </span>
-            <p>An account manager reviews the lead and reaches out to book a consultation.</p>
+            <p>An admin or account manager reviews the lead and reaches out to book a consultation.</p>
           </div>
           <div className="flex items-start gap-3">
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
@@ -90,7 +90,8 @@ function JobSeekerSubmittedState({
       )}
 
       <div className="mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
-        Lead reference: <span className="font-mono text-gray-700">{result.leadId}</span>
+        Lead reference: <span className="font-mono text-gray-700">{result.leadId}</span>. Keep
+        this if the team asks you to confirm your submission.
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
