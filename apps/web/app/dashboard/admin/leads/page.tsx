@@ -36,6 +36,13 @@ type VoiceCallRow = {
   call_ended_at: string | null;
 };
 
+type LeadResumeMetadata = {
+  file_name?: unknown;
+  mime_type?: unknown;
+  storage_path?: unknown;
+  signed_url?: unknown;
+};
+
 function badgeClasses(status: string) {
   switch (status) {
     case "new":
@@ -84,6 +91,31 @@ function getOfferCode(metadata: Record<string, unknown> | null) {
 function getSubmittedVia(metadata: Record<string, unknown> | null) {
   const value = metadata?.source ?? metadata?.submitted_via;
   return typeof value === "string" && value.trim() ? value.trim() : "website";
+}
+
+function getResumeMetadata(metadata: Record<string, unknown> | null) {
+  const resume = metadata?.resume;
+  if (!resume || typeof resume !== "object" || Array.isArray(resume)) {
+    return null;
+  }
+
+  const data = resume as LeadResumeMetadata;
+  const fileName =
+    typeof data.file_name === "string" && data.file_name.trim() ? data.file_name.trim() : null;
+  const mimeType =
+    typeof data.mime_type === "string" && data.mime_type.trim() ? data.mime_type.trim() : null;
+  const hasFile =
+    (typeof data.storage_path === "string" && data.storage_path.trim().length > 0) ||
+    (typeof data.signed_url === "string" && data.signed_url.trim().length > 0);
+
+  if (!hasFile) {
+    return null;
+  }
+
+  return {
+    fileName,
+    mimeType,
+  };
 }
 
 function isSignupIntake(metadata: Record<string, unknown> | null) {
@@ -348,6 +380,7 @@ export default async function AdminLeadsPage({
                   const voice = latestVoiceByLead.get(lead.id);
                   const offerCode = getOfferCode(lead.metadata);
                   const submittedVia = getSubmittedVia(lead.metadata);
+                  const resume = getResumeMetadata(lead.metadata);
                   const owner = lead.owner_account_manager_id
                     ? ownerMap.get(lead.owner_account_manager_id) ?? null
                     : null;
@@ -372,6 +405,22 @@ export default async function AdminLeadsPage({
                           <p className="text-xs text-gray-400">
                             Source: {formatStatus(lead.source)} | Submitted via {formatStatus(submittedVia)}
                           </p>
+                          {resume ? (
+                            <div className="pt-1">
+                              <p className="text-xs text-gray-500">
+                                Resume: {resume.fileName || "uploaded file"}
+                                {resume.mimeType ? ` (${resume.mimeType})` : ""}
+                              </p>
+                              <a
+                                href={`/api/admin/leads/${lead.id}/resume`}
+                                className="mt-1 inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
+                              >
+                                Download resume
+                              </a>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400">No resume uploaded</p>
+                          )}
                           {lead.notes && (
                             <p className="text-xs text-gray-500 line-clamp-2">{lead.notes}</p>
                           )}
