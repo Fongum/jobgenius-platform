@@ -48,6 +48,8 @@ export const NOTIFICATION_CATEGORIES = {
   employee_bonus_payable_this_month: "employee_bonus_payable_this_month",
   employee_bonus_updated: "employee_bonus_updated",
   employee_social_fund_contribution_added: "employee_social_fund_contribution_added",
+  work_report_missing: "work_report_missing",
+  work_report_review_digest: "work_report_review_digest",
 } as const;
 
 export type NotificationCategory =
@@ -71,6 +73,8 @@ export const INTERNAL_OPERATIONS_NOTIFICATION_CATEGORIES = [
   NOTIFICATION_CATEGORIES.employee_bonus_payable_this_month,
   NOTIFICATION_CATEGORIES.employee_bonus_updated,
   NOTIFICATION_CATEGORIES.employee_social_fund_contribution_added,
+  NOTIFICATION_CATEGORIES.work_report_missing,
+  NOTIFICATION_CATEGORIES.work_report_review_digest,
 ] as const;
 
 export function getNotificationCategoryLabel(category: string): string {
@@ -109,6 +113,10 @@ export function getNotificationCategoryLabel(category: string): string {
       return "Bonus updated";
     case NOTIFICATION_CATEGORIES.employee_social_fund_contribution_added:
       return "Social fund contribution added";
+    case NOTIFICATION_CATEGORIES.work_report_missing:
+      return "Daily work report reminder";
+    case NOTIFICATION_CATEGORIES.work_report_review_digest:
+      return "Work report review digest";
     default:
       return category
         .replace(/_/g, " ")

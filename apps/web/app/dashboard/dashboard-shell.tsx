@@ -75,6 +75,13 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Reporting",
+    items: [
+      { href: "/dashboard/work-reports/me", label: "My Work Report", icon: "document" },
+      { href: "/dashboard/work-reports", label: "Team Reports", icon: "chart" },
+    ],
+  },
+  {
     title: "My Work",
     items: [
       { href: "/dashboard/me/work", label: "Employee Hub", icon: "briefcase" },
