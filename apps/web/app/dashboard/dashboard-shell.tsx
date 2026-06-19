@@ -36,6 +36,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
   {
     title: "Job Seekers",
     items: [
+      { href: "/dashboard/delivery", label: "Delivery Board", icon: "briefcase" },
       { href: "/dashboard/seekers", label: "My Seekers", icon: "users" },
     ],
   },
@@ -86,6 +87,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/me/work", label: "Employee Hub", icon: "briefcase" },
       { href: "/dashboard/me/onboarding", label: "Onboarding", icon: "check" },
+      { href: "/dashboard/me/permissions", label: "Permissions", icon: "calendar" },
       { href: "/dashboard/me/performance", label: "Scorecards", icon: "chart" },
       { href: "/dashboard/me/probation", label: "Probation", icon: "clock" },
       { href: "/dashboard/me/career", label: "Career Path", icon: "academic" },
@@ -143,6 +145,7 @@ const PEOPLE_NAV_SECTION: NavSection = {
     { href: "/dashboard/people", label: "People Overview", icon: "users-all", exact: true },
     { href: "/dashboard/people/employees", label: "Employees", icon: "users" },
     { href: "/dashboard/people/onboarding", label: "Onboarding Queue", icon: "queue" },
+    { href: "/dashboard/people/permissions", label: "Permissions", icon: "calendar" },
     { href: "/dashboard/people/scorecards", label: "Scorecards", icon: "chart" },
     { href: "/dashboard/people/probation", label: "Probation", icon: "clock" },
     { href: "/dashboard/people/discipline", label: "Discipline", icon: "alert" },

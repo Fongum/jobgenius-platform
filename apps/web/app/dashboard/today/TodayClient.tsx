@@ -20,6 +20,10 @@ export interface AmTaskRow {
 
 const KIND_LABELS: Record<string, string> = {
   attention_item: "Attention",
+  delivery_next_action: "Delivery",
+  delivery_blocker: "Blocker",
+  delivery_stale: "Stale",
+  delivery_risk_review: "Risk",
   billing_overdue: "Billing",
   payslip_sign: "Payslip",
   outreach_reply: "Reply",
@@ -28,6 +32,10 @@ const KIND_LABELS: Record<string, string> = {
 
 const KIND_STYLES: Record<string, string> = {
   attention_item: "bg-amber-100 text-amber-700",
+  delivery_next_action: "bg-violet-100 text-violet-700",
+  delivery_blocker: "bg-orange-100 text-orange-800",
+  delivery_stale: "bg-slate-200 text-slate-700",
+  delivery_risk_review: "bg-red-100 text-red-700",
   billing_overdue: "bg-red-100 text-red-700",
   payslip_sign: "bg-emerald-100 text-emerald-700",
   outreach_reply: "bg-blue-100 text-blue-700",
@@ -92,6 +100,10 @@ export default function TodayClient({
   const filters: Array<{ key: string; label: string }> = [
     { key: "all", label: "All" },
     { key: "attention_item", label: "Attention" },
+    { key: "delivery_next_action", label: "Delivery" },
+    { key: "delivery_blocker", label: "Blockers" },
+    { key: "delivery_stale", label: "Stale" },
+    { key: "delivery_risk_review", label: "Risk" },
     { key: "outreach_reply", label: "Replies" },
     { key: "interview_upcoming", label: "Interviews" },
     { key: "billing_overdue", label: "Billing" },
@@ -103,8 +115,8 @@ export default function TodayClient({
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-16 text-center">
         <p className="text-sm font-medium text-gray-700">You're clear, {amName}.</p>
         <p className="text-xs text-gray-400 mt-2">
-          No open tasks across attention items, billing, payslips, replies, or
-          upcoming interviews.
+          No open tasks across delivery, attention items, billing, payslips,
+          replies, or upcoming interviews.
         </p>
       </div>
     );

@@ -35,9 +35,19 @@ describe("buildDiscoveryPolicyVariants", () => {
         ["Backend Developer", "API Engineer", "Back-End Engineer"].includes(variant.title)
       )
     ).toBe(true);
+    expect(
+      variants.some(
+        (variant) =>
+          variant.queryStrategy === "skill_keyword" &&
+          variant.title === "Backend Engineer Node.js API Microservices" &&
+          variant.keywords.includes("Node.js")
+      )
+    ).toBe(true);
 
     const uniqueCombinations = new Set(
-      variants.map((variant) => `${variant.title.toLowerCase()}::${variant.location.toLowerCase()}`)
+      variants.map(
+        (variant) => `${variant.key}::${variant.title.toLowerCase()}::${variant.location.toLowerCase()}`
+      )
     );
     expect(uniqueCombinations.size).toBe(variants.length);
   });
@@ -64,6 +74,24 @@ describe("buildDiscoveryPolicyVariants", () => {
     ).toBe(true);
     expect(
       variants.some((variant) => variant.title === "Product Owner")
+    ).toBe(true);
+  });
+
+  it("adds controlled stack-keyword variants for data roles", () => {
+    const variants = buildDiscoveryPolicyVariants(
+      "policy-3",
+      "Data Analyst",
+      "Toronto, ON"
+    );
+
+    expect(
+      variants.some(
+        (variant) =>
+          variant.queryStrategy === "skill_keyword" &&
+          variant.title === "Data Analyst SQL Tableau Power BI" &&
+          variant.location === "Toronto, ON" &&
+          variant.keywords.includes("Tableau")
+      )
     ).toBe(true);
   });
 });

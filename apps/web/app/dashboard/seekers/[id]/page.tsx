@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
-import { isAdminRole } from "@/lib/auth/roles";
+import { isAdminRole, isPeopleManagerRole } from "@/lib/auth/roles";
+import { getClientDeliveryCaseBundleForSeeker } from "@/lib/client-delivery-server";
 import SeekerDetailClient from "./SeekerDetailClient";
 
 interface PageProps {
@@ -12,12 +13,12 @@ export default async function SeekerDetailPage({ params }: PageProps) {
   if (!user) return null;
 
   const { id } = params;
-  const isAdmin =
-    user.userType === "am" &&
-    isAdminRole(user.role);
+  const isAdmin = user.userType === "am" && isAdminRole(user.role);
+  const canViewAnySeeker =
+    user.userType === "am" && isPeopleManagerRole(user.role);
 
-  if (!isAdmin) {
-    // Verify assignment for non-admin AM users
+  if (!canViewAnySeeker) {
+    // Verify assignment for non-privileged AM users
     const { data: assignment } = await supabaseAdmin
       .from("job_seeker_assignments")
       .select("id")
@@ -245,11 +246,19 @@ export default async function SeekerDetailPage({ params }: PageProps) {
   });
 
   type FinancialProp = NonNullable<Parameters<typeof SeekerDetailClient>[0]["financial"]>;
+  const deliveryBundle =
+    user.userType === "am"
+      ? await getClientDeliveryCaseBundleForSeeker(
+          { accountManagerId: user.id, role: user.role },
+          id
+        )
+      : null;
 
   return (
     <SeekerDetailClient
-      backHref={isAdmin ? "/dashboard/admin/job-seekers" : "/dashboard/seekers"}
+      backHref={isAdmin ? "/dashboard/admin/job-seekers" : canViewAnySeeker ? "/dashboard/delivery" : "/dashboard/seekers"}
       seeker={seeker}
+      deliveryBundle={deliveryBundle}
       matchedJobs={matchedJobs as unknown as Parameters<typeof SeekerDetailClient>[0]["matchedJobs"]}
       queueItems={(queueItems || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["queueItems"]}
       runs={(runs || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["runs"]}

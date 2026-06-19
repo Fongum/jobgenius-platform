@@ -202,6 +202,40 @@ describe("computeMatchScore", () => {
   // ────────────────────────────────────────────────────────────────────────
   // 3. Poor match — title mismatch, missing skills
   // ────────────────────────────────────────────────────────────────────────
+  describe("title alias matching", () => {
+    it("treats software developer as a partial title match for software engineer targets", () => {
+      const seeker = buildSeeker({
+        target_titles: ["Software Engineer"],
+      });
+      const job = buildJob({
+        title: "Software Developer",
+      });
+
+      const result = computeMatchScore(seeker, job);
+
+      expect(result.component_scores.title.score).toBeGreaterThanOrEqual(10);
+      expect(result.component_scores.title.details.partial_matches).toEqual(
+        expect.arrayContaining(["software engineer"])
+      );
+    });
+
+    it("treats platform engineer as a partial title match for devops engineer targets", () => {
+      const seeker = buildSeeker({
+        target_titles: ["DevOps Engineer"],
+      });
+      const job = buildJob({
+        title: "Platform Engineer",
+      });
+
+      const result = computeMatchScore(seeker, job);
+
+      expect(result.component_scores.title.score).toBeGreaterThanOrEqual(10);
+      expect(result.component_scores.title.details.partial_matches).toEqual(
+        expect.arrayContaining(["devops engineer"])
+      );
+    });
+  });
+
   describe("poor match", () => {
     it("returns score < 40 and poor_fit when title and skills are mismatched", () => {
       mockPartialSkills(0, [], ["python", "sql", "tableau"], [], 0);
@@ -337,6 +371,24 @@ describe("computeMatchScore", () => {
   // 7. Location mismatch — seeker NYC onsite, job SF onsite
   // ────────────────────────────────────────────────────────────────────────
   describe("location mismatch", () => {
+    it("matches common city variants and stripped work-mode labels", () => {
+      const seeker = buildSeeker({
+        location: "New York, NY",
+        preferred_locations: ["New York, NY"],
+        work_type: "hybrid",
+        location_preferences: [],
+      });
+      const job = buildJob({
+        location: "New York City, NY (Hybrid)",
+        work_type: "hybrid",
+      });
+
+      const result = computeMatchScore(seeker, job);
+
+      expect(result.component_scores.location.score).toBe(15);
+      expect(result.component_scores.location.details.match_type).toBe("exact");
+    });
+
     it("gives 0 location score when seeker in NYC (onsite) and job in SF (onsite), no relocation", () => {
       const seeker = buildSeeker({
         location: "New York, NY",

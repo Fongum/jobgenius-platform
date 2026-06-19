@@ -7,6 +7,8 @@ import type {
   DisciplinaryRecord,
   EmployeeOnboardingForm,
   EmployeeBonusRecord,
+  EmployeePermissionPolicy,
+  EmployeePermissionRequest,
   EmployeeRecord,
   LeaderOfMonthAward,
   LeadershipCourseEnrollment,
@@ -28,6 +30,7 @@ import type {
   SocialFundExpense,
 } from "@/lib/people";
 import {
+  calculatePermissionAllowanceSummary,
   calculateSocialFundBalance,
   calculateWeightedScorecardTotal,
   evaluateSocialLeadEligibility,
@@ -64,6 +67,36 @@ export type EmployeeListRow = EmployeeRecord & {
 
 export type OnboardingQueueRow = EmployeeOnboardingForm & {
   employee: EmployeeListRow | null;
+};
+
+export type EmployeePermissionPolicyRow = EmployeePermissionPolicy & {
+  employee: EmployeeListRow | null;
+  configured_by_account_manager: {
+    id: string;
+    name: string | null;
+    email: string;
+  } | null;
+};
+
+export type EmployeePermissionRequestRow = EmployeePermissionRequest & {
+  employee: EmployeeListRow | null;
+  policy: EmployeePermissionPolicy | null;
+  decider: {
+    id: string;
+    name: string | null;
+    email: string;
+  } | null;
+};
+
+export type EmployeePermissionAllowanceSummaryRow = {
+  employee: EmployeeListRow;
+  activePolicy: EmployeePermissionPolicyRow | null;
+  approvedDaysUsed: number;
+  pendingDays: number;
+  committedDays: number;
+  remainingDays: number;
+  overLimit: boolean;
+  requests: EmployeePermissionRequestRow[];
 };
 
 export type ScorecardRecord = MonthlyScorecard & {
@@ -405,6 +438,39 @@ export async function getEmployeeByAccountManagerId(
   return mapEmployeeRelation((data as Record<string, unknown> | null) ?? null);
 }
 
+export async function getEmployeeById(
+  employeeId: string
+): Promise<EmployeeListRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("employees")
+    .select(
+      `
+      *,
+      worker:payroll_workers!employees_worker_id_fkey(
+        id, full_name, email, job_title, department, status, currency
+      ),
+      account_manager:account_managers!employees_account_manager_id_fkey(
+        id, name, email, role
+      ),
+      supervisor:employees!supervisor_employee_id(
+        id,
+        worker:payroll_workers!employees_worker_id_fkey(full_name)
+      ),
+      current_level:career_ladder_levels!employees_current_career_level_id_fkey(
+        id, slug, title, department, rank_order, summary, requirements
+      )
+    `
+    )
+    .eq("id", employeeId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapEmployeeRelation((data as Record<string, unknown> | null) ?? null);
+}
+
 export async function getEmployeeOnboardingForm(
   employeeId: string
 ): Promise<EmployeeOnboardingForm | null> {
@@ -434,6 +500,223 @@ export async function listPolicyAcknowledgementsForEmployee(
   }
 
   return (data ?? []) as PolicyAcknowledgement[];
+}
+
+export async function listEmployeePermissionPolicies(
+  employeeId?: string
+): Promise<EmployeePermissionPolicyRow[]> {
+  let query = supabaseAdmin
+    .from("employee_permission_policies")
+    .select(
+      `
+      *,
+      employee:employees!employee_permission_policies_employee_id_fkey(
+        *,
+        worker:payroll_workers!employees_worker_id_fkey(
+          id, full_name, email, job_title, department, status, currency
+        ),
+        account_manager:account_managers!employees_account_manager_id_fkey(
+          id, name, email, role
+        ),
+        supervisor:employees!supervisor_employee_id(
+          id,
+          worker:payroll_workers!employees_worker_id_fkey(full_name)
+        ),
+        current_level:career_ladder_levels!employees_current_career_level_id_fkey(
+          id, slug, title, department, rank_order, summary, requirements
+        )
+      ),
+      configured_by_account_manager:account_managers!employee_permission_policies_configured_by_fkey(
+        id, name, email
+      )
+    `
+    )
+    .order("active", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (employeeId) {
+    query = query.eq("employee_id", employeeId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    ...(row as unknown as EmployeePermissionPolicy),
+    employee: mapEmployeeRelation(
+      (row.employee as Record<string, unknown> | null) ?? null
+    ),
+    configured_by_account_manager: Array.isArray(row.configured_by_account_manager)
+      ? ((row.configured_by_account_manager[0] as EmployeePermissionPolicyRow["configured_by_account_manager"]) ??
+          null)
+      : ((row.configured_by_account_manager as EmployeePermissionPolicyRow["configured_by_account_manager"]) ??
+          null),
+  }));
+}
+
+export async function listEmployeePermissionRequests(
+  employeeId?: string
+): Promise<EmployeePermissionRequestRow[]> {
+  let query = supabaseAdmin
+    .from("employee_permission_requests")
+    .select(
+      `
+      *,
+      employee:employees!employee_permission_requests_employee_id_fkey(
+        *,
+        worker:payroll_workers!employees_worker_id_fkey(
+          id, full_name, email, job_title, department, status, currency
+        ),
+        account_manager:account_managers!employees_account_manager_id_fkey(
+          id, name, email, role
+        ),
+        supervisor:employees!supervisor_employee_id(
+          id,
+          worker:payroll_workers!employees_worker_id_fkey(full_name)
+        ),
+        current_level:career_ladder_levels!employees_current_career_level_id_fkey(
+          id, slug, title, department, rank_order, summary, requirements
+        )
+      ),
+      policy:employee_permission_policies!employee_permission_requests_policy_id_fkey(
+        *
+      ),
+      decider:account_managers!employee_permission_requests_decided_by_fkey(
+        id, name, email
+      )
+    `
+    )
+    .order("created_at", { ascending: false });
+
+  if (employeeId) {
+    query = query.eq("employee_id", employeeId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    ...(row as unknown as EmployeePermissionRequest),
+    employee: mapEmployeeRelation(
+      (row.employee as Record<string, unknown> | null) ?? null
+    ),
+    policy: Array.isArray(row.policy)
+      ? ((row.policy[0] as EmployeePermissionPolicy | null) ?? null)
+      : ((row.policy as EmployeePermissionPolicy | null) ?? null),
+    decider: Array.isArray(row.decider)
+      ? ((row.decider[0] as EmployeePermissionRequestRow["decider"]) ?? null)
+      : ((row.decider as EmployeePermissionRequestRow["decider"]) ?? null),
+  }));
+}
+
+function buildEmployeePermissionAllowanceSummary(params: {
+  employee: EmployeeListRow;
+  activePolicy: EmployeePermissionPolicyRow | null;
+  requests: EmployeePermissionRequestRow[];
+}): EmployeePermissionAllowanceSummaryRow {
+  const policyRequests = params.activePolicy
+    ? params.requests.filter((request) => request.policy_id === params.activePolicy?.id)
+    : [];
+  const allowance = params.activePolicy
+    ? calculatePermissionAllowanceSummary({
+        allowedDays: params.activePolicy.allowed_days,
+        requests: policyRequests,
+      })
+    : {
+        allowedDays: 0,
+        approvedDaysUsed: 0,
+        pendingDays: 0,
+        committedDays: 0,
+        remainingDays: 0,
+        overLimit: false,
+      };
+
+  return {
+    employee: params.employee,
+    activePolicy: params.activePolicy,
+    approvedDaysUsed: allowance.approvedDaysUsed,
+    pendingDays: allowance.pendingDays,
+    committedDays: allowance.committedDays,
+    remainingDays: allowance.remainingDays,
+    overLimit: allowance.overLimit,
+    requests: policyRequests,
+  };
+}
+
+export async function getEmployeePermissionAllowanceSummary(
+  employeeId: string
+): Promise<EmployeePermissionAllowanceSummaryRow | null> {
+  const [employee, policies, requests] = await Promise.all([
+    getEmployeeById(employeeId),
+    listEmployeePermissionPolicies(employeeId),
+    listEmployeePermissionRequests(employeeId),
+  ]);
+
+  if (!employee) return null;
+
+  const activePolicy =
+    policies.find((policy) => policy.active) ??
+    null;
+
+  return buildEmployeePermissionAllowanceSummary({
+    employee,
+    activePolicy,
+    requests,
+  });
+}
+
+export async function listEmployeePermissionAllowanceSummaries(): Promise<
+  EmployeePermissionAllowanceSummaryRow[]
+> {
+  const [employees, policies, requests] = await Promise.all([
+    listPeopleEmployees(),
+    listEmployeePermissionPolicies(),
+    listEmployeePermissionRequests(),
+  ]);
+
+  const activePolicyByEmployee = new Map<string, EmployeePermissionPolicyRow>();
+  for (const policy of policies) {
+    if (policy.active && !activePolicyByEmployee.has(policy.employee_id)) {
+      activePolicyByEmployee.set(policy.employee_id, policy);
+    }
+  }
+
+  const requestsByEmployee = new Map<string, EmployeePermissionRequestRow[]>();
+  for (const request of requests) {
+    const bucket = requestsByEmployee.get(request.employee_id) ?? [];
+    bucket.push(request);
+    requestsByEmployee.set(request.employee_id, bucket);
+  }
+
+  return employees
+    .filter((employee) => employee.active && employee.employment_status !== "terminated")
+    .map((employee) =>
+      buildEmployeePermissionAllowanceSummary({
+        employee,
+        activePolicy: activePolicyByEmployee.get(employee.id) ?? null,
+        requests: requestsByEmployee.get(employee.id) ?? [],
+      })
+    );
+}
+
+export async function listPeopleManagerAccounts(): Promise<
+  Array<{ id: string; name: string | null; email: string | null; role: string | null }>
+> {
+  const { data, error } = await supabaseAdmin
+    .from("account_managers")
+    .select("id, name, email, role");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).filter((account) => isPeopleManagerRole(account.role));
 }
 
 export async function listPeopleEmployees(): Promise<EmployeeListRow[]> {

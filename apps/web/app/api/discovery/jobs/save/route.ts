@@ -4,6 +4,10 @@ import { parseJobPost } from "@/lib/matching";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { normalizeJobUrl } from "@/lib/job-url";
 import { computeDiscoveredJobContentHash } from "@/lib/discovery/content-hash";
+import {
+  areLikelyMirroredDiscoveredJobs,
+  cleanDiscoveredJobRecord,
+} from "@/lib/discovery/job-cleaning";
 
 type DiscoveredJob = {
   external_id: string | null;
@@ -31,6 +35,7 @@ type ExistingJobPost = {
   location: string | null;
   description_text: string | null;
   external_id: string | null;
+  source_name: string | null;
   posted_at: string | null;
   times_seen: number | null;
   content_hash: string | null;
@@ -53,9 +58,10 @@ function buildParsedData(job: {
   title: string;
   company: string | null;
   location: string | null;
+  salary: string | null;
   description_text: string | null;
 }) {
-  if (!job.description_text) {
+  if (!job.description_text && !job.salary) {
     return { parsedData: {}, parsedAt: null as string | null };
   }
 
@@ -64,14 +70,16 @@ function buildParsedData(job: {
       job.title,
       job.company,
       job.location,
-      job.description_text
+      job.description_text,
+      job.salary
     ),
     parsedAt: new Date().toISOString(),
   };
 }
 
 async function findExistingJob(normalizedUrl: string, externalId: string | null, sourceName: string) {
-  const baseSelect = "id, url, title, company, location, description_text, external_id, posted_at, times_seen, content_hash";
+  const baseSelect =
+    "id, url, title, company, location, description_text, external_id, source_name, posted_at, times_seen, content_hash";
 
   const { data: existingByUrl } = await supabaseServer
     .from("job_posts")
@@ -97,6 +105,42 @@ async function findExistingJob(normalizedUrl: string, externalId: string | null,
     .maybeSingle();
 
   return (existingByExtId as ExistingJobPost | null) ?? null;
+}
+
+async function findMirroredExistingJob(job: {
+  title: string;
+  company: string | null;
+  location: string | null;
+  description_text: string | null;
+  posted_at: string | null;
+}) {
+  const baseSelect =
+    "id, url, title, company, location, description_text, external_id, source_name, posted_at, times_seen, content_hash";
+
+  let query = supabaseServer
+    .from("job_posts")
+    .select(baseSelect)
+    .eq("title", job.title)
+    .order("last_seen_at", { ascending: false })
+    .limit(15);
+
+  query = job.company ? query.eq("company", job.company) : query.is("company", null);
+  query = job.location ? query.eq("location", job.location) : query.is("location", null);
+
+  const { data } = await query;
+  const candidates = (data ?? []) as ExistingJobPost[];
+
+  return (
+    candidates.find((candidate) =>
+      areLikelyMirroredDiscoveredJobs(job, {
+        title: candidate.title,
+        company: candidate.company,
+        location: candidate.location,
+        description_text: candidate.description_text,
+        posted_at: candidate.posted_at,
+      })
+    ) ?? null
+  );
 }
 
 /**
@@ -135,53 +179,88 @@ export async function POST(request: Request) {
   let updated = 0;
   let unchanged = 0;
   let duplicates = 0;
+  let mirrored = 0;
   let errors = 0;
   const rematchJobIds: string[] = [];
 
   for (const job of payload.jobs) {
-    const normalizedUrl = job.url ? normalizeJobUrl(job.url) : "";
+    const cleanedJob = cleanDiscoveredJobRecord(job);
+    const normalizedUrl = cleanedJob.url ? normalizeJobUrl(cleanedJob.url) : "";
     const nowIso = new Date().toISOString();
 
     // Skip jobs without a valid URL or title
-    if (!normalizedUrl || !job.title) {
+    if (!normalizedUrl || !cleanedJob.title) {
       errors++;
       continue;
     }
 
     try {
-      const existing = await findExistingJob(normalizedUrl, job.external_id, job.source_name);
+      const existing = await findExistingJob(
+        normalizedUrl,
+        cleanedJob.external_id,
+        cleanedJob.source_name
+      );
+      const mirroredExisting =
+        existing ??
+        (await findMirroredExistingJob({
+          title: cleanedJob.title,
+          company: cleanedJob.company,
+          location: cleanedJob.location,
+          description_text: cleanedJob.description_text,
+          posted_at: cleanedJob.posted_at,
+        }));
+      const matchType = existing ? "direct" : mirroredExisting ? "mirror" : "new";
 
-      if (existing) {
+      if (mirroredExisting) {
         const mergedJob = {
-          title: job.title,
-          company: preferIncomingText(job.company, existing.company),
-          location: preferIncomingText(job.location, existing.location),
-          description_text: preferIncomingText(job.description_text, existing.description_text),
-          external_id: job.external_id ?? existing.external_id,
-          posted_at: parseDiscoveryTimestamp(job.posted_at) ?? existing.posted_at,
+          title: cleanedJob.title,
+          company: preferIncomingText(cleanedJob.company, mirroredExisting.company),
+          location: preferIncomingText(cleanedJob.location, mirroredExisting.location),
+          salary: cleanedJob.salary,
+          description_text: preferIncomingText(
+            cleanedJob.description_text,
+            mirroredExisting.description_text
+          ),
+          external_id:
+            matchType === "mirror"
+              ? mirroredExisting.external_id
+              : cleanedJob.external_id ?? mirroredExisting.external_id,
+          posted_at:
+            parseDiscoveryTimestamp(cleanedJob.posted_at) ?? mirroredExisting.posted_at,
         };
         const existingHash =
-          existing.content_hash ??
+          mirroredExisting.content_hash ??
           computeDiscoveredJobContentHash({
-            title: existing.title,
-            company: existing.company,
-            location: existing.location,
-            description_text: existing.description_text,
+            title: mirroredExisting.title,
+            company: mirroredExisting.company,
+            location: mirroredExisting.location,
+            salary: null,
+            description_text: mirroredExisting.description_text,
           });
         const mergedHash = computeDiscoveredJobContentHash(mergedJob);
         const contentChanged = mergedHash !== existingHash;
-        const postedAtChanged = mergedJob.posted_at !== existing.posted_at;
+        const postedAtChanged = mergedJob.posted_at !== mirroredExisting.posted_at;
         const needsRefresh = contentChanged || postedAtChanged;
         const { parsedData, parsedAt } = buildParsedData(mergedJob);
 
         const updatePayload: Record<string, unknown> = {
-          external_id: mergedJob.external_id,
+          external_id:
+            matchType === "mirror" && mirroredExisting.external_id
+              ? mirroredExisting.external_id
+              : mergedJob.external_id,
           discovery_run_id: payload.run_id,
           last_seen_at: nowIso,
           is_active: true,
-          times_seen: (existing.times_seen ?? 1) + 1,
+          times_seen: (mirroredExisting.times_seen ?? 1) + 1,
           content_hash: mergedHash,
-          last_discovery_status: needsRefresh ? "updated" : "unchanged",
+          last_discovery_status:
+            matchType === "mirror"
+              ? needsRefresh
+                ? "mirrored_updated"
+                : "mirrored_duplicate"
+              : needsRefresh
+              ? "updated"
+              : "unchanged",
         };
 
         if (postedAtChanged) {
@@ -207,7 +286,7 @@ export async function POST(request: Request) {
         const { error: updateError } = await supabaseServer
           .from("job_posts")
           .update(updatePayload)
-          .eq("id", existing.id);
+          .eq("id", mirroredExisting.id);
 
         if (updateError) {
           errors++;
@@ -216,18 +295,22 @@ export async function POST(request: Request) {
 
         if (needsRefresh) {
           updated++;
-          rematchJobIds.push(existing.id);
+          rematchJobIds.push(mirroredExisting.id);
         } else {
           unchanged++;
+        }
+        if (matchType === "mirror") {
+          mirrored++;
         }
         continue;
       }
 
       const insertedJob = {
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        description_text: job.description_text,
+        title: cleanedJob.title,
+        company: cleanedJob.company,
+        location: cleanedJob.location,
+        salary: cleanedJob.salary,
+        description_text: cleanedJob.description_text,
       };
       const contentHash = computeDiscoveredJobContentHash(insertedJob);
       const { parsedData, parsedAt } = buildParsedData(insertedJob);
@@ -237,13 +320,13 @@ export async function POST(request: Request) {
         .from("job_posts")
         .insert({
           url: normalizedUrl,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          description_text: job.description_text,
-          external_id: job.external_id,
-          source_name: job.source_name,
-          source: job.source_name, // Also set the legacy source field
+          title: cleanedJob.title,
+          company: cleanedJob.company,
+          location: cleanedJob.location,
+          description_text: cleanedJob.description_text,
+          external_id: cleanedJob.external_id,
+          source_name: cleanedJob.source_name,
+          source: cleanedJob.source_name, // Also set the legacy source field
           discovery_run_id: payload.run_id,
           discovered_at: nowIso,
           first_seen_at: nowIso,
@@ -253,7 +336,7 @@ export async function POST(request: Request) {
           content_hash: contentHash,
           last_content_change_at: nowIso,
           last_discovery_status: "inserted",
-          posted_at: parseDiscoveryTimestamp(job.posted_at),
+          posted_at: parseDiscoveryTimestamp(cleanedJob.posted_at),
           // Parsed structured data
           ...parsedData,
           parsed_at: parsedAt,
@@ -296,6 +379,7 @@ export async function POST(request: Request) {
     updated,
     unchanged,
     duplicates,
+    mirrored,
     errors,
     total: payload.jobs.length,
   });

@@ -53,7 +53,8 @@ export default async function ClientTimelinePage({ params }: PageProps) {
           Unified feed of resume changes, applications, outreach, interviews,
           payments, contracts, payslips, AI outputs, and feedback. Use{" "}
           <strong>Suggest next action</strong> to get an LLM-curated 1-3 step
-          plan based on the most recent 40 events.
+          plan based on the most recent 40 events, then save a suggestion
+          directly into the delivery case or turn it into a blocker.
         </p>
       </div>
 

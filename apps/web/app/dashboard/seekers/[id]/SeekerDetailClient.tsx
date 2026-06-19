@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import DeliveryCommandPanel from "./DeliveryCommandPanel";
 import {
   formatTaskStatusLabel,
   getTaskAttachmentFromAttachments,
@@ -11,6 +12,7 @@ import {
   buildJobGeniusReportMessage,
   type JobGeniusReport,
 } from "@/lib/jobgenius/report";
+import type { ClientDeliveryCaseBundle } from "@/lib/client-delivery";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
 
 interface ScoringWeights {
@@ -419,6 +421,7 @@ export default function SeekerDetailClient({
   interviewPrep,
   references,
   documents,
+  deliveryBundle,
   gmailConnection,
   inboundEmails,
   auditLogs = [],
@@ -437,6 +440,7 @@ export default function SeekerDetailClient({
   interviewPrep: InterviewPrep[];
   references: Reference[];
   documents: Document[];
+  deliveryBundle?: ClientDeliveryCaseBundle | null;
   gmailConnection: GmailConnectionInfo | null;
   inboundEmails: InboundEmail[];
   auditLogs?: ProfileAuditLog[];
@@ -514,6 +518,12 @@ export default function SeekerDetailClient({
           </div>
         </div>
       </div>
+
+      <DeliveryCommandPanel
+        seekerId={seeker.id}
+        seekerName={seeker.full_name || "Unnamed Seeker"}
+        deliveryBundle={deliveryBundle ?? { snapshot: null, caseRecord: null, blockers: [] }}
+      />
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow">

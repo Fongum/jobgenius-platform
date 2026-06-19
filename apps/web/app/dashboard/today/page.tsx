@@ -23,8 +23,8 @@ export default async function TodayPage() {
         <h1 className="text-2xl font-bold text-gray-900">Today</h1>
         <p className="text-sm text-gray-500 mt-1">
           Everything that needs your attention, in one place. Sourced from
-          attention items, billing escalations, payslip signatures, outreach
-          replies, and upcoming interviews.
+          attention items, delivery command cases, billing escalations,
+          payslip signatures, outreach replies, and upcoming interviews.
         </p>
       </div>
       <TodayClient initialTasks={tasks} amName={user.name ?? user.email} />

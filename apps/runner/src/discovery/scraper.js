@@ -8,6 +8,10 @@
 
 import { chromium } from 'playwright';
 import { logLine } from '../logger.js';
+import {
+  buildDiscoveredJobFingerprintKey,
+  cleanDiscoveredJobRecord,
+} from './job-cleaning.js';
 
 /** @type {import('./types.js').ScraperConfig} */
 const DEFAULT_CONFIG = {
@@ -690,6 +694,7 @@ export class JobScraper {
     let errorMessage = null;
     let stopReason = 'completed';
     let zeroYieldStreak = 0;
+    let initialJobCardsSelectorMissing = false;
     let descriptionFetchStats = {
       attempted: 0,
       succeeded: 0,
@@ -706,13 +711,14 @@ export class JobScraper {
       const selectors = this.source.selectors;
       await this.page
         .waitForSelector(selectors.job_cards, { timeout: 10000 })
-        .catch(() =>
-          logLine({
+        .catch(() => {
+          initialJobCardsSelectorMissing = true;
+          return logLine({
             level: 'WARN',
             step: 'SCRAPER',
             msg: 'Job cards selector not found immediately; hidden extraction may still recover jobs',
-          })
-        );
+          });
+        });
 
       const loadMoreType = selectors.load_more_type || 'pagination';
 
@@ -804,6 +810,7 @@ export class JobScraper {
         hidden_network_candidates: this.hiddenExtractionStats.network_candidates,
         hidden_network_payloads_seen: this.hiddenExtractionStats.network_payloads_seen,
         hidden_network_payloads_parsed: this.hiddenExtractionStats.network_payloads_parsed,
+        job_cards_selector_missing: initialJobCardsSelectorMissing,
         max_pages: this.config.maxPages,
         max_jobs: this.config.maxJobs,
       },
@@ -812,7 +819,11 @@ export class JobScraper {
   }
 
   buildUniqueKeys(job) {
-    return [asCleanString(job.external_id), normalizeComparableUrl(job.url)].filter(Boolean);
+    return [
+      asCleanString(job.external_id),
+      normalizeComparableUrl(job.url),
+      buildDiscoveredJobFingerprintKey(job),
+    ].filter(Boolean);
   }
 
   findExistingJobIndex(job) {
@@ -859,14 +870,16 @@ export class JobScraper {
   }
 
   upsertCollectedJob(job, signal = 'dom') {
-    if (!job || (!job.external_id && !job.url) || !job.title) {
+    const cleanedJob = cleanDiscoveredJobRecord(job);
+
+    if (!cleanedJob || (!cleanedJob.external_id && !cleanedJob.url) || !cleanedJob.title) {
       return false;
     }
 
-    const existingIndex = this.findExistingJobIndex(job);
+    const existingIndex = this.findExistingJobIndex(cleanedJob);
     if (existingIndex != null) {
       const existingJob = this.jobsCollected[existingIndex];
-      this.mergeJobs(existingJob, job);
+      this.mergeJobs(existingJob, cleanedJob);
       for (const key of this.buildUniqueKeys(existingJob)) {
         this.jobIndexByKey.set(key, existingIndex);
       }
@@ -874,8 +887,8 @@ export class JobScraper {
     }
 
     const nextIndex = this.jobsCollected.length;
-    this.jobsCollected.push(job);
-    for (const key of this.buildUniqueKeys(job)) {
+    this.jobsCollected.push(cleanedJob);
+    for (const key of this.buildUniqueKeys(cleanedJob)) {
       this.jobIndexByKey.set(key, nextIndex);
     }
 

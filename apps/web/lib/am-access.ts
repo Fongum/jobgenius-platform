@@ -7,7 +7,7 @@
 
 import { authenticateRequest, supabaseAdmin } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
-import { isAdminRole } from "@/lib/auth/roles";
+import { isAdminRole, isPeopleManagerRole } from "@/lib/auth/roles";
 
 // Cookie names for new auth
 export type AccountManager = {
@@ -89,7 +89,7 @@ export async function hasJobSeekerAccess(
     .eq("id", accountManagerId)
     .maybeSingle();
 
-  if (isAdminRole(am?.role)) {
+  if (isAdminRole(am?.role) || isPeopleManagerRole(am?.role)) {
     return true;
   }
 

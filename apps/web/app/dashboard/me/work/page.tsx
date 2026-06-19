@@ -64,6 +64,12 @@ export default async function EmployeeWorkHubPage() {
             Complete onboarding
           </Link>
           <Link
+            href="/dashboard/me/permissions"
+            className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Manage permissions
+          </Link>
+          <Link
             href="/dashboard/me/career"
             className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
           >
@@ -145,6 +151,7 @@ export default async function EmployeeWorkHubPage() {
           <ul className="mt-4 space-y-3 text-sm text-gray-600">
             <li>Your onboarding completion and policy acknowledgements.</li>
             <li>Your employment stage: tentative, probation, permanent, or terminated.</li>
+            <li>Your permission allowance window, requests, and remaining approved days.</li>
             <li>Your current ladder level and the next level requirements.</li>
             <li>Your leadership eligibility status and internal growth readiness.</li>
             <li>Your later scorecards, probation checkpoints, and recognitions.</li>

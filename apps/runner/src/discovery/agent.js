@@ -240,21 +240,26 @@ export async function processSearch(search) {
   logLine({ level: 'INFO', step: 'DISCOVERY', msg: `Processing search: ${search.search_name} (${search.id})` });
 
   let runId = null;
+  let source = null;
+  let sourceType = '';
+  let failureStage = 'resolve_source';
 
   try {
     // Get source configuration
-    const source = await resolveSourceForSearch(search);
+    source = await resolveSourceForSearch(search);
     if (!source) {
       throw new Error(`Source not found for search ${search.id}`);
     }
+    sourceType = source.source_type || 'scraper';
 
     // Start the run
+    failureStage = 'start_run';
     const { run_id } = await api.startDiscoveryRun(search.id);
     runId = run_id;
 
     // Dispatch by source_type
-    const sourceType = source.source_type || 'scraper';
     let result;
+    failureStage = 'fetch';
 
     if (sourceType === 'scraper') {
       if (!search.search_url) {
@@ -294,22 +299,31 @@ export async function processSearch(search) {
         jobs_updated: 0,
         pages_scraped: 0,
         metadata: {
+          source_type: sourceType,
           max_jobs: discoveryConfig.maxJobs
         },
         jobs,
       };
     }
 
+    result.metadata = {
+      ...(result.metadata || {}),
+      source_type: sourceType,
+      source_name: source.name,
+    };
+
     result.run_id = runId;
 
     // Save discovered jobs
     if (result.jobs.length > 0) {
+      failureStage = 'save';
       const saveResult = await api.saveDiscoveredJobs(runId, result.jobs);
       result.jobs_new = saveResult.saved;
       result.jobs_updated = saveResult.updated;
       result.metadata = {
         ...(result.metadata || {}),
         jobs_unchanged: saveResult.unchanged,
+        jobs_mirrored: saveResult.mirrored,
         save_duplicates: saveResult.duplicates,
         save_errors: saveResult.errors,
       };
@@ -321,6 +335,7 @@ export async function processSearch(search) {
     }
 
     // Complete the run
+    failureStage = 'complete';
     await api.completeDiscoveryRun(runId, result);
     logLine({ level: 'INFO', step: 'DISCOVERY', msg: `Completed search ${search.search_name}: ${result.jobs_found} jobs found` });
 
@@ -337,7 +352,11 @@ export async function processSearch(search) {
         jobs_updated: 0,
         pages_scraped: 0,
         error_message: error.message,
-        metadata: {},
+        metadata: {
+          source_type: sourceType || null,
+          source_name: source?.name ?? search.source_name ?? null,
+          failure_stage: failureStage,
+        },
         jobs: []
       }).catch(() => {});
     }
@@ -393,11 +412,19 @@ export async function runOnce(sourceName, searchUrl, options = {}) {
       jobs_updated: 0,
       pages_scraped: 0,
       metadata: {
+        source_type: sourceType,
+        source_name: source.name,
         max_jobs: discoveryConfig.maxJobs
       },
       jobs,
     };
   }
+
+  result.metadata = {
+    ...(result.metadata || {}),
+    source_type: sourceType,
+    source_name: source.name,
+  };
 
   // Save jobs if requested
   if (options.save !== false && result.jobs.length > 0) {

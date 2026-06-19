@@ -13,6 +13,24 @@ export const EMPLOYEE_ONBOARDING_STATUSES = [
   "archived",
 ] as const;
 
+export const EMPLOYEE_PERMISSION_PERIOD_KINDS = [
+  "six_months",
+  "one_year",
+  "two_years",
+] as const;
+
+export const EMPLOYEE_PERMISSION_REQUEST_TYPES = [
+  "permission",
+  "authorization",
+] as const;
+
+export const EMPLOYEE_PERMISSION_REQUEST_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+] as const;
+
 export const LEADERSHIP_PIPELINE_STATUSES = [
   "not_eligible",
   "under_observation",
@@ -133,6 +151,12 @@ export type EmployeeEmploymentStatus =
   (typeof EMPLOYEE_EMPLOYMENT_STATUSES)[number];
 export type EmployeeOnboardingStatus =
   (typeof EMPLOYEE_ONBOARDING_STATUSES)[number];
+export type EmployeePermissionPeriodKind =
+  (typeof EMPLOYEE_PERMISSION_PERIOD_KINDS)[number];
+export type EmployeePermissionRequestType =
+  (typeof EMPLOYEE_PERMISSION_REQUEST_TYPES)[number];
+export type EmployeePermissionRequestStatus =
+  (typeof EMPLOYEE_PERMISSION_REQUEST_STATUSES)[number];
 export type LeadershipPipelineStatus =
   (typeof LEADERSHIP_PIPELINE_STATUSES)[number];
 export type LeadershipCourseStatus =
@@ -260,6 +284,40 @@ export interface PolicyAcknowledgement {
   signature_name: string | null;
   signature_at: string;
   signature_ip: string | null;
+}
+
+export interface EmployeePermissionPolicy {
+  id: string;
+  employee_id: string;
+  period_kind: EmployeePermissionPeriodKind;
+  period_start_date: string;
+  period_end_date: string;
+  allowed_days: number;
+  active: boolean;
+  notes: string | null;
+  configured_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmployeePermissionRequest {
+  id: string;
+  employee_id: string;
+  policy_id: string | null;
+  request_type: EmployeePermissionRequestType;
+  title: string;
+  reason: string | null;
+  requested_start_date: string;
+  requested_end_date: string;
+  requested_days: number;
+  approved_days: number | null;
+  status: EmployeePermissionRequestStatus;
+  submitted_at: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  manager_comment: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ScorecardCategory {
@@ -512,6 +570,86 @@ export interface SocialLeadTerm {
   removal_reason: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export function normalizeDateOnly(value: string | Date): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Invalid date.");
+  }
+  const normalized = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  );
+  return normalized.toISOString().slice(0, 10);
+}
+
+export function calculatePermissionPolicyEndDate(
+  periodStartDate: string | Date,
+  periodKind: EmployeePermissionPeriodKind
+): string {
+  const normalizedStart = normalizeDateOnly(periodStartDate);
+  const start = new Date(`${normalizedStart}T00:00:00.000Z`);
+  const end = new Date(start);
+
+  switch (periodKind) {
+    case "six_months":
+      end.setUTCMonth(end.getUTCMonth() + 6);
+      break;
+    case "two_years":
+      end.setUTCFullYear(end.getUTCFullYear() + 2);
+      break;
+    case "one_year":
+    default:
+      end.setUTCFullYear(end.getUTCFullYear() + 1);
+      break;
+  }
+
+  end.setUTCDate(end.getUTCDate() - 1);
+  return normalizeDateOnly(end);
+}
+
+export function calculatePermissionRequestDays(
+  requestedStartDate: string | Date,
+  requestedEndDate: string | Date
+): number {
+  const start = new Date(`${normalizeDateOnly(requestedStartDate)}T00:00:00.000Z`);
+  const end = new Date(`${normalizeDateOnly(requestedEndDate)}T00:00:00.000Z`);
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs < 0) {
+    throw new Error("End date must be on or after start date.");
+  }
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+}
+
+export function calculatePermissionAllowanceSummary(input: {
+  allowedDays: number;
+  requests: Array<
+    Pick<
+      EmployeePermissionRequest,
+      "status" | "requested_days" | "approved_days"
+    >
+  >;
+}) {
+  const allowedDays = Math.max(0, Math.round(Number(input.allowedDays) || 0));
+  const approvedDaysUsed = input.requests.reduce((sum, request) => {
+    if (request.status !== "approved") return sum;
+    return sum + Math.max(0, Number(request.approved_days ?? request.requested_days) || 0);
+  }, 0);
+  const pendingDays = input.requests.reduce((sum, request) => {
+    if (request.status !== "pending") return sum;
+    return sum + Math.max(0, Number(request.requested_days) || 0);
+  }, 0);
+  const committedDays = approvedDaysUsed + pendingDays;
+  const remainingDays = allowedDays - committedDays;
+
+  return {
+    allowedDays,
+    approvedDaysUsed,
+    pendingDays,
+    committedDays,
+    remainingDays,
+    overLimit: remainingDays < 0,
+  };
 }
 
 export function labelizePeopleValue(value: string | null | undefined): string {

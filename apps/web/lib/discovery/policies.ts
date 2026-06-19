@@ -37,7 +37,13 @@ type PolicySearchRow = {
 type PolicySearchVariant = {
   key: string;
   label: string;
-  queryStrategy: "exact" | "title_core" | "title_alias" | "location_fallback" | "combined";
+  queryStrategy:
+    | "exact"
+    | "title_core"
+    | "title_alias"
+    | "location_fallback"
+    | "skill_keyword"
+    | "combined";
   title: string;
   location: string;
   searchName: string;
@@ -113,6 +119,59 @@ const TITLE_ALIAS_RULES: Array<{ match: RegExp; aliases: string[] }> = [
 
 const MAX_POLICY_TITLE_VARIANTS = 4;
 const MAX_POLICY_LOCATION_VARIANTS = 3;
+const MAX_POLICY_SKILL_VARIANTS = 2;
+
+const TITLE_SKILL_RULES: Array<{
+  match: RegExp;
+  label: string;
+  keywords: string[];
+}> = [
+  {
+    match: /\b(back[\s-]?end|backend|api) (engineer|developer)\b/i,
+    label: "Stack-led backend query",
+    keywords: ["Node.js", "API", "Microservices"],
+  },
+  {
+    match: /\b(front[\s-]?end|frontend) (engineer|developer)\b/i,
+    label: "Stack-led frontend query",
+    keywords: ["React", "TypeScript", "JavaScript"],
+  },
+  {
+    match: /\bfull[\s-]?stack (engineer|developer)\b/i,
+    label: "Stack-led full-stack query",
+    keywords: ["React", "Node.js", "TypeScript"],
+  },
+  {
+    match: /\bdata engineer\b/i,
+    label: "Stack-led data-engineering query",
+    keywords: ["SQL", "ETL", "Python"],
+  },
+  {
+    match: /\bdata analyst\b/i,
+    label: "Stack-led data-analysis query",
+    keywords: ["SQL", "Tableau", "Power BI"],
+  },
+  {
+    match: /\b(business intelligence analyst|analytics engineer)\b/i,
+    label: "Stack-led analytics query",
+    keywords: ["SQL", "Tableau", "Power BI"],
+  },
+  {
+    match: /\b(devops engineer|site reliability engineer|platform engineer|cloud engineer)\b/i,
+    label: "Stack-led infrastructure query",
+    keywords: ["AWS", "Terraform", "Kubernetes"],
+  },
+  {
+    match: /\bqa\b|\bquality assurance\b|\btest automation\b/i,
+    label: "Stack-led QA query",
+    keywords: ["Selenium", "Cypress", "Automation"],
+  },
+  {
+    match: /\b(cybersecurity|security|soc|siem)\b/i,
+    label: "Stack-led security query",
+    keywords: ["SIEM", "SOC", "Incident Response"],
+  },
+];
 
 function normalizeWhitespace(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -276,6 +335,41 @@ function buildTitleVariants(jobTitle: string) {
   return variants.slice(0, MAX_POLICY_TITLE_VARIANTS);
 }
 
+function buildSkillKeywordVariants(jobTitle: string) {
+  const exactTitle = normalizePolicyTitle(jobTitle);
+  const titleCore = stripLeadingSeniority(exactTitle);
+  const baseTitle = titleCore || exactTitle;
+  const variants: Array<{
+    key: string;
+    label: string;
+    queryStrategy: PolicySearchVariant["queryStrategy"];
+    title: string;
+    keywords: string[];
+  }> = [];
+
+  for (const rule of TITLE_SKILL_RULES) {
+    if (!rule.match.test(exactTitle) && !rule.match.test(titleCore)) {
+      continue;
+    }
+
+    const dedupedKeywords = dedupeStrings(rule.keywords).slice(0, 3);
+    if (dedupedKeywords.length === 0) {
+      continue;
+    }
+
+    const queryTitle = normalizePolicyTitle(`${baseTitle} ${dedupedKeywords.join(" ")}`);
+    variants.push({
+      key: `skill_${slugifyVariantKey(dedupedKeywords.join("_"))}`,
+      label: rule.label,
+      queryStrategy: "skill_keyword",
+      title: queryTitle,
+      keywords: [baseTitle, ...dedupedKeywords],
+    });
+  }
+
+  return variants.slice(0, MAX_POLICY_SKILL_VARIANTS);
+}
+
 function buildLocationVariants(location: string) {
   const exactLocation = normalizePolicyLocation(location);
   const variants: Array<{
@@ -348,7 +442,9 @@ function buildPolicySearchVariant(
   policyId: string,
   jobTitle: string,
   location: string,
-  titleVariant: ReturnType<typeof buildTitleVariants>[number],
+  titleVariant:
+    | ReturnType<typeof buildTitleVariants>[number]
+    | ReturnType<typeof buildSkillKeywordVariants>[number],
   locationVariant: ReturnType<typeof buildLocationVariants>[number],
   combined = false
 ): PolicySearchVariant {
@@ -384,7 +480,7 @@ function buildPolicySearchVariant(
     title: queryTitle,
     location: queryLocation,
     searchName: `${queryTitle} - ${queryLocation}`,
-    keywords: [queryTitle],
+    keywords: "keywords" in titleVariant ? titleVariant.keywords : [queryTitle],
     filters: {
       managed_by: "superadmin_policy",
       policy_id: policyId,
@@ -411,6 +507,7 @@ export function buildDiscoveryPolicyVariants(policyId: string, jobTitle: string,
   const desiredTitle = normalizePolicyTitle(jobTitle);
   const desiredLocation = normalizePolicyLocation(location);
   const titleVariants = buildTitleVariants(desiredTitle);
+  const skillVariants = buildSkillKeywordVariants(desiredTitle);
   const locationVariants = buildLocationVariants(desiredLocation);
   const variants = new Map<string, PolicySearchVariant>();
 
@@ -427,7 +524,7 @@ export function buildDiscoveryPolicyVariants(policyId: string, jobTitle: string,
       locationVariant,
       combined
     );
-    const dedupeKey = `${variant.title.toLowerCase()}::${variant.location.toLowerCase()}`;
+    const dedupeKey = `${variant.key}::${variant.title.toLowerCase()}::${variant.location.toLowerCase()}`;
     if (!variants.has(dedupeKey)) {
       variants.set(dedupeKey, variant);
     }
@@ -441,6 +538,10 @@ export function buildDiscoveryPolicyVariants(policyId: string, jobTitle: string,
 
   for (const locationVariant of locationVariants.slice(1)) {
     addVariant(titleVariants[0], locationVariant);
+  }
+
+  for (const skillVariant of skillVariants) {
+    addVariant(skillVariant, locationVariants[0]);
   }
 
   if (titleVariants.length > 1 && locationVariants.length > 1) {

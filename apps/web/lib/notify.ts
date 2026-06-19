@@ -48,8 +48,14 @@ export const NOTIFICATION_CATEGORIES = {
   employee_bonus_payable_this_month: "employee_bonus_payable_this_month",
   employee_bonus_updated: "employee_bonus_updated",
   employee_social_fund_contribution_added: "employee_social_fund_contribution_added",
+  people_permission_pending_review: "people_permission_pending_review",
+  employee_permission_decision: "employee_permission_decision",
   work_report_missing: "work_report_missing",
   work_report_review_digest: "work_report_review_digest",
+  delivery_next_action_overdue: "delivery_next_action_overdue",
+  delivery_blocker_due: "delivery_blocker_due",
+  delivery_case_stale: "delivery_case_stale",
+  delivery_risk_review_due: "delivery_risk_review_due",
 } as const;
 
 export type NotificationCategory =
@@ -73,8 +79,14 @@ export const INTERNAL_OPERATIONS_NOTIFICATION_CATEGORIES = [
   NOTIFICATION_CATEGORIES.employee_bonus_payable_this_month,
   NOTIFICATION_CATEGORIES.employee_bonus_updated,
   NOTIFICATION_CATEGORIES.employee_social_fund_contribution_added,
+  NOTIFICATION_CATEGORIES.people_permission_pending_review,
+  NOTIFICATION_CATEGORIES.employee_permission_decision,
   NOTIFICATION_CATEGORIES.work_report_missing,
   NOTIFICATION_CATEGORIES.work_report_review_digest,
+  NOTIFICATION_CATEGORIES.delivery_next_action_overdue,
+  NOTIFICATION_CATEGORIES.delivery_blocker_due,
+  NOTIFICATION_CATEGORIES.delivery_case_stale,
+  NOTIFICATION_CATEGORIES.delivery_risk_review_due,
 ] as const;
 
 export function getNotificationCategoryLabel(category: string): string {
@@ -113,10 +125,22 @@ export function getNotificationCategoryLabel(category: string): string {
       return "Bonus updated";
     case NOTIFICATION_CATEGORIES.employee_social_fund_contribution_added:
       return "Social fund contribution added";
+    case NOTIFICATION_CATEGORIES.people_permission_pending_review:
+      return "Permission request pending review";
+    case NOTIFICATION_CATEGORIES.employee_permission_decision:
+      return "Permission request updated";
     case NOTIFICATION_CATEGORIES.work_report_missing:
       return "Daily work report reminder";
     case NOTIFICATION_CATEGORIES.work_report_review_digest:
       return "Work report review digest";
+    case NOTIFICATION_CATEGORIES.delivery_next_action_overdue:
+      return "Delivery next action overdue";
+    case NOTIFICATION_CATEGORIES.delivery_blocker_due:
+      return "Delivery blocker due";
+    case NOTIFICATION_CATEGORIES.delivery_case_stale:
+      return "Delivery case stale";
+    case NOTIFICATION_CATEGORIES.delivery_risk_review_due:
+      return "High-risk delivery review due";
     default:
       return category
         .replace(/_/g, " ")

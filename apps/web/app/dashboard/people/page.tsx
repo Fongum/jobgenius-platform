@@ -39,6 +39,12 @@ export default async function PeopleOverviewPage() {
             Manage employees
           </Link>
           <Link
+            href="/dashboard/people/permissions"
+            className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Review permissions
+          </Link>
+          <Link
             href="/dashboard/people/discipline"
             className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
           >

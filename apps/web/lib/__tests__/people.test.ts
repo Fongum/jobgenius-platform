@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculatePermissionAllowanceSummary,
   calculateSocialFundBalance,
+  calculatePermissionPolicyEndDate,
+  calculatePermissionRequestDays,
   calculateWeightedScorecardTotal,
   calculateOnboardingCompletion,
   evaluateSocialLeadEligibility,
@@ -201,6 +204,41 @@ describe("people progress helpers", () => {
       spent: 10000,
       approvedReserved: 5000,
       balance: 45000,
+    });
+  });
+
+  it("derives permission allowance windows and remaining days", () => {
+    expect(calculatePermissionPolicyEndDate("2026-01-15", "six_months")).toBe(
+      "2026-07-14"
+    );
+    expect(calculatePermissionPolicyEndDate("2026-01-15", "one_year")).toBe(
+      "2027-01-14"
+    );
+    expect(calculatePermissionPolicyEndDate("2026-01-15", "two_years")).toBe(
+      "2028-01-14"
+    );
+
+    expect(calculatePermissionRequestDays("2026-06-10", "2026-06-12")).toBe(3);
+    expect(() => calculatePermissionRequestDays("2026-06-12", "2026-06-10")).toThrow(
+      /End date must be on or after start date/i
+    );
+
+    expect(
+      calculatePermissionAllowanceSummary({
+        allowedDays: 14,
+        requests: [
+          { status: "approved", requested_days: 4, approved_days: 3 },
+          { status: "pending", requested_days: 2, approved_days: null },
+          { status: "cancelled", requested_days: 5, approved_days: null },
+        ],
+      })
+    ).toEqual({
+      allowedDays: 14,
+      approvedDaysUsed: 3,
+      pendingDays: 2,
+      committedDays: 5,
+      remainingDays: 9,
+      overLimit: false,
     });
   });
 

@@ -36,6 +36,9 @@ type AuditAction =
   | "reports.settings_update"
   | "people.employee_create"
   | "people.employee_update"
+  | "people.permission_policy_update"
+  | "people.permission_request_submit"
+  | "people.permission_request_update"
   | "people.onboarding_submit"
   | "people.onboarding_review"
   | "people.policy_acknowledge"
@@ -54,7 +57,10 @@ type AuditAction =
   | "people.social_election_update"
   | "people.social_candidate_update"
   | "people.social_vote_cast"
-  | "people.social_term_update";
+  | "people.social_term_update"
+  | "delivery.case_update"
+  | "delivery.blocker_create"
+  | "delivery.blocker_update";
 
 export interface AuditParams {
   adminId: string;

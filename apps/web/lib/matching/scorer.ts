@@ -32,6 +32,60 @@ function normalizeArray(arr: string[] | null | undefined): string[] {
   return arr.map(normalizeString).filter((s) => s.length > 0);
 }
 
+function normalizeLocationText(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/\((?:remote|hybrid|on[- ]?site|onsite|in[- ]office|in office)[^)]*\)/g, " ")
+    .replace(/\bremote(?: only| within [a-z\s]+)?\b/g, " ")
+    .replace(/\bhybrid\b/g, " ")
+    .replace(/\bon[- ]?site\b|\bonsite\b|\bin[- ]office\b|\bin office\b/g, " ")
+    .replace(/\bnew york city\b|\bnyc\b/g, "new york")
+    .replace(/\bwashington,\s*d\.?c\.?\b|\bwashington d\.?c\.?\b/g, "washington dc")
+    .replace(/\bu\.?s\.?a?\.?\b/g, "united states")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeLocation(value: string) {
+  return value.split(" ").filter((token) => token.length >= 2);
+}
+
+function locationsRoughlyMatch(left: string | null | undefined, right: string | null | undefined) {
+  const leftNormalized = normalizeLocationText(left);
+  const rightNormalized = normalizeLocationText(right);
+
+  if (!leftNormalized || !rightNormalized) {
+    return false;
+  }
+
+  if (leftNormalized === rightNormalized) {
+    return true;
+  }
+
+  if (
+    leftNormalized.includes(rightNormalized) ||
+    rightNormalized.includes(leftNormalized)
+  ) {
+    return true;
+  }
+
+  const leftTokens = tokenizeLocation(leftNormalized);
+  const rightTokens = new Set(tokenizeLocation(rightNormalized));
+  if (leftTokens.length === 0 || rightTokens.size === 0) {
+    return false;
+  }
+
+  let overlap = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+
+  return overlap / Math.min(leftTokens.length, rightTokens.size) >= 0.75;
+}
+
 const TITLE_STOP_WORDS = new Set([
   "a",
   "an",
@@ -76,13 +130,111 @@ const TITLE_TOKEN_NORMALIZATIONS: Record<string, string> = {
   cyber: "security",
   infosec: "security",
   secops: "security",
+  sde: "software",
+  swe: "software",
+  dev: "developer",
+  backenddeveloper: "back-end",
+  backendengineer: "back-end",
+  frontenddeveloper: "front-end",
+  frontendengineer: "front-end",
+  fullstackdeveloper: "full-stack",
+  fullstackengineer: "full-stack",
+  sitereliability: "sre",
   frontend: "front-end",
   frontendend: "front-end",
   backend: "back-end",
   fullstack: "full-stack",
   productowner: "product",
   presales: "pre-sales",
+  bizops: "operations",
+  bizdev: "sales",
+  bi: "analytics",
+  qa: "quality",
 };
+
+const TITLE_ALIAS_GROUPS: Array<[string, string[]]> = [
+  [
+    "software_engineering",
+    [
+      "software engineer",
+      "software developer",
+      "application engineer",
+      "application developer",
+      "sde",
+      "swe",
+    ],
+  ],
+  [
+    "backend_engineering",
+    [
+      "backend engineer",
+      "backend developer",
+      "back-end engineer",
+      "back-end developer",
+      "api engineer",
+      "api developer",
+      "server engineer",
+      "server developer",
+    ],
+  ],
+  [
+    "frontend_engineering",
+    [
+      "frontend engineer",
+      "frontend developer",
+      "front-end engineer",
+      "front-end developer",
+      "web engineer",
+      "web developer",
+      "ui engineer",
+    ],
+  ],
+  [
+    "full_stack_engineering",
+    [
+      "full stack engineer",
+      "full stack developer",
+      "full-stack engineer",
+      "full-stack developer",
+    ],
+  ],
+  [
+    "platform_devops",
+    [
+      "platform engineer",
+      "devops engineer",
+      "site reliability engineer",
+      "sre",
+      "cloud engineer",
+      "infrastructure engineer",
+      "systems engineer",
+    ],
+  ],
+  [
+    "data_analytics",
+    [
+      "data analyst",
+      "business intelligence analyst",
+      "bi analyst",
+      "analytics analyst",
+      "reporting analyst",
+      "insights analyst",
+    ],
+  ],
+  [
+    "product_management",
+    ["product manager", "product owner", "technical product manager"],
+  ],
+  [
+    "customer_success",
+    [
+      "customer success manager",
+      "client success manager",
+      "account manager",
+      "customer account manager",
+    ],
+  ],
+];
 
 type TitleAlignment = {
   exact: boolean;
@@ -106,6 +258,35 @@ function tokenizeTitle(title: string): string[] {
     .split(/[\s/()-]+/)
     .map(canonicalizeTitleToken)
     .filter((token) => token.length > 0 && !TITLE_STOP_WORDS.has(token));
+}
+
+function normalizeTitlePhrase(title: string): string {
+  return normalizeString(title)
+    .replace(/[^a-z0-9+#/ -]+/g, " ")
+    .replace(/\bfront end\b/g, "front-end")
+    .replace(/\bback end\b/g, "back-end")
+    .replace(/\bfull stack\b/g, "full-stack")
+    .replace(/\bsite reliability engineer\b/g, "sre")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectTitleAliasGroups(title: string): Set<string> {
+  const normalized = normalizeTitlePhrase(title);
+  const groups = new Set<string>();
+
+  for (const [group, aliases] of TITLE_ALIAS_GROUPS) {
+    if (
+      aliases.some((alias) => {
+        const normalizedAlias = normalizeTitlePhrase(alias);
+        return normalized === normalizedAlias || normalized.includes(normalizedAlias);
+      })
+    ) {
+      groups.add(group);
+    }
+  }
+
+  return groups;
 }
 
 function detectTitleFamilies(title: string): Set<string> {
@@ -228,6 +409,7 @@ function analyzeTitleAlignment(
   const jobTitle = normalizeString(rawJobTitle);
   const jobTokens = new Set(tokenizeTitle(rawJobTitle));
   const jobFamilies = detectTitleFamilies(rawJobTitle);
+  const jobAliasGroups = detectTitleAliasGroups(rawJobTitle);
 
   const matchedTitles: string[] = [];
   const partialMatches: string[] = [];
@@ -257,7 +439,9 @@ function analyzeTitleAlignment(
 
   // Title entries drive exact/partial matching
   for (const target of titleEntries) {
-    if (jobTitle.includes(target)) {
+    const normalizedTarget = normalizeTitlePhrase(target);
+
+    if (jobTitle.includes(target) || normalizeTitlePhrase(rawJobTitle).includes(normalizedTarget)) {
       matchedTitles.push(target);
       continue;
     }
@@ -275,11 +459,19 @@ function analyzeTitleAlignment(
       }
     }
 
+    const targetAliasGroups = detectTitleAliasGroups(target);
+    const sharedAliasGroups = Array.from(targetAliasGroups).filter((group) =>
+      jobAliasGroups.has(group)
+    );
+
     if (
       tokenOverlap >= 0.6 ||
       (matchedTokenCount >= 2 && targetTokens.length >= 2)
     ) {
       partialMatches.push(target);
+    } else if (sharedAliasGroups.length > 0) {
+      partialMatches.push(target);
+      bestTokenOverlap = Math.max(bestTokenOverlap, 0.65);
     } else if (tokenOverlap >= 0.4 && targetFamilies.size > 0) {
       partialMatches.push(target);
     }
@@ -603,9 +795,7 @@ function scoreLocationWithPreferences(
       if (jobWorkType === prefWorkType || (prefWorkType === "onsite" && jobWorkType === "on-site")) {
         // Check if job location matches any of this preference's locations
         const locationHit = prefLocations.some(
-          (loc) =>
-            jobLocationLower.includes(loc) ||
-            loc.includes(jobLocationLower.split(",")[0])
+          (loc) => locationsRoughlyMatch(jobLocationLower, loc)
         );
         if (locationHit) {
           bestScore = maxScore;
@@ -689,9 +879,7 @@ function scoreLocation(
     ].filter((l) => l.length > 0);
 
     const locationMatch = allSeekerLocations.some(
-      (loc) =>
-        jobLocationLower.includes(loc) ||
-        loc.includes(jobLocationLower.split(",")[0])
+      (loc) => locationsRoughlyMatch(jobLocationLower, loc)
     );
 
     if (locationMatch) {
