@@ -78,7 +78,7 @@ function JobSeekerSubmittedState({
             <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
               4
             </span>
-            <p>After payment, we activate your JobGenius app access and full onboarding.</p>
+            <p>After you approve the service agreement and make payment, we activate your JobGenius app access and full onboarding.</p>
           </div>
         </div>
       </div>
@@ -361,7 +361,7 @@ function SignUpForm() {
     "We capture your resume, contact details, and any promo or referral code.",
     "We give you a call to confirm your timing, role fit, and urgency before we ever ask you to use the app.",
     "An account manager reviews the lead and reaches out to book your consultation.",
-    "After payment, we activate JobGenius and collect the deeper search preferences inside the app.",
+    "After you choose to activate a paid campaign, we activate JobGenius and collect the deeper search preferences inside the app.",
   ];
 
   const amSteps = [
@@ -433,9 +433,10 @@ function SignUpForm() {
 
             {userType === "job_seeker" && (
               <div className="mt-6 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4 text-sm text-orange-900">
-                Registration starts at <strong>$500</strong>, but you do not pay or create
-                a portal password at this stage. Consultation and payment happen before app
-                activation.
+                Creating your account is free. Paid campaign activation starts at{" "}
+                <strong>$300 for Essentials</strong> or <strong>$600 for Premium</strong>, and
+                that only happens after consultation, strategy review, and your decision to move
+                forward.
               </div>
             )}
 

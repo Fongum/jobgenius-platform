@@ -44,8 +44,8 @@ export default function NetworkSection() {
               <h3 className="text-xl font-bold text-gray-900 mb-3">For Peers</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
                 Know someone who&apos;s job searching? Refer them to JobGenius and earn a
-                reward when they land an offer. Help your network get hired faster with
-                expert support behind them.
+                reward when they land an offer. Help your network access more structured
+                search support with expert help behind them.
               </p>
               <ul className="space-y-3 mb-8 flex-1">
                 <BulletPoint text="Easy referral link to share with your network" />
@@ -68,7 +68,7 @@ export default function NetworkSection() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">For Recruiters</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
-                Partner with us to access a pipeline of pre-screened, interview-ready
+                Partner with us to access a pipeline of pre-screened, interview-prepared
                 candidates matched to your open roles. Our account managers know
                 every candidate personally.
               </p>

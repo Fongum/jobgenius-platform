@@ -30,11 +30,11 @@ export default function WhatWeDoSection() {
             What We Do
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">
-            Everything a job seeker needs. Nothing you have to do yourself.
+            Structured support for a more consistent job search
           </h2>
           <p className="text-center text-gray-500 max-w-2xl mx-auto mb-16">
             Think of us as your career team &mdash; part recruiter, part coach,
-            part AI assistant &mdash; all working toward one goal: getting you hired.
+            part AI assistant &mdash; all working to improve the quality and consistency of your search.
           </p>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -10,7 +10,7 @@ export default function ReferralSection() {
             Referral Network
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">
-            Opportunities come to you
+            A second path to relevant opportunities
           </h2>
           <p className="text-center text-gray-500 max-w-2xl mx-auto mb-16 text-lg">
             Most job seekers compete on job boards against thousands of applicants.
@@ -66,7 +66,7 @@ export default function ReferralSection() {
               would have found on LinkedIn. That&apos;s where I ended up getting my offer.&rdquo;
             </p>
             <p className="text-sm font-semibold text-gray-900">Priya R. &mdash; Data Analyst</p>
-            <p className="text-xs text-violet-600 font-medium mt-1">Hired in 5 weeks via referral</p>
+            <p className="text-xs text-violet-600 font-medium mt-1">Referral-led offer outcome</p>
           </div>
         </div>
       </ScrollReveal>

@@ -24,12 +24,13 @@ export default function FinalCtaSection({
             />
           )}
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
-            Ready to stop running your search alone?
+            Ready to start with a clearer job-search plan?
           </h2>
           <p className="text-lg text-gray-400 mb-8 max-w-xl mx-auto">
             Upload your resume, tell us your targets, and let a dedicated
-            search owner take it from there. Registration starts at $500 and
-            the 5% success fee only applies after you accept an offer.
+            search owner take it from there. Creating an account is free, and
+            paid campaign activation starts at $300 with the success fee only
+            due after an accepted offer.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
             <Link
@@ -46,7 +47,7 @@ export default function FinalCtaSection({
             </Link>
           </div>
           <p className="text-sm text-gray-500">
-            No lock-in contracts. Success fee only on accepted offers.
+            Clear service agreement before activation. Success fee only on accepted offers.
           </p>
         </div>
       </ScrollReveal>

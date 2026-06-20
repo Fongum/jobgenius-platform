@@ -42,10 +42,10 @@ export default function HeroSection({
             <div className="flex flex-wrap gap-2 mb-8">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-violet-50 border border-violet-100 rounded-full text-sm font-medium text-violet-700">
                 <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                Five-minute setup and resume upload
+                Free account setup and resume upload
               </div>
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-orange-50 border border-orange-100 rounded-full text-sm font-medium text-orange-700">
-                20% off Essentials / 25% off Premium with a valid code
+                7-day strategy preview before paid activation
               </div>
             </div>
 
@@ -58,16 +58,16 @@ export default function HeroSection({
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-gray-600 leading-relaxed">
               JobGenius pairs a dedicated account manager with always-on AI to
-              find strong-fit roles, run applications, reach out to recruiters,
-              and prep you for interviews. Choose direct signup with a registration
-              discount or start with a 7-day strategy preview before moving into
-              paid execution.
+              support role targeting, consistent applications, recruiter outreach,
+              and interview preparation. Start with a free account, get a 7-day
+              strategy preview, then decide whether to activate a managed job
+              search campaign.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-2.5">
-              <FeaturePill color="violet" icon={<LightningIcon />} label="Managed Applications" />
-              <FeaturePill color="orange" icon={<PeopleIcon />} label="Referral Outreach" />
-              <FeaturePill color="violet" icon={<MicIcon />} label="AI Interview Prep" />
+              <FeaturePill color="violet" icon={<LightningIcon />} label="Managed Application Support" />
+              <FeaturePill color="orange" icon={<PeopleIcon />} label="Recruiter Outreach Support" />
+              <FeaturePill color="violet" icon={<MicIcon />} label="Interview Preparation" />
             </div>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-4">
@@ -75,7 +75,7 @@ export default function HeroSection({
                 href="/signup"
                 className="bg-orange-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-200 text-center"
               >
-                Start the 5-Min Setup
+                Create Free Account
               </Link>
               <a
                 href="#pricing"

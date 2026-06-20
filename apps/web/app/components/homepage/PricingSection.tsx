@@ -1,6 +1,12 @@
 import Link from "next/link";
 import CapacityNotice, { type CapacityNoticeSummary } from "../CapacityNotice";
 import ScrollReveal from "../ScrollReveal";
+import {
+  CAMPAIGN_FEE_LABEL,
+  FREE_ACCOUNT_PRICING_MESSAGE,
+  PRICING_PLANS,
+  SUCCESS_FEE_SUMMARY,
+} from "./marketingContent";
 
 function PricingItem({
   included,
@@ -15,7 +21,7 @@ function PricingItem({
     <li className="flex items-start gap-3">
       {included ? (
         <svg
-          className={`w-5 h-5 mt-0.5 flex-shrink-0 ${light ? "text-orange-300" : "text-violet-600"}`}
+          className={`mt-0.5 h-5 w-5 shrink-0 ${light ? "text-orange-300" : "text-violet-600"}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -25,7 +31,7 @@ function PricingItem({
         </svg>
       ) : (
         <svg
-          className="w-5 h-5 mt-0.5 flex-shrink-0 text-gray-300"
+          className="mt-0.5 h-5 w-5 shrink-0 text-gray-300"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -41,25 +47,34 @@ function PricingItem({
   );
 }
 
+function formatUsd(amount: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export default function PricingSection({
   capacitySummary,
 }: {
   capacitySummary?: CapacityNoticeSummary | null;
 }) {
+  const [essentials, premium] = PRICING_PLANS;
+
   return (
     <section id="pricing" className="py-20 sm:py-28">
       <ScrollReveal>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
-          <p className="text-center text-violet-600 font-semibold text-sm uppercase tracking-wider mb-3">
+        <div className="container mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+          <p className="mb-3 text-center text-sm font-semibold uppercase tracking-wider text-violet-600">
             Pricing
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">
-            Simple pricing. Real execution.
+          <h2 className="mb-4 text-center text-3xl font-bold text-gray-900 sm:text-4xl">
+            Clear pricing for a managed job search campaign
           </h2>
-          <p className="text-center text-gray-500 max-w-2xl mx-auto mb-16">
-            Choose your plan and your path. Sign up directly with a valid code for
-            discounted registration pricing, or start with a 7-day strategy preview
-            before you commit to live execution.
+          <p className="mx-auto mb-8 max-w-3xl text-center text-gray-500">
+            Free account creation comes first. Paid campaign activation only starts when you decide
+            to move forward after review and strategy planning.
           </p>
 
           {capacitySummary && (
@@ -67,123 +82,123 @@ export default function PricingSection({
               summary={capacitySummary}
               variant="outline"
               compact
-              className="mb-10 max-w-2xl mx-auto"
+              className="mx-auto mb-8 max-w-2xl"
             />
           )}
 
-          <div className="mb-10 rounded-2xl border border-orange-200 bg-orange-50 px-6 py-5 text-center max-w-3xl mx-auto">
-            <p className="text-sm font-semibold text-orange-900">
-              Direct signup offer: 20% off Essentials and 25% off Premium with a valid promo or referral code.
-            </p>
-            <p className="mt-2 text-sm text-orange-800">
-              Need more confidence first? Start with a 7-day strategy preview for resume audit, role strategy, and kickoff planning before converting to full service.
-            </p>
+          <div className="mx-auto mb-8 max-w-4xl rounded-3xl border border-violet-200 bg-violet-50 px-6 py-5 text-center">
+            <p className="text-sm font-semibold text-violet-900">{FREE_ACCOUNT_PRICING_MESSAGE}</p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Tier 1 — Essentials */}
-            <div className="bg-white rounded-2xl border-2 border-gray-200 p-8 flex flex-col relative hover:border-violet-200 hover:shadow-lg transition-all">
-              <div className="absolute top-4 right-4 bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">
-                20% OFF
+          <div className="mx-auto mb-10 grid max-w-4xl gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                Step 1
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-gray-900">Create your free account</h3>
+              <p className="mt-2 text-sm leading-6 text-gray-700">
+                Resume upload, qualification, and the 7-day strategy preview happen before any paid
+                campaign activation.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
+                Step 2
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-gray-900">Activate a managed campaign</h3>
+              <p className="mt-2 text-sm leading-6 text-gray-700">
+                Choose the level of campaign support you want and pay the success fee only after an
+                accepted offer.
+              </p>
+            </div>
+          </div>
+
+          <div className="mx-auto grid max-w-4xl gap-8 md:grid-cols-2">
+            <div className="relative flex flex-col rounded-2xl border-2 border-gray-200 bg-white p-8 transition-all hover:border-violet-200 hover:shadow-lg">
+              <div className="absolute right-4 top-4 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-800">
+                {essentials.badge}
               </div>
               <div className="mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Essentials</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Unlimited applications + guided outreach
+                <h3 className="text-lg font-bold text-gray-900">{essentials.name}</h3>
+                <p className="mt-1 text-sm text-gray-500">{essentials.description}</p>
+              </div>
+              <div className="mb-6 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                  {CAMPAIGN_FEE_LABEL}
+                </p>
+                <p className="mt-2 text-4xl font-extrabold text-gray-900">
+                  {formatUsd(essentials.setupFeeUsd)}
+                </p>
+                <p className="mt-3 text-sm font-medium text-violet-700">
+                  Success Fee: 5% of first-year base salary
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Only due after the candidate receives and accepts an offer.
                 </p>
               </div>
-              <div className="mb-6">
-                <span className="text-4xl font-extrabold text-gray-900">$500</span>
-                <span className="text-gray-500 ml-1">registration fee</span>
-                <p className="mt-2 text-sm font-semibold text-emerald-700">
-                  Direct signup with code: 20% off, pay $400
-                </p>
-              </div>
-              <div className="bg-orange-50 border border-orange-100 rounded-lg px-4 py-2.5 mb-6">
-                <p className="text-sm font-medium text-orange-700">
-                  Pay in 1 to 3 installments within 1 month
-                </p>
-              </div>
-              <ul className="space-y-3 mb-8 flex-1">
-                <PricingItem included text="Unlimited job applications" />
-                <PricingItem included text="Up to 20 referral outreaches" />
-                <PricingItem included text="Dedicated account manager support" />
-                <PricingItem included text="Resume optimization guidance" />
-                <PricingItem included text="Portal with real-time updates" />
-                <PricingItem included={false} text="Priority referral network access" />
-                <PricingItem included={false} text="Interview coaching + AI voice practice" />
+              <ul className="mb-8 flex-1 space-y-3">
+                {essentials.features.map((feature) => (
+                  <PricingItem key={feature} included text={feature} />
+                ))}
+                {essentials.exclusions.map((feature) => (
+                  <PricingItem key={feature} included={false} text={feature} />
+                ))}
               </ul>
               <Link
                 href="/signup"
-                className="block text-center bg-white text-violet-700 px-6 py-3 rounded-xl font-semibold border-2 border-violet-600 hover:bg-violet-50 transition-colors"
+                className="block rounded-xl border-2 border-violet-600 bg-white px-6 py-3 text-center font-semibold text-violet-700 transition-colors hover:bg-violet-50"
               >
-                Choose Essentials
+                Start with Essentials
               </Link>
             </div>
 
-            {/* Tier 2 — Premium */}
-            <div className="bg-gradient-to-b from-violet-600 to-violet-700 rounded-2xl p-8 text-white flex flex-col relative overflow-hidden shadow-xl shadow-violet-200">
-              <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-2">
-                <div className="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+            <div className="relative flex flex-col overflow-hidden rounded-2xl bg-gradient-to-b from-violet-600 to-violet-700 p-8 text-white shadow-xl shadow-violet-200">
+              <div className="absolute right-4 top-4 flex flex-wrap justify-end gap-2">
+                <div className="rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white">
                   MOST POPULAR
                 </div>
-                <div className="bg-white/15 text-orange-200 text-xs font-bold px-3 py-1 rounded-full border border-white/20">
-                  25% OFF
+                <div className="rounded-full border border-white/20 bg-white/15 px-3 py-1 text-xs font-bold text-orange-200">
+                  {premium.badge}
                 </div>
               </div>
               <div className="mb-6">
-                <h3 className="text-lg font-bold">Premium</h3>
-                <p className="text-sm text-violet-200 mt-1">
-                  Unlimited applications + priority support
+                <h3 className="text-lg font-bold">{premium.name}</h3>
+                <p className="mt-1 text-sm text-violet-200">{premium.description}</p>
+              </div>
+              <div className="mb-6 rounded-2xl border border-white/20 bg-white/10 px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">
+                  {CAMPAIGN_FEE_LABEL}
+                </p>
+                <p className="mt-2 text-4xl font-extrabold">{formatUsd(premium.setupFeeUsd)}</p>
+                <p className="mt-3 text-sm font-medium text-orange-200">
+                  Success Fee: 5% of first-year base salary
+                </p>
+                <p className="mt-1 text-sm text-violet-100">
+                  Only due after the candidate receives and accepts an offer.
                 </p>
               </div>
-              <div className="mb-6">
-                <span className="text-4xl font-extrabold">$1,000</span>
-                <span className="text-violet-200 ml-1">registration fee</span>
-                <p className="mt-2 text-sm font-semibold text-orange-200">
-                  Direct signup with code: 25% off, pay $750
-                </p>
-              </div>
-              <div className="bg-white/15 border border-white/20 rounded-lg px-4 py-2.5 mb-6">
-                <p className="text-sm font-medium text-orange-300">
-                  Pay in 1 to 3 installments within 1 month
-                </p>
-              </div>
-              <ul className="space-y-3 mb-8 flex-1">
-                <PricingItem included light text="Unlimited job applications" />
-                <PricingItem included light text="Unlimited referral outreaches" />
-                <PricingItem included light text="Dedicated account manager support" />
-                <PricingItem included light text="Resume optimization + interview coaching" />
-                <PricingItem included light text="Priority referral network access" />
-                <PricingItem included light text="AI interview prep + voice practice" />
-                <PricingItem included light text="Portal with real-time updates" />
+              <ul className="mb-8 flex-1 space-y-3">
+                {premium.features.map((feature) => (
+                  <PricingItem key={feature} included light text={feature} />
+                ))}
               </ul>
               <Link
                 href="/signup"
-                className="block text-center bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-colors shadow-lg"
+                className="block rounded-xl bg-orange-500 px-6 py-3 text-center font-semibold text-white shadow-lg transition-colors hover:bg-orange-600"
               >
-                Choose Premium
+                Start with Premium
               </Link>
             </div>
           </div>
 
           <div className="mt-8 space-y-2 text-center text-sm text-gray-500">
             <p>
-              Success commission for both plans:{" "}
-              <strong className="text-gray-900">5% of first-year base salary after placement.</strong>
+              <strong className="text-gray-900">Success fee for both plans:</strong>{" "}
+              {SUCCESS_FEE_SUMMARY}
             </p>
-            <p>
-              Commission is due within 60 days of accepted offer. One-time 30-day extension available.
-            </p>
-            <p className="text-gray-400">No hidden fees. No accepted offer, no success commission.</p>
-          </div>
-
-          {/* ROI callout */}
-          <div className="mt-8 bg-violet-50 border border-violet-100 rounded-xl px-6 py-5 text-center max-w-2xl mx-auto">
-            <p className="text-sm text-violet-800">
-              <strong>Quick math:</strong> On an $80k salary, the 5% success fee is $4,000 &mdash; paid once,
-              only after you&apos;re hired. Compare that to months of unpaid job-search hours and missed
-              opportunities from going it alone.
+            <p className="text-gray-400">
+              No accepted offer, no success fee. Account creation and strategy review happen before
+              any paid campaign activation.
             </p>
           </div>
         </div>

@@ -4,15 +4,18 @@ import MarketingShell from "../components/MarketingShell";
 import PageHero from "../components/PageHero";
 import { breadcrumbJsonLd } from "../components/breadcrumb";
 import {
+  GuaranteesSection,
+  PrePaymentSection,
   PricingSection,
   StatsSection,
   TestimonialsSection,
+  WhyTrustSection,
   FinalCtaSection,
 } from "../components/homepage";
 
-const title = "Pricing: Essentials $500 / Premium $1,000 + 5% Success Fee";
+const title = "Pricing: Essentials $300 / Premium $600 + 5% Success Fee";
 const description =
-  "Transparent JobGenius pricing. Essentials at $500 or Premium at $1,000 registration fee, payable in up to 3 installments. 5% success commission only after you accept an offer — no offer, no commission.";
+  "Transparent JobGenius pricing. Creating an account is free. Activate Essentials at $300 or Premium at $600, with a 5% success fee only after you receive and accept an offer.";
 
 export const metadata: Metadata = {
   title,
@@ -35,8 +38,8 @@ const productJsonLd = {
       "@type": "Offer",
       name: "Essentials",
       description:
-        "Unlimited job applications, up to 20 referral outreaches, dedicated account manager, resume optimization, portal access.",
-      price: "500",
+        "Consistent role-matched applications, guided outreach support, dedicated account manager support, and campaign visibility.",
+      price: "300",
       priceCurrency: "USD",
       url: "https://job-genius.com/pricing",
       availability: "https://schema.org/InStock",
@@ -45,8 +48,8 @@ const productJsonLd = {
       "@type": "Offer",
       name: "Premium",
       description:
-        "Unlimited applications + unlimited referral outreaches, priority network access, AI interview coaching with voice practice, full account manager support.",
-      price: "1000",
+        "Higher-touch campaign execution with priority outreach support, interview preparation, and dedicated account manager support.",
+      price: "600",
       priceCurrency: "USD",
       url: "https://job-genius.com/pricing",
       availability: "https://schema.org/InStock",
@@ -74,12 +77,15 @@ export default async function PricingPage() {
       />
       <PageHero
         eyebrow="Pricing"
-        title="Pay once, get hired, owe a small success fee"
-        subtitle="One registration fee covers the strategy, applications, and outreach. A 5% success commission is only ever due after you accept an offer — never before."
+        title="Free account first. Paid campaign activation only when you decide to move forward."
+        subtitle="Review your fit, strategy direction, and service boundaries before you activate a managed Job Search Campaign. The 5% success fee is only due after an accepted offer."
         secondaryCta={{ href: "/how-it-works", label: "How It Works" }}
       />
+      <PrePaymentSection />
       <PricingSection capacitySummary={capacitySummary} />
+      <GuaranteesSection />
       <StatsSection />
+      <WhyTrustSection />
       <TestimonialsSection />
       <FinalCtaSection capacitySummary={capacitySummary} />
     </MarketingShell>

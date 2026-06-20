@@ -15,7 +15,10 @@ import {
   InterviewPrepSection,
   ReferralSection,
   NetworkSection,
+  PrePaymentSection,
   PricingSection,
+  GuaranteesSection,
+  WhyTrustSection,
   TestimonialsSection,
   FaqSection,
   FinalCtaSection,
@@ -62,7 +65,10 @@ export default async function HomePage() {
       <InterviewPrepSection />
       <ReferralSection />
       <NetworkSection />
+      <PrePaymentSection />
       <PricingSection capacitySummary={capacitySummary} />
+      <GuaranteesSection />
+      <WhyTrustSection />
       <TestimonialsSection />
       <FaqSection />
       <FinalCtaSection capacitySummary={capacitySummary} />

@@ -9,9 +9,9 @@ import {
   FinalCtaSection,
 } from "../components/homepage";
 
-const title = "How JobGenius Works: AI + Human Account Manager Job Search";
+const title = "How JobGenius Works: Human-Guided and AI-Assisted Job Search Support";
 const description =
-  "See exactly how JobGenius runs your job search end-to-end. AI finds and matches roles 24/7 while a dedicated human account manager applies, reaches out to recruiters, and preps you for interviews.";
+  "See how JobGenius supports your job search with structured planning, role-matched applications, recruiter outreach support, and interview preparation led by a human account manager with AI assistance.";
 
 export const metadata: Metadata = {
   title,
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 const howToJsonLd = {
   "@context": "https://schema.org",
   "@type": "HowTo",
-  name: "How JobGenius runs your job search",
+  name: "How JobGenius supports your job search",
   description,
   step: [
     {
@@ -41,14 +41,14 @@ const howToJsonLd = {
     {
       "@type": "HowToStep",
       position: 2,
-      name: "We work while you don't",
-      text: "Our AI finds and matches opportunities 24/7. Your account manager applies, reaches out to recruiters, taps the referral network, and manages your entire pipeline.",
+      name: "We run the campaign with you",
+      text: "Our AI keeps surfacing opportunities while your account manager manages applications, recruiter outreach, and pipeline follow-through using your approved search direction.",
     },
     {
       "@type": "HowToStep",
       position: 3,
-      name: "You focus on interviews",
-      text: "When an interview lands, we prepare you with AI-powered coaching, company-specific questions, and practice sessions so you walk in confident and ready.",
+      name: "You prepare for interviews",
+      text: "When interviews begin, we support preparation with coaching, company-specific questions, and practice sessions so you can show up ready.",
     },
   ],
 };
@@ -71,8 +71,8 @@ export default function HowItWorksPage() {
       />
       <PageHero
         eyebrow="How It Works"
-        title="Three steps from sign-up to signed offer"
-        subtitle="JobGenius pairs always-on AI with a dedicated human account manager. You tell us what you want; we run the entire search end-to-end."
+        title="A managed campaign, not a job-offer promise"
+        subtitle="JobGenius pairs always-on AI with a dedicated human account manager. You set the direction, we help run the search with more structure, consistency, and visibility."
         secondaryCta={{ href: "/pricing", label: "See Pricing" }}
       />
       <HowItWorksSection />

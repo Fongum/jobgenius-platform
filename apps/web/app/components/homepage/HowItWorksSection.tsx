@@ -10,11 +10,11 @@ export default function HowItWorksSection() {
             How It Works
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">
-            Three steps to your next offer
+            Three steps to a structured job-search campaign
           </h2>
           <p className="text-center text-gray-500 max-w-2xl mx-auto mb-16">
             We pair AI speed with human judgment. Your dedicated account manager
-            runs your search while our AI works around the clock.
+            runs your campaign while our AI keeps surfacing role-matched opportunities.
           </p>
 
           <div className="relative grid md:grid-cols-3 gap-10">
@@ -30,8 +30,8 @@ export default function HowItWorksSection() {
               },
               {
                 n: "2",
-                title: "We work while you don't",
-                desc: "Our AI finds and matches opportunities 24/7. Your account manager applies, reaches out to recruiters, taps the referral network, and manages your entire pipeline.",
+                title: "We run the campaign with you",
+                desc: "Our AI finds and matches opportunities 24/7. Your account manager manages applications, recruiter outreach, and pipeline follow-through with your approved search direction.",
                 icon: <SearchIcon />,
               },
               {
@@ -54,14 +54,14 @@ export default function HowItWorksSection() {
           {/* Timeline callout */}
           <div className="mt-14 bg-gradient-to-r from-violet-50 to-orange-50 rounded-2xl p-6 sm:p-8 border border-violet-100">
             <p className="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mb-6">
-              Typical client timeline
+              Example campaign rhythm
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-2 max-w-3xl mx-auto">
               {[
                 { day: "Day 1", label: "Profile reviewed & strategy set" },
-                { day: "Days 2\u20135", label: "Applications + outreach begin" },
-                { day: "Week 2\u20133", label: "First interviews scheduled" },
-                { day: "Week 4\u20136", label: "Offer received" },
+                { day: "Days 2-5", label: "Applications + outreach begin" },
+                { day: "Week 2+", label: "Interview traction may begin" },
+                { day: "Later", label: "Offer timing depends on market conditions and fit" },
               ].map((item, i) => (
                 <div key={i} className="flex sm:flex-col items-center gap-3 sm:gap-2 sm:flex-1 text-left sm:text-center">
                   <div className="w-10 h-10 rounded-full bg-violet-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 sm:mx-auto shadow-md shadow-violet-200">
@@ -74,6 +74,10 @@ export default function HowItWorksSection() {
                 </div>
               ))}
             </div>
+            <p className="mt-6 text-center text-xs leading-5 text-gray-500">
+              Timelines vary by market conditions, seniority, target roles, location, and interview
+              performance.
+            </p>
           </div>
         </div>
       </ScrollReveal>

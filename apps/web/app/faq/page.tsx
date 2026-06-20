@@ -5,9 +5,9 @@ import { breadcrumbJsonLd } from "../components/breadcrumb";
 import { FAQS } from "../components/faqs";
 import { FaqSection, FinalCtaSection } from "../components/homepage";
 
-const title = "JobGenius FAQ: Pricing, Timeline, Guarantees Explained";
+const title = "JobGenius FAQ: Pricing, Process, and Service Boundaries";
 const description =
-  "Answers to the questions job seekers ask most about JobGenius — pricing, success commission, timelines, industries we cover, and how this is different from applying yourself.";
+  "Answers to the questions job seekers ask most about JobGenius: pricing, success fees, process, timing, service boundaries, and how managed search support works.";
 
 export const metadata: Metadata = {
   title,
@@ -46,7 +46,7 @@ export default function FaqPage() {
       <PageHero
         eyebrow="FAQ"
         title="Common questions, answered plainly"
-        subtitle="Pricing, timelines, guarantees, and exactly what your account manager handles — straight answers to what people ask before signing up."
+        subtitle="Pricing, timing, service boundaries, and exactly what your account manager handles - straight answers to what people ask before signing up."
         secondaryCta={{ href: "/pricing", label: "See Pricing" }}
       />
       <FaqSection />

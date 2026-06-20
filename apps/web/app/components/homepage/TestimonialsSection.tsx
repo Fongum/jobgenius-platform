@@ -1,99 +1,116 @@
 import ScrollReveal from "../ScrollReveal";
-import { StarIcon } from "../icons";
+import { SUCCESS_STORIES, SUCCESS_STORIES_DISCLAIMER } from "./marketingContent";
 
-function TestimonialCard({
-  quote,
+function SuccessStoryCard({
   name,
   role,
   result,
+  story,
+  resultLine,
+  linkedInUrl,
+  photoUrl,
+  quote,
   initials,
-  avatarColor,
-}: {
-  quote: string;
-  name: string;
-  role: string;
-  result: string;
-  initials: string;
-  avatarColor: string;
-}) {
+  accentClass,
+  badgeClass,
+}: (typeof SUCCESS_STORIES)[number]) {
+  const hasLinkedIn = Boolean(linkedInUrl);
+  const hasPhoto = Boolean(photoUrl);
+  const hasQuote = Boolean(quote);
+
   return (
-    <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-1 mb-4 text-orange-400">
-        {[...Array(5)].map((_, i) => (
-          <StarIcon key={i} className="w-4 h-4 fill-current" />
-        ))}
-      </div>
-      <p className="text-gray-700 text-sm leading-relaxed mb-5">
-        &ldquo;{quote}&rdquo;
-      </p>
-      <div className="flex items-center gap-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${avatarColor}`}>
-          {initials}
+    <article className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+      <div className={`h-2 w-full bg-gradient-to-r ${accentClass}`} />
+      <div className="p-7 sm:p-8">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm font-bold text-gray-700">
+              {hasPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoUrl} alt={`${name} photo`} className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">{name}</h3>
+              <p className="mt-1 text-sm text-gray-500">{role}</p>
+            </div>
+          </div>
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+            {result}
+          </span>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-900">{name}</p>
-          <p className="text-xs text-gray-500">{role}</p>
-          <p className="text-xs font-medium text-violet-600 mt-0.5">{result}</p>
+
+        <div className="mt-6 space-y-4 text-sm leading-7 text-gray-700">
+          {story.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+          <p className="font-semibold text-gray-900">{resultLine}</p>
         </div>
+
+        <div className="mt-6 grid gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+          <p>
+            <span className="font-semibold text-gray-900">LinkedIn profile:</span>{" "}
+            {hasLinkedIn ? "Approved link attached." : "Placeholder pending client approval."}
+          </p>
+          <p>
+            <span className="font-semibold text-gray-900">Client photo:</span>{" "}
+            {hasPhoto ? "Approved photo attached." : "Optional placeholder pending client approval."}
+          </p>
+          <p>
+            <span className="font-semibold text-gray-900">Testimonial quote:</span>{" "}
+            {hasQuote ? quote : "Optional quote placeholder pending client approval."}
+          </p>
+        </div>
+
+        {hasLinkedIn ? (
+          <a
+            href={linkedInUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-6 inline-flex rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700"
+          >
+            View LinkedIn Profile
+          </a>
+        ) : (
+          <span
+            aria-disabled="true"
+            className="mt-6 inline-flex cursor-not-allowed rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-400"
+          >
+            View LinkedIn Profile
+          </span>
+        )}
       </div>
-    </div>
+    </article>
   );
 }
 
 export default function TestimonialsSection() {
   return (
-    <section className="py-20 sm:py-28 bg-gray-50">
+    <section className="bg-gray-50 py-20 sm:py-28">
       <ScrollReveal>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
-          <p className="text-center text-violet-600 font-semibold text-sm uppercase tracking-wider mb-3">
-            What Job Seekers Say
+        <div className="container mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+          <p className="mb-3 text-center text-sm font-semibold uppercase tracking-wider text-violet-600">
+            Success Stories
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-14">
-            People who stopped job searching
+          <h2 className="mb-4 text-center text-3xl font-bold text-gray-900 sm:text-4xl">
+            Real client outcomes, presented with more context
           </h2>
+          <p className="mx-auto mb-14 max-w-3xl text-center text-gray-500">
+            These examples show the type of positioning, application support, and campaign
+            execution JobGenius provides. They are not promises of identical results.
+          </p>
 
-          {/* Featured testimonial */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 sm:p-10 mb-8 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-violet-500 to-orange-500 rounded-l-2xl" />
-            <div className="flex items-center gap-1 mb-5 text-orange-400">
-              {[...Array(5)].map((_, i) => (
-                <StarIcon key={i} className="w-5 h-5 fill-current" />
-              ))}
-            </div>
-            <p className="text-gray-800 text-xl sm:text-2xl font-medium leading-relaxed mb-6">
-              &ldquo;I was spending 5 hours a day applying to jobs. Now I spend zero. My account
-              manager handles everything and I just show up to interviews feeling prepared.&rdquo;
-            </p>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-violet-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                SK
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">Sarah K.</p>
-                <p className="text-sm text-gray-500">Product Manager</p>
-                <p className="text-sm font-medium text-violet-600 mt-0.5">Hired in 6 weeks</p>
-              </div>
-            </div>
+          <div className="grid gap-8">
+            {SUCCESS_STORIES.map((story) => (
+              <SuccessStoryCard key={story.name} {...story} />
+            ))}
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <TestimonialCard
-              quote="The interview prep alone is worth it. The AI scored my practice answers and told me exactly what to fix. I walked into my final round and nailed it."
-              name="Marcus T."
-              role="Software Engineer"
-              result="Hired in 4 weeks"
-              initials="MT"
-              avatarColor="bg-orange-500"
-            />
-            <TestimonialCard
-              quote="I got introduced to a company through their recruiter network that I never would have found on LinkedIn. That's where I ended up getting my offer."
-              name="Priya R."
-              role="Data Analyst"
-              result="Hired in 5 weeks via referral"
-              initials="PR"
-              avatarColor="bg-emerald-500"
-            />
-          </div>
+          <p className="mx-auto mt-8 max-w-4xl text-center text-sm leading-6 text-gray-500">
+            {SUCCESS_STORIES_DISCLAIMER}
+          </p>
         </div>
       </ScrollReveal>
     </section>
