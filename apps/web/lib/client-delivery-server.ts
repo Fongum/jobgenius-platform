@@ -290,6 +290,62 @@ const SNAPSHOT_SELECT = [
   "case_updated_at",
 ].join(", ");
 
+const SNAPSHOT_SELECT_BASE = [
+  "case_id",
+  "job_seeker_id",
+  "account_manager_id",
+  "full_name",
+  "email",
+  "location",
+  "seniority",
+  "target_titles",
+  "intake_status",
+  "work_started",
+  "payment_status",
+  "amount_paid",
+  "total_amount",
+  "payment_deadline",
+  "system_stage",
+  "effective_stage",
+  "stage_override",
+  "risk_level",
+  "paused",
+  "last_application_at",
+  "applications_7d",
+  "applications_30d",
+  "open_application_runs",
+  "open_queue_count",
+  "last_outreach_at",
+  "next_follow_up_at",
+  "active_thread_count",
+  "follow_ups_due_count",
+  "next_interview_at",
+  "open_interview_count",
+  "prep_count",
+  "last_offer_at",
+  "has_open_offer",
+  "has_placed_offer",
+  "next_start_date",
+  "has_payment_hold",
+  "has_active_escalation",
+  "active_blocker_count",
+  "active_blocker_titles",
+  "next_action_type",
+  "next_action_title",
+  "next_action_notes",
+  "next_action_due_at",
+  "next_action_completed_at",
+  "next_action_completed_by",
+  "manager_notes",
+  "last_manual_review_at",
+  "overdue_next_action",
+  "last_touch_at",
+  "days_since_last_touch",
+  "needs_attention",
+  "case_created_at",
+  "case_updated_at",
+].join(", ");
+
 const CASE_SELECT = [
   "id",
   "job_seeker_id",
@@ -614,6 +670,23 @@ async function runCaseSelect<T>(
   let result = await build(CASE_SELECT);
   if (result.error && isDeliverySlaSchemaErrorMessage(result.error.message)) {
     result = await build(CASE_SELECT_BASE);
+  }
+
+  if (result.error) {
+    throw new ClientDeliveryError(500, result.error.message);
+  }
+
+  return result.data;
+}
+
+async function runSnapshotSelect<T>(
+  build: (
+    selectClause: string
+  ) => PromiseLike<{ data: T; error: { message: string } | null }>
+): Promise<T> {
+  let result = await build(SNAPSHOT_SELECT);
+  if (result.error && isDeliverySlaSchemaErrorMessage(result.error.message)) {
+    result = await build(SNAPSHOT_SELECT_BASE);
   }
 
   if (result.error) {
@@ -1145,19 +1218,17 @@ export async function listClientDeliverySnapshots(
   await ensureClientDeliveryCasesForManagedSeekers();
 
   const role = await resolveViewerRole(viewer);
-  let query = supabaseAdmin
-    .from("v_client_delivery_snapshot")
-    .select(SNAPSHOT_SELECT);
+  const data = await runSnapshotSelect((selectClause) => {
+    let query = supabaseAdmin
+      .from("v_client_delivery_snapshot")
+      .select(selectClause);
 
-  if (!canViewAllDelivery(role)) {
-    query = query.eq("account_manager_id", viewer.accountManagerId);
-  }
+    if (!canViewAllDelivery(role)) {
+      query = query.eq("account_manager_id", viewer.accountManagerId);
+    }
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new ClientDeliveryError(500, error.message);
-  }
+    return query;
+  });
 
   const rawRows = ((data as unknown as DeliverySnapshotRow[] | null) ?? []).map(
     mapSnapshotRow
@@ -1180,20 +1251,18 @@ export async function getClientDeliverySnapshotForSeeker(
   await ensureClientDeliveryCaseForSeeker(jobSeekerId);
 
   const role = await resolveViewerRole(viewer);
-  let query = supabaseAdmin
-    .from("v_client_delivery_snapshot")
-    .select(SNAPSHOT_SELECT)
-    .eq("job_seeker_id", jobSeekerId);
+  const data = await runSnapshotSelect((selectClause) => {
+    let query = supabaseAdmin
+      .from("v_client_delivery_snapshot")
+      .select(selectClause)
+      .eq("job_seeker_id", jobSeekerId);
 
-  if (!canViewAllDelivery(role)) {
-    query = query.eq("account_manager_id", viewer.accountManagerId);
-  }
+    if (!canViewAllDelivery(role)) {
+      query = query.eq("account_manager_id", viewer.accountManagerId);
+    }
 
-  const { data, error } = await query.maybeSingle();
-
-  if (error) {
-    throw new ClientDeliveryError(500, error.message);
-  }
+    return query.maybeSingle();
+  });
 
   const row = (data as unknown as DeliverySnapshotRow | null) ?? null;
   if (!row) return null;
