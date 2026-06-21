@@ -315,6 +315,26 @@ const CASE_SELECT = [
   "updated_at",
 ].join(", ");
 
+const CASE_SELECT_BASE = [
+  "id",
+  "job_seeker_id",
+  "account_manager_id",
+  "stage_override",
+  "risk_level",
+  "paused",
+  "next_action_type",
+  "next_action_title",
+  "next_action_notes",
+  "next_action_due_at",
+  "next_action_completed_at",
+  "next_action_completed_by",
+  "manager_notes",
+  "last_manual_review_at",
+  "created_by",
+  "created_at",
+  "updated_at",
+].join(", ");
+
 const ESCALATION_SELECT = [
   "id",
   "delivery_case_id",
@@ -459,11 +479,12 @@ function mapCaseRow(row: ClientDeliveryCaseRow): ClientDeliveryCaseRecord {
     stageOverride: row.stage_override,
     riskLevel: row.risk_level,
     paused: row.paused,
-    escalationStatus: row.escalation_status,
-    escalatedAt: row.escalated_at,
-    escalatedByAccountManagerId: row.escalated_by_account_manager_id,
-    managerReviewedAt: row.manager_reviewed_at,
-    managerReviewedByAccountManagerId: row.manager_reviewed_by_account_manager_id,
+    escalationStatus: row.escalation_status ?? "none",
+    escalatedAt: row.escalated_at ?? null,
+    escalatedByAccountManagerId: row.escalated_by_account_manager_id ?? null,
+    managerReviewedAt: row.manager_reviewed_at ?? null,
+    managerReviewedByAccountManagerId:
+      row.manager_reviewed_by_account_manager_id ?? null,
     nextActionType: row.next_action_type,
     nextActionTitle: row.next_action_title ?? "",
     nextActionNotes: row.next_action_notes ?? "",
@@ -529,6 +550,9 @@ async function resolveViewerRole(viewer: ClientDeliveryViewer): Promise<string |
     .maybeSingle();
 
   if (error) {
+    if (isDeliverySlaSchemaErrorMessage(error.message)) {
+      throw createDeliverySlaUnavailableError();
+    }
     throw new ClientDeliveryError(500, error.message);
   }
 
@@ -560,6 +584,43 @@ function normalizeOptionalIsoTimestamp(
     throw new ClientDeliveryError(400, "Invalid date value.");
   }
   return parsed.toISOString();
+}
+
+function isDeliverySlaSchemaErrorMessage(message: string | undefined): boolean {
+  const text = String(message ?? "").toLowerCase();
+  return (
+    text.includes("escalation_status") ||
+    text.includes("manager_reviewed_at") ||
+    text.includes("manager_reviewed_by_account_manager_id") ||
+    text.includes("escalated_at") ||
+    text.includes("escalated_by_account_manager_id") ||
+    text.includes("relation \"public.client_delivery_escalations\" does not exist") ||
+    text.includes("relation \"client_delivery_escalations\" does not exist")
+  );
+}
+
+function createDeliverySlaUnavailableError(): ClientDeliveryError {
+  return new ClientDeliveryError(
+    503,
+    "Delivery escalation controls are not available until migration 100 is applied."
+  );
+}
+
+async function runCaseSelect<T>(
+  build: (
+    selectClause: string
+  ) => PromiseLike<{ data: T; error: { message: string } | null }>
+): Promise<T> {
+  let result = await build(CASE_SELECT);
+  if (result.error && isDeliverySlaSchemaErrorMessage(result.error.message)) {
+    result = await build(CASE_SELECT_BASE);
+  }
+
+  if (result.error) {
+    throw new ClientDeliveryError(500, result.error.message);
+  }
+
+  return result.data;
 }
 
 function isActiveEscalationStatus(
@@ -869,15 +930,18 @@ async function upsertClientDeliveryCaseForSeeker(args: {
         created_by: args.actorAccountManagerId,
       },
       { onConflict: "job_seeker_id" }
-    )
-    .select(CASE_SELECT)
-    .single();
+    );
 
   if (error) {
     throw new ClientDeliveryError(500, error.message);
   }
 
-  return mapCaseRow(data as unknown as ClientDeliveryCaseRow);
+  const refreshed = await getClientDeliveryCaseForSeeker(args.jobSeekerId);
+  if (!refreshed) {
+    throw new ClientDeliveryError(500, "Failed to load delivery case.");
+  }
+
+  return refreshed;
 }
 
 async function listClientDeliveryCasesByJobSeekerIds(
@@ -885,14 +949,12 @@ async function listClientDeliveryCasesByJobSeekerIds(
 ): Promise<Map<string, ClientDeliveryCaseRecord>> {
   if (jobSeekerIds.length === 0) return new Map();
 
-  const { data, error } = await supabaseAdmin
-    .from("client_delivery_cases")
-    .select(CASE_SELECT)
-    .in("job_seeker_id", jobSeekerIds);
-
-  if (error) {
-    throw new ClientDeliveryError(500, error.message);
-  }
+  const data = await runCaseSelect((selectClause) =>
+    supabaseAdmin
+      .from("client_delivery_cases")
+      .select(selectClause)
+      .in("job_seeker_id", jobSeekerIds)
+  );
 
   return new Map(
     ((data as unknown as ClientDeliveryCaseRow[] | null) ?? []).map((row) => {
@@ -939,6 +1001,9 @@ async function listClientDeliveryEscalationsByCaseIds(
     .order("opened_at", { ascending: false });
 
   if (error) {
+    if (isDeliverySlaSchemaErrorMessage(error.message)) {
+      return new Map();
+    }
     throw new ClientDeliveryError(500, error.message);
   }
 
@@ -1140,15 +1205,13 @@ export async function getClientDeliverySnapshotForSeeker(
 export async function getClientDeliveryCaseForSeeker(
   jobSeekerId: string
 ): Promise<ClientDeliveryCaseRecord | null> {
-  const { data, error } = await supabaseAdmin
-    .from("client_delivery_cases")
-    .select(CASE_SELECT)
-    .eq("job_seeker_id", jobSeekerId)
-    .maybeSingle();
-
-  if (error) {
-    throw new ClientDeliveryError(500, error.message);
-  }
+  const data = await runCaseSelect((selectClause) =>
+    supabaseAdmin
+      .from("client_delivery_cases")
+      .select(selectClause)
+      .eq("job_seeker_id", jobSeekerId)
+      .maybeSingle()
+  );
 
   const row = (data as unknown as ClientDeliveryCaseRow | null) ?? null;
   return row ? mapCaseRow(row) : null;
@@ -1227,18 +1290,21 @@ export async function saveClientDeliveryCase(
     updates.next_action_completed_by = null;
   }
 
-  const { data, error } = await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from("client_delivery_cases")
     .update(updates)
-    .eq("id", caseRecord.id)
-    .select(CASE_SELECT)
-    .single();
+    .eq("id", caseRecord.id);
 
   if (error) {
     throw new ClientDeliveryError(500, error.message);
   }
 
-  return mapCaseRow(data as unknown as ClientDeliveryCaseRow);
+  const refreshed = await getClientDeliveryCaseForSeeker(input.jobSeekerId);
+  if (!refreshed) {
+    throw new ClientDeliveryError(500, "Failed to load delivery case.");
+  }
+
+  return refreshed;
 }
 
 export async function getClientDeliveryBlockerContext(
@@ -1251,6 +1317,9 @@ export async function getClientDeliveryBlockerContext(
     .maybeSingle();
 
   if (error) {
+    if (isDeliverySlaSchemaErrorMessage(error.message)) {
+      return null;
+    }
     throw new ClientDeliveryError(500, error.message);
   }
 
@@ -1264,6 +1333,9 @@ export async function getClientDeliveryBlockerContext(
     .maybeSingle();
 
   if (caseError) {
+    if (isDeliverySlaSchemaErrorMessage(caseError.message)) {
+      throw createDeliverySlaUnavailableError();
+    }
     throw new ClientDeliveryError(500, caseError.message);
   }
 
@@ -1498,6 +1570,9 @@ export async function updateClientDeliveryEscalation(
     .maybeSingle();
 
   if (existingError) {
+    if (isDeliverySlaSchemaErrorMessage(existingError.message)) {
+      throw createDeliverySlaUnavailableError();
+    }
     throw new ClientDeliveryError(500, existingError.message);
   }
 
@@ -1547,6 +1622,9 @@ export async function updateClientDeliveryEscalation(
     .single();
 
   if (error) {
+    if (isDeliverySlaSchemaErrorMessage(error.message)) {
+      throw createDeliverySlaUnavailableError();
+    }
     throw new ClientDeliveryError(500, error.message);
   }
 
@@ -1582,6 +1660,9 @@ export async function updateClientDeliveryEscalation(
     .eq("id", mapped.deliveryCaseId);
 
   if (caseError) {
+    if (isDeliverySlaSchemaErrorMessage(caseError.message)) {
+      throw createDeliverySlaUnavailableError();
+    }
     throw new ClientDeliveryError(500, caseError.message);
   }
 
@@ -1612,10 +1693,13 @@ export async function markClientDeliveryCaseReviewed(args: {
     .from("client_delivery_cases")
     .update(updates)
     .eq("id", caseRecord.id)
-    .select(CASE_SELECT)
+    .select(CASE_SELECT_BASE)
     .single();
 
   if (error) {
+    if (isDeliverySlaSchemaErrorMessage(error.message)) {
+      throw createDeliverySlaUnavailableError();
+    }
     throw new ClientDeliveryError(500, error.message);
   }
 
