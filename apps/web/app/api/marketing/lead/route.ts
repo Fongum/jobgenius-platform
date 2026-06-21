@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { writeOutcomeEvent } from "@/lib/outcomes-server";
+import { resolveLeadOutcomeSourceChannel } from "@/lib/outcomes";
 import { normalizePhone } from "@/lib/voice/service";
 import {
   ALLOWED_RESUME_MIME_TYPES,
@@ -404,6 +406,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Lead submission could not be created." }, { status: 500 });
   }
 
+  const leadSourceChannel = resolveLeadOutcomeSourceChannel({
+    submissionSource: source,
+    metadata,
+  });
+
   let voiceCallId: string | null = null;
   const playbook = await loadLeadQualificationPlaybook();
   if (playbook) {
@@ -449,6 +456,55 @@ export async function POST(request: Request) {
       }
     }
   }
+
+  const shadowWrites = [
+    writeOutcomeEvent({
+      eventType: "lead_captured",
+      occurredAt: nowIso,
+      leadSubmissionId: leadId,
+      sourceChannel: leadSourceChannel,
+      sourceRecordType: "lead_submission",
+      sourceRecordId: leadId,
+      metadata: {
+        submitted_via: metadata.submitted_via ?? "marketing_form",
+        source_route: metadata.source_route ?? "/api/marketing/lead",
+        offer_code: offerCode,
+        target_roles_count: targetRoles.length,
+        has_resume: Boolean(uploadedResume || resumeRawText),
+        consent_voice: true,
+      },
+    }),
+  ];
+
+  if (voiceCallId) {
+    shadowWrites.push(
+      writeOutcomeEvent({
+        eventType: "qualification_call_queued",
+        occurredAt: nowIso,
+        leadSubmissionId: leadId,
+        voiceCallId,
+        sourceChannel: "voice_automation",
+        sourceRecordType: "voice_call",
+        sourceRecordId: voiceCallId,
+        metadata: {
+          call_type: "lead_qualification",
+          dispatch_source: metadata.submitted_via ?? "marketing_form",
+          playbook_id: playbook?.id ?? null,
+        },
+      })
+    );
+  }
+
+  const shadowResults = await Promise.allSettled(shadowWrites);
+  shadowResults.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error("[outcomes] marketing lead shadow write failed", {
+        leadId,
+        eventIndex: index,
+        error: result.reason,
+      });
+    }
+  });
 
   return NextResponse.json({
     ok: true,

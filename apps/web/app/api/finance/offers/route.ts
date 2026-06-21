@@ -9,6 +9,8 @@ import {
 } from "@/lib/people";
 import { logAdminAction } from "@/lib/audit";
 import { sendNotification } from "@/lib/notify";
+import { writeOutcomeEvents } from "@/lib/outcomes-server";
+import type { OutcomeEventWriteInput } from "@/lib/outcomes";
 
 function canAccess(role: string | null | undefined): boolean {
   return isFinanceRole(role) || isPeopleManagerRole(role);
@@ -110,6 +112,7 @@ export async function POST(request: Request) {
         startMonth: existingOfferRes.data.start_month,
       })
     : false;
+  const existingOffer = existingOfferRes.data;
 
   const assignedAccountManagerId =
     typeof body.assigned_account_manager_id === "string" && body.assigned_account_manager_id.trim()
@@ -352,6 +355,63 @@ export async function POST(request: Request) {
         },
       }).catch(() => {});
     }
+  }
+
+  const outcomeWrites: OutcomeEventWriteInput[] = [
+    {
+      eventType: "offer_reported",
+      occurredAt: offer.created_at,
+      jobSeekerId: offer.job_seeker_id,
+      acceptedOfferRecordId: offer.id,
+      actorUserId: auth.user.id,
+      actorAccountManagerId: auth.user.id,
+      ownerAccountManagerIdSnapshot:
+        offer.assigned_account_manager_id ??
+        offer.application_submitted_by_account_manager_id ??
+        offer.interview_managed_by_account_manager_id ??
+        null,
+      sourceChannel: "finance",
+      sourceRecordType: "accepted_offer_record",
+      sourceRecordId: offer.id,
+      metadata: {
+        employee_id: employeeId,
+        company_name: companyName,
+        offer_title: offerTitle,
+        was_existing_record: Boolean(existingOffer),
+      },
+    },
+  ];
+
+  if (verificationStatus === "verified") {
+    outcomeWrites.push({
+      eventType: "offer_verified",
+      occurredAt: offer.verified_at || new Date().toISOString(),
+      jobSeekerId: offer.job_seeker_id,
+      acceptedOfferRecordId: offer.id,
+      actorUserId: auth.user.id,
+      actorAccountManagerId: auth.user.id,
+      ownerAccountManagerIdSnapshot:
+        offer.assigned_account_manager_id ??
+        offer.application_submitted_by_account_manager_id ??
+        offer.interview_managed_by_account_manager_id ??
+        null,
+      sourceChannel: "finance",
+      sourceRecordType: "accepted_offer_verified",
+      sourceRecordId: offer.id,
+      metadata: {
+        employee_id: employeeId,
+        company_name: companyName,
+        offer_title: offerTitle,
+        ready_for_bonus: readyForBonus,
+        payment_month: startMonth,
+      },
+    });
+  }
+
+  try {
+    await writeOutcomeEvents(outcomeWrites);
+  } catch (error) {
+    console.error("[outcomes] finance offer shadow writes failed:", error);
   }
 
   return NextResponse.json({

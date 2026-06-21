@@ -4,13 +4,17 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   buildClientDeliveryBoardSummary,
+  CLIENT_DELIVERY_HEALTH_BANDS,
   CLIENT_DELIVERY_RISK_LEVELS,
   CLIENT_DELIVERY_STAGES,
+  CLIENT_DELIVERY_STALE_STATUSES,
   labelizeClientDeliveryValue,
   type ClientDeliveryBoardSummary,
+  type ClientDeliveryHealthBand,
   type ClientDeliveryRiskLevel,
   type ClientDeliverySnapshotRecord,
   type ClientDeliveryStage,
+  type ClientDeliveryStaleStatus,
 } from "@/lib/client-delivery";
 
 type AccountManagerDirectoryRow = {
@@ -48,6 +52,32 @@ function riskBadgeClasses(risk: ClientDeliveryRiskLevel) {
       return "bg-amber-100 text-amber-800";
     case "medium":
       return "bg-blue-100 text-blue-800";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+function healthBadgeClasses(healthBand: ClientDeliveryHealthBand) {
+  switch (healthBand) {
+    case "critical":
+      return "bg-red-100 text-red-800";
+    case "at_risk":
+      return "bg-amber-100 text-amber-800";
+    case "watch":
+      return "bg-blue-100 text-blue-800";
+    default:
+      return "bg-emerald-100 text-emerald-800";
+  }
+}
+
+function staleBadgeClasses(staleStatus: ClientDeliveryStaleStatus) {
+  switch (staleStatus) {
+    case "severely_stale":
+      return "bg-red-100 text-red-800";
+    case "stale":
+      return "bg-amber-100 text-amber-800";
+    case "approaching_stale":
+      return "bg-slate-200 text-slate-700";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -98,6 +128,8 @@ function RowActivity({ row }: { row: ClientDeliverySnapshotRecord }) {
       <p>{row.applications7d} applications in the last 7 days</p>
       <p>{row.activeThreadCount} active outreach thread{row.activeThreadCount === 1 ? "" : "s"}</p>
       <p>{row.openInterviewCount} open interview{row.openInterviewCount === 1 ? "" : "s"}</p>
+      <p>Health: {row.healthScore}/100</p>
+      {row.staleStatus !== "none" ? <p>Stale: {labelizeClientDeliveryValue(row.staleStatus)}</p> : null}
       {row.nextInterviewAt ? <p>Next interview: {formatDateTime(row.nextInterviewAt)}</p> : null}
       {row.nextFollowUpAt ? <p>Follow-up due: {formatDateTime(row.nextFollowUpAt)}</p> : null}
       {row.hasOpenOffer ? <p>Offer flow is currently active</p> : null}
@@ -111,12 +143,16 @@ function SummaryCards({ summary }: { summary: ClientDeliveryBoardSummary }) {
     { label: "Need attention", value: summary.needsAttentionCount, tone: "text-red-700" },
     { label: "Overdue action", value: summary.overdueNextActionCount, tone: "text-amber-700" },
     { label: "High risk", value: summary.highRiskCount, tone: "text-violet-700" },
+    { label: "Critical health", value: summary.criticalHealthCount, tone: "text-red-700" },
+    { label: "Stale", value: summary.staleCount, tone: "text-amber-700" },
+    { label: "Escalated", value: summary.escalatedCount, tone: "text-rose-700" },
+    { label: "Mgr review", value: summary.managerReviewCount, tone: "text-blue-700" },
     { label: "Active blockers", value: summary.activeBlockerCount, tone: "text-blue-700" },
     { label: "Payment holds", value: summary.paymentHoldCount, tone: "text-rose-700" },
   ];
 
   return (
-    <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
       {cards.map((card) => (
         <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -141,7 +177,11 @@ export default function DeliveryClient({
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<ClientDeliveryStage | "all">("all");
   const [riskFilter, setRiskFilter] = useState<ClientDeliveryRiskLevel | "all">("all");
+  const [healthFilter, setHealthFilter] = useState<ClientDeliveryHealthBand | "all">("all");
+  const [staleFilter, setStaleFilter] = useState<ClientDeliveryStaleStatus | "all">("all");
   const [attentionOnly, setAttentionOnly] = useState(false);
+  const [escalatedOnly, setEscalatedOnly] = useState(false);
+  const [managerReviewOnly, setManagerReviewOnly] = useState(false);
 
   const accountManagerDirectory = useMemo(
     () => new Map(accountManagers.map((row) => [row.id, row])),
@@ -159,6 +199,10 @@ export default function DeliveryClient({
       if (attentionOnly && !row.needsAttention) return false;
       if (stageFilter !== "all" && row.effectiveStage !== stageFilter) return false;
       if (riskFilter !== "all" && row.riskLevel !== riskFilter) return false;
+      if (healthFilter !== "all" && row.healthBand !== healthFilter) return false;
+      if (staleFilter !== "all" && row.staleStatus !== staleFilter) return false;
+      if (escalatedOnly && !row.hasActiveEscalationRecord) return false;
+      if (managerReviewOnly && !row.needsManagerReview) return false;
       if (!needle) return true;
 
       const owner = ownerLabel(row.accountManagerId, accountManagerDirectory).toLowerCase();
@@ -173,13 +217,21 @@ export default function DeliveryClient({
   }, [
     accountManagerDirectory,
     attentionOnly,
+    escalatedOnly,
+    healthFilter,
     initialRows,
+    managerReviewOnly,
     riskFilter,
     search,
+    staleFilter,
     stageFilter,
   ]);
 
   const summary = useMemo(() => buildClientDeliveryBoardSummary(rows), [rows]);
+  const managerQueue = useMemo(
+    () => rows.filter((row) => row.needsManagerReview).slice(0, 8),
+    [rows]
+  );
 
   return (
     <div className="space-y-6">
@@ -218,11 +270,37 @@ export default function DeliveryClient({
           </button>
           <button
             type="button"
+            onClick={() => setEscalatedOnly((current) => !current)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              escalatedOnly
+                ? "bg-rose-600 text-white"
+                : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {escalatedOnly ? "Showing escalated only" : "Escalated only"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setManagerReviewOnly((current) => !current)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              managerReviewOnly
+                ? "bg-blue-600 text-white"
+                : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {managerReviewOnly ? "Showing manager review" : "Manager review only"}
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setSearch("");
               setAttentionOnly(false);
+              setEscalatedOnly(false);
+              setManagerReviewOnly(false);
               setStageFilter("all");
               setRiskFilter("all");
+              setHealthFilter("all");
+              setStaleFilter("all");
             }}
             className="px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
@@ -295,7 +373,124 @@ export default function DeliveryClient({
             ))}
           </div>
         </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Health
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setHealthFilter("all")}
+              className={`px-3 py-2 rounded-full text-sm font-medium ${
+                healthFilter === "all"
+                  ? "bg-violet-600 text-white"
+                  : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              All {unfilteredSummary.totalCount}
+            </button>
+            {CLIENT_DELIVERY_HEALTH_BANDS.map((healthBand) => (
+              <button
+                key={healthBand}
+                type="button"
+                onClick={() => setHealthFilter(healthBand)}
+                className={`px-3 py-2 rounded-full text-sm font-medium ${
+                  healthFilter === healthBand
+                    ? "bg-violet-600 text-white"
+                    : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {labelizeClientDeliveryValue(healthBand)}{" "}
+                {unfilteredSummary.healthBandCounts[healthBand]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Stale state
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setStaleFilter("all")}
+              className={`px-3 py-2 rounded-full text-sm font-medium ${
+                staleFilter === "all"
+                  ? "bg-violet-600 text-white"
+                  : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              All {unfilteredSummary.totalCount}
+            </button>
+            {CLIENT_DELIVERY_STALE_STATUSES.map((staleStatus) => (
+              <button
+                key={staleStatus}
+                type="button"
+                onClick={() => setStaleFilter(staleStatus)}
+                className={`px-3 py-2 rounded-full text-sm font-medium ${
+                  staleFilter === staleStatus
+                    ? "bg-violet-600 text-white"
+                    : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {labelizeClientDeliveryValue(staleStatus)}{" "}
+                {unfilteredSummary.staleStatusCounts[staleStatus]}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+
+      {canViewAllCases && managerQueue.length > 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">Manager review queue</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Highest-priority cases currently flagged for manager intervention.
+            </p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {managerQueue.map((row) => (
+              <Link
+                key={`review-${row.jobSeekerId}`}
+                href={`/dashboard/seekers/${row.jobSeekerId}`}
+                className="rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{row.fullName}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {ownerLabel(row.accountManagerId, accountManagerDirectory)}
+                    </p>
+                  </div>
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${healthBadgeClasses(row.healthBand)}`}>
+                    {labelizeClientDeliveryValue(row.healthBand)}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {row.staleStatus !== "none" ? (
+                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${staleBadgeClasses(row.staleStatus)}`}>
+                      {labelizeClientDeliveryValue(row.staleStatus)}
+                    </span>
+                  ) : null}
+                  {row.hasActiveEscalationRecord ? (
+                    <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800">
+                      {labelizeClientDeliveryValue(row.escalationStatus)}
+                    </span>
+                  ) : null}
+                  {row.overdueNextAction ? (
+                    <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                      Overdue action
+                    </span>
+                  ) : null}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -365,6 +560,19 @@ export default function DeliveryClient({
                                 Needs attention
                               </span>
                             ) : null}
+                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${healthBadgeClasses(row.healthBand)}`}>
+                              {labelizeClientDeliveryValue(row.healthBand)}
+                            </span>
+                            {row.staleStatus !== "none" ? (
+                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${staleBadgeClasses(row.staleStatus)}`}>
+                                {labelizeClientDeliveryValue(row.staleStatus)}
+                              </span>
+                            ) : null}
+                            {row.hasActiveEscalationRecord ? (
+                              <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800">
+                                {labelizeClientDeliveryValue(row.escalationStatus)}
+                              </span>
+                            ) : null}
                             {row.hasPaymentHold ? (
                               <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800">
                                 Billing hold
@@ -393,6 +601,7 @@ export default function DeliveryClient({
                             {row.stageOverride ? (
                               <p>Override: {labelizeClientDeliveryValue(row.stageOverride)}</p>
                             ) : null}
+                            <p>Stale: {labelizeClientDeliveryValue(row.staleStatus)}</p>
                             <p>Payment: {labelizeClientDeliveryValue(row.paymentStatus || "unknown")}</p>
                             {row.hasOpenOffer ? <p>Offer flow open</p> : null}
                             {row.nextStartDate ? <p>Start date: {formatDate(row.nextStartDate)}</p> : null}
@@ -441,6 +650,7 @@ export default function DeliveryClient({
                           <div className="text-xs text-gray-500 space-y-1">
                             <p>{row.followUpsDueCount} follow-up{row.followUpsDueCount === 1 ? "" : "s"} due</p>
                             <p>{row.prepCount} prep item{row.prepCount === 1 ? "" : "s"}</p>
+                            <p>{row.overdueBlockerCount} overdue blocker{row.overdueBlockerCount === 1 ? "" : "s"}</p>
                             <p>Paid: {compactMoney(row.amountPaid)} / {compactMoney(row.totalAmount)}</p>
                           </div>
                         </div>
@@ -498,9 +708,22 @@ export default function DeliveryClient({
                     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${riskBadgeClasses(row.riskLevel)}`}>
                       {labelizeClientDeliveryValue(row.riskLevel)}
                     </span>
+                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${healthBadgeClasses(row.healthBand)}`}>
+                      {labelizeClientDeliveryValue(row.healthBand)}
+                    </span>
+                    {row.staleStatus !== "none" ? (
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${staleBadgeClasses(row.staleStatus)}`}>
+                        {labelizeClientDeliveryValue(row.staleStatus)}
+                      </span>
+                    ) : null}
                     {row.needsAttention ? (
                       <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                         Needs attention
+                      </span>
+                    ) : null}
+                    {row.hasActiveEscalationRecord ? (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800">
+                        {labelizeClientDeliveryValue(row.escalationStatus)}
                       </span>
                     ) : null}
                     {row.activeBlockerCount > 0 ? (

@@ -59,8 +59,11 @@ type AuditAction =
   | "people.social_vote_cast"
   | "people.social_term_update"
   | "delivery.case_update"
+  | "delivery.case_review"
   | "delivery.blocker_create"
-  | "delivery.blocker_update";
+  | "delivery.blocker_update"
+  | "delivery.escalation_create"
+  | "delivery.escalation_update";
 
 export interface AuditParams {
   adminId: string;

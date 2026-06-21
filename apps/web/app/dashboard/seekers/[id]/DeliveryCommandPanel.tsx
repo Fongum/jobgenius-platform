@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CLIENT_DELIVERY_ACTION_TYPES,
   CLIENT_DELIVERY_BLOCKER_TYPES,
+  CLIENT_DELIVERY_ESCALATION_REASONS,
   CLIENT_DELIVERY_RISK_LEVELS,
   CLIENT_DELIVERY_STAGES,
   labelizeClientDeliveryValue,
@@ -18,8 +19,11 @@ import {
   type ClientDeliveryBlockerRecord,
   type ClientDeliveryBlockerType,
   type ClientDeliveryCaseBundle,
+  type ClientDeliveryEscalationReason,
+  type ClientDeliveryHealthBand,
   type ClientDeliveryRiskLevel,
   type ClientDeliveryStage,
+  type ClientDeliveryStaleStatus,
 } from "@/lib/client-delivery";
 
 type CaseFormState = {
@@ -38,6 +42,11 @@ type BlockerFormState = {
   title: string;
   description: string;
   dueAt: string;
+};
+
+type EscalationFormState = {
+  reason: ClientDeliveryEscalationReason;
+  details: string;
 };
 
 function stageBadgeClasses(stage: ClientDeliveryStage) {
@@ -69,6 +78,32 @@ function riskBadgeClasses(risk: ClientDeliveryRiskLevel) {
       return "bg-amber-100 text-amber-800";
     case "medium":
       return "bg-blue-100 text-blue-800";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+function healthBadgeClasses(healthBand: ClientDeliveryHealthBand) {
+  switch (healthBand) {
+    case "critical":
+      return "bg-red-100 text-red-800";
+    case "at_risk":
+      return "bg-amber-100 text-amber-800";
+    case "watch":
+      return "bg-blue-100 text-blue-800";
+    default:
+      return "bg-emerald-100 text-emerald-800";
+  }
+}
+
+function staleBadgeClasses(staleStatus: ClientDeliveryStaleStatus) {
+  switch (staleStatus) {
+    case "severely_stale":
+      return "bg-red-100 text-red-800";
+    case "stale":
+      return "bg-amber-100 text-amber-800";
+    case "approaching_stale":
+      return "bg-slate-200 text-slate-700";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -136,6 +171,13 @@ function emptyBlockerForm(): BlockerFormState {
     title: "",
     description: "",
     dueAt: "",
+  };
+}
+
+function emptyEscalationForm(): EscalationFormState {
+  return {
+    reason: CLIENT_DELIVERY_ESCALATION_REASONS[0],
+    details: "",
   };
 }
 
@@ -240,20 +282,34 @@ export default function DeliveryCommandPanel({
   seekerId,
   seekerName,
   deliveryBundle,
+  canReviewCases = false,
 }: {
   seekerId: string;
   seekerName: string;
   deliveryBundle: ClientDeliveryCaseBundle | null;
+  canReviewCases?: boolean;
 }) {
   const [bundleState, setBundleState] = useState<ClientDeliveryCaseBundle>(
-    deliveryBundle ?? { snapshot: null, caseRecord: null, blockers: [] }
+    deliveryBundle ?? { snapshot: null, caseRecord: null, blockers: [], escalations: [] }
   );
   const [caseForm, setCaseForm] = useState<CaseFormState>(
-    buildCaseForm(deliveryBundle ?? { snapshot: null, caseRecord: null, blockers: [] })
+    buildCaseForm(
+      deliveryBundle ?? {
+        snapshot: null,
+        caseRecord: null,
+        blockers: [],
+        escalations: [],
+      }
+    )
   );
   const [blockerForm, setBlockerForm] = useState<BlockerFormState>(emptyBlockerForm);
+  const [escalationForm, setEscalationForm] = useState<EscalationFormState>(
+    emptyEscalationForm
+  );
   const [caseSaving, setCaseSaving] = useState(false);
   const [blockerSaving, setBlockerSaving] = useState(false);
+  const [escalationSaving, setEscalationSaving] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -265,6 +321,7 @@ export default function DeliveryCommandPanel({
       snapshot: null,
       caseRecord: null,
       blockers: [],
+      escalations: [],
     };
     setBundleState(nextBundle);
     setCaseForm(buildCaseForm(nextBundle));
@@ -402,6 +459,64 @@ export default function DeliveryCommandPanel({
     }
   }
 
+  async function createEscalation() {
+    setEscalationSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/am/delivery/${seekerId}/escalate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: escalationForm.reason,
+          details: escalationForm.details,
+        }),
+      });
+
+      await syncFromResponse(response);
+      setEscalationForm(emptyEscalationForm());
+      setMessage({
+        type: "success",
+        text: "Delivery case escalated for manager review.",
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to escalate delivery case.",
+      });
+    } finally {
+      setEscalationSaving(false);
+    }
+  }
+
+  async function markReviewed() {
+    setReviewSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/am/delivery/${seekerId}/review`, {
+        method: "POST",
+      });
+
+      await syncFromResponse(response);
+      setMessage({
+        type: "success",
+        text: "Delivery case marked reviewed.",
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to mark delivery case reviewed.",
+      });
+    } finally {
+      setReviewSaving(false);
+    }
+  }
+
   const effectiveStage =
     snapshot?.effectiveStage ?? (caseForm.paused ? "paused" : null);
 
@@ -441,9 +556,37 @@ export default function DeliveryCommandPanel({
             >
               {labelizeClientDeliveryValue(caseForm.riskLevel)} risk
             </span>
+            {snapshot ? (
+              <span
+                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${healthBadgeClasses(
+                  snapshot.healthBand
+                )}`}
+              >
+                {labelizeClientDeliveryValue(snapshot.healthBand)} health
+              </span>
+            ) : null}
+            {snapshot && snapshot.staleStatus !== "none" ? (
+              <span
+                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${staleBadgeClasses(
+                  snapshot.staleStatus
+                )}`}
+              >
+                {labelizeClientDeliveryValue(snapshot.staleStatus)}
+              </span>
+            ) : null}
             {caseForm.paused ? (
               <span className="inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-800">
                 Paused
+              </span>
+            ) : null}
+            {snapshot?.hasActiveEscalationRecord ? (
+              <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800">
+                {labelizeClientDeliveryValue(snapshot.escalationStatus)}
+              </span>
+            ) : null}
+            {snapshot?.needsManagerReview ? (
+              <span className="inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-800">
+                Manager review needed
               </span>
             ) : null}
             {activeBlockers.length > 0 ? (
@@ -494,6 +637,19 @@ export default function DeliveryCommandPanel({
           value={snapshot ? labelizeClientDeliveryValue(snapshot.systemStage) : "Pending"}
         />
         <StatCard
+          label="Health"
+          value={snapshot ? `${snapshot.healthScore} / 100` : "Pending"}
+          tone={
+            snapshot?.healthBand === "critical"
+              ? "text-red-700"
+              : snapshot?.healthBand === "at_risk"
+                ? "text-amber-700"
+                : snapshot?.healthBand === "watch"
+                  ? "text-blue-700"
+                  : "text-emerald-700"
+          }
+        />
+        <StatCard
           label="Last touch"
           value={snapshot ? summarizeLastTouch(snapshot.daysSinceLastTouch) : "No activity yet"}
           tone={snapshot?.needsAttention ? "text-red-700" : "text-gray-900"}
@@ -504,14 +660,24 @@ export default function DeliveryCommandPanel({
           tone="text-blue-700"
         />
         <StatCard
-          label="Open interviews"
-          value={snapshot?.openInterviewCount ?? 0}
-          tone="text-amber-700"
+          label="Stale state"
+          value={
+            snapshot
+              ? labelizeClientDeliveryValue(snapshot.staleStatus)
+              : "Pending"
+          }
+          tone={
+            snapshot?.staleStatus === "severely_stale" || snapshot?.staleStatus === "stale"
+              ? "text-red-700"
+              : snapshot?.staleStatus === "approaching_stale"
+                ? "text-amber-700"
+                : "text-emerald-700"
+          }
         />
         <StatCard
-          label="Follow-ups due"
-          value={snapshot?.followUpsDueCount ?? 0}
-          tone="text-violet-700"
+          label="Review queue"
+          value={snapshot?.needsManagerReview ? "Needs review" : "Stable"}
+          tone={snapshot?.needsManagerReview ? "text-red-700" : "text-gray-900"}
         />
       </div>
 
@@ -678,6 +844,124 @@ export default function DeliveryCommandPanel({
                 </p>
               ) : null}
             </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 p-5 space-y-4">
+            <SectionTitle
+              title="Escalation control"
+              description="Escalate only when ordinary AM execution is not enough and the case needs manager intervention."
+            />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField
+                label="Escalation reason"
+                value={escalationForm.reason}
+                onChange={(event) =>
+                  setEscalationForm((current) => ({
+                    ...current,
+                    reason: event.target.value as ClientDeliveryEscalationReason,
+                  }))
+                }
+              >
+                {CLIENT_DELIVERY_ESCALATION_REASONS.map((reason) => (
+                  <option key={reason} value={reason}>
+                    {labelizeClientDeliveryValue(reason)}
+                  </option>
+                ))}
+              </SelectField>
+
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Current escalation state
+                </p>
+                <p className="mt-2 text-sm font-medium text-gray-900">
+                  {snapshot
+                    ? labelizeClientDeliveryValue(snapshot.escalationStatus)
+                    : "None"}
+                </p>
+                {snapshot?.latestEscalationReason ? (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Latest reason:{" "}
+                    {labelizeClientDeliveryValue(snapshot.latestEscalationReason)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <TextArea
+              label="Escalation details"
+              value={escalationForm.details}
+              onChange={(event) =>
+                setEscalationForm((current) => ({
+                  ...current,
+                  details: event.target.value,
+                }))
+              }
+              rows={3}
+              placeholder="Explain what is stalled, what has already been tried, and what manager help is needed."
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={createEscalation}
+                disabled={escalationSaving}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {escalationSaving ? "Escalating..." : "Escalate case"}
+              </button>
+              {canReviewCases ? (
+                <button
+                  type="button"
+                  onClick={markReviewed}
+                  disabled={reviewSaving}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {reviewSaving ? "Reviewing..." : "Mark reviewed"}
+                </button>
+              ) : null}
+              {snapshot?.managerReviewedAt ? (
+                <p className="text-xs text-gray-500">
+                  Last manager review: {formatDateTime(snapshot.managerReviewedAt)}
+                </p>
+              ) : null}
+            </div>
+
+            {bundleState.escalations.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
+                No escalation history yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {bundleState.escalations.map((escalation) => (
+                  <div
+                    key={escalation.id}
+                    className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-4"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800">
+                        {labelizeClientDeliveryValue(escalation.status)}
+                      </span>
+                      <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-200">
+                        {labelizeClientDeliveryValue(escalation.reason)}
+                      </span>
+                    </div>
+                    {escalation.details ? (
+                      <p className="mt-2 text-sm text-gray-700">{escalation.details}</p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                      <span>Opened: {formatDateTime(escalation.openedAt)}</span>
+                      {escalation.reviewedAt ? (
+                        <span>Reviewed: {formatDateTime(escalation.reviewedAt)}</span>
+                      ) : null}
+                      {escalation.resolvedAt ? (
+                        <span>Resolved: {formatDateTime(escalation.resolvedAt)}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-gray-200 p-5 space-y-4">
@@ -892,6 +1176,36 @@ export default function DeliveryCommandPanel({
                 </span>
               </div>
               <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Health score</span>
+                <span className="font-medium text-gray-900">
+                  {snapshot ? `${snapshot.healthScore} / 100` : "Pending"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Health band</span>
+                <span className="font-medium text-gray-900">
+                  {snapshot
+                    ? labelizeClientDeliveryValue(snapshot.healthBand)
+                    : "Pending"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Stale state</span>
+                <span className="font-medium text-gray-900">
+                  {snapshot
+                    ? labelizeClientDeliveryValue(snapshot.staleStatus)
+                    : "Pending"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Escalation state</span>
+                <span className="font-medium text-right text-gray-900">
+                  {snapshot
+                    ? labelizeClientDeliveryValue(snapshot.escalationStatus)
+                    : "None"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
                 <span className="text-gray-500">Needs attention</span>
                 <span className="font-medium text-gray-900">
                   {snapshot?.needsAttention ? "Yes" : "No"}
@@ -919,6 +1233,12 @@ export default function DeliveryCommandPanel({
                 <span className="text-gray-500">Current next action</span>
                 <span className="font-medium text-right text-gray-900">
                   {snapshot?.nextActionTitle || "Not set"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Manager review</span>
+                <span className="font-medium text-right text-gray-900">
+                  {snapshot?.needsManagerReview ? "Required" : "Not required"}
                 </span>
               </div>
             </div>
@@ -968,9 +1288,27 @@ export default function DeliveryCommandPanel({
                 </span>
               </div>
               <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Days since application</span>
+                <span className="font-medium text-right text-gray-900">
+                  {snapshot?.daysSinceLastApplication ?? "n/a"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
                 <span className="text-gray-500">Last outreach</span>
                 <span className="font-medium text-right text-gray-900">
                   {formatDateTime(snapshot?.lastOutreachAt ?? null)}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Overdue blockers</span>
+                <span className="font-medium text-gray-900">
+                  {snapshot?.overdueBlockerCount ?? 0}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-gray-500">Critical overdue blockers</span>
+                <span className="font-medium text-gray-900">
+                  {snapshot?.criticalOverdueBlockerCount ?? 0}
                 </span>
               </div>
               <div className="flex items-start justify-between gap-4">

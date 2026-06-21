@@ -15,6 +15,40 @@ export const CLIENT_DELIVERY_RISK_LEVELS = [
   "critical",
 ] as const;
 
+export const CLIENT_DELIVERY_HEALTH_BANDS = [
+  "healthy",
+  "watch",
+  "at_risk",
+  "critical",
+] as const;
+
+export const CLIENT_DELIVERY_STALE_STATUSES = [
+  "none",
+  "approaching_stale",
+  "stale",
+  "severely_stale",
+] as const;
+
+export const CLIENT_DELIVERY_ESCALATION_STATUSES = [
+  "none",
+  "needs_manager_review",
+  "manager_reviewed",
+  "ops_escalated",
+  "resolved",
+] as const;
+
+export const CLIENT_DELIVERY_ESCALATION_REASONS = [
+  "client_unresponsive",
+  "low_market_fit",
+  "delivery_execution_gap",
+  "blocker_unresolved",
+  "interview_readiness",
+  "payment_or_contract_hold",
+  "offer_or_background_issue",
+  "manager_attention_requested",
+  "other",
+] as const;
+
 export const CLIENT_DELIVERY_BLOCKER_TYPES = [
   "seeker_unresponsive",
   "billing_hold",
@@ -49,6 +83,14 @@ export const CLIENT_DELIVERY_ACTION_TYPES = [
 export type ClientDeliveryStage = (typeof CLIENT_DELIVERY_STAGES)[number];
 export type ClientDeliveryRiskLevel =
   (typeof CLIENT_DELIVERY_RISK_LEVELS)[number];
+export type ClientDeliveryHealthBand =
+  (typeof CLIENT_DELIVERY_HEALTH_BANDS)[number];
+export type ClientDeliveryStaleStatus =
+  (typeof CLIENT_DELIVERY_STALE_STATUSES)[number];
+export type ClientDeliveryEscalationStatus =
+  (typeof CLIENT_DELIVERY_ESCALATION_STATUSES)[number];
+export type ClientDeliveryEscalationReason =
+  (typeof CLIENT_DELIVERY_ESCALATION_REASONS)[number];
 export type ClientDeliveryBlockerType =
   (typeof CLIENT_DELIVERY_BLOCKER_TYPES)[number];
 export type ClientDeliveryBlockerStatus =
@@ -63,6 +105,11 @@ export interface ClientDeliveryCaseRecord {
   stageOverride: ClientDeliveryStage | null;
   riskLevel: ClientDeliveryRiskLevel;
   paused: boolean;
+  escalationStatus: ClientDeliveryEscalationStatus;
+  escalatedAt: string | null;
+  escalatedByAccountManagerId: string | null;
+  managerReviewedAt: string | null;
+  managerReviewedByAccountManagerId: string | null;
   nextActionType: ClientDeliveryActionType | null;
   nextActionTitle: string;
   nextActionNotes: string;
@@ -93,10 +140,29 @@ export interface ClientDeliveryBlockerRecord {
   updatedAt: string;
 }
 
+export interface ClientDeliveryEscalationRecord {
+  id: string;
+  deliveryCaseId: string;
+  jobSeekerId: string;
+  status: ClientDeliveryEscalationStatus;
+  reason: ClientDeliveryEscalationReason;
+  details: string;
+  openedByAccountManagerId: string | null;
+  reviewedByAccountManagerId: string | null;
+  resolvedByAccountManagerId: string | null;
+  openedAt: string;
+  reviewedAt: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ClientDeliveryCaseBundle {
   snapshot: ClientDeliverySnapshotRecord | null;
   caseRecord: ClientDeliveryCaseRecord | null;
   blockers: ClientDeliveryBlockerRecord[];
+  escalations: ClientDeliveryEscalationRecord[];
 }
 
 export interface ClientDeliverySnapshotRecord {
@@ -150,6 +216,22 @@ export interface ClientDeliverySnapshotRecord {
   overdueNextAction: boolean;
   lastTouchAt: string;
   daysSinceLastTouch: number;
+  healthScore: number;
+  healthBand: ClientDeliveryHealthBand;
+  staleStatus: ClientDeliveryStaleStatus;
+  staleSinceAt: string | null;
+  escalationStatus: ClientDeliveryEscalationStatus;
+  escalatedAt: string | null;
+  managerReviewedAt: string | null;
+  latestEscalationReason: ClientDeliveryEscalationReason | null;
+  latestEscalationOpenedAt: string | null;
+  hasActiveEscalationRecord: boolean;
+  overdueBlockerCount: number;
+  criticalOverdueBlockerCount: number;
+  blockerMaxAgeDays: number;
+  daysSinceLastApplication: number | null;
+  daysSinceLastManualReview: number | null;
+  needsManagerReview: boolean;
   needsAttention: boolean;
   caseCreatedAt: string | null;
   caseUpdatedAt: string | null;
@@ -160,10 +242,16 @@ export interface ClientDeliveryBoardSummary {
   needsAttentionCount: number;
   overdueNextActionCount: number;
   highRiskCount: number;
+  criticalHealthCount: number;
+  staleCount: number;
+  escalatedCount: number;
+  managerReviewCount: number;
   activeBlockerCount: number;
   paymentHoldCount: number;
   stageCounts: Record<ClientDeliveryStage, number>;
   riskCounts: Record<ClientDeliveryRiskLevel, number>;
+  healthBandCounts: Record<ClientDeliveryHealthBand, number>;
+  staleStatusCounts: Record<ClientDeliveryStaleStatus, number>;
 }
 
 export function labelizeClientDeliveryValue(value: string): string {
@@ -179,6 +267,20 @@ const RISK_PRIORITY: Record<ClientDeliveryRiskLevel, number> = {
   high: 3,
   medium: 2,
   low: 1,
+};
+
+const HEALTH_PRIORITY: Record<ClientDeliveryHealthBand, number> = {
+  critical: 4,
+  at_risk: 3,
+  watch: 2,
+  healthy: 1,
+};
+
+const STALE_PRIORITY: Record<ClientDeliveryStaleStatus, number> = {
+  severely_stale: 4,
+  stale: 3,
+  approaching_stale: 2,
+  none: 1,
 };
 
 function emptyStageCounts(): Record<ClientDeliveryStage, number> {
@@ -199,6 +301,24 @@ function emptyRiskCounts(): Record<ClientDeliveryRiskLevel, number> {
     medium: 0,
     high: 0,
     critical: 0,
+  };
+}
+
+function emptyHealthBandCounts(): Record<ClientDeliveryHealthBand, number> {
+  return {
+    healthy: 0,
+    watch: 0,
+    at_risk: 0,
+    critical: 0,
+  };
+}
+
+function emptyStaleStatusCounts(): Record<ClientDeliveryStaleStatus, number> {
+  return {
+    none: 0,
+    approaching_stale: 0,
+    stale: 0,
+    severely_stale: 0,
   };
 }
 
@@ -264,8 +384,36 @@ export function compareClientDeliverySnapshots(
   left: ClientDeliverySnapshotRecord,
   right: ClientDeliverySnapshotRecord
 ): number {
+  if (left.needsManagerReview !== right.needsManagerReview) {
+    return left.needsManagerReview ? -1 : 1;
+  }
+
   if (left.needsAttention !== right.needsAttention) {
     return left.needsAttention ? -1 : 1;
+  }
+
+  if (left.escalationStatus !== right.escalationStatus) {
+    const leftEscalated =
+      left.escalationStatus === "needs_manager_review" ||
+      left.escalationStatus === "ops_escalated";
+    const rightEscalated =
+      right.escalationStatus === "needs_manager_review" ||
+      right.escalationStatus === "ops_escalated";
+    if (leftEscalated !== rightEscalated) {
+      return leftEscalated ? -1 : 1;
+    }
+  }
+
+  const leftHealth = HEALTH_PRIORITY[left.healthBand];
+  const rightHealth = HEALTH_PRIORITY[right.healthBand];
+  if (leftHealth !== rightHealth) {
+    return rightHealth - leftHealth;
+  }
+
+  const leftStale = STALE_PRIORITY[left.staleStatus];
+  const rightStale = STALE_PRIORITY[right.staleStatus];
+  if (leftStale !== rightStale) {
+    return rightStale - leftStale;
   }
 
   if (left.overdueNextAction !== right.overdueNextAction) {
@@ -311,20 +459,39 @@ export function buildClientDeliveryBoardSummary(
     needsAttentionCount: 0,
     overdueNextActionCount: 0,
     highRiskCount: 0,
+    criticalHealthCount: 0,
+    staleCount: 0,
+    escalatedCount: 0,
+    managerReviewCount: 0,
     activeBlockerCount: 0,
     paymentHoldCount: 0,
     stageCounts: emptyStageCounts(),
     riskCounts: emptyRiskCounts(),
+    healthBandCounts: emptyHealthBandCounts(),
+    staleStatusCounts: emptyStaleStatusCounts(),
   };
 
   for (const row of rows) {
     summary.stageCounts[row.effectiveStage] += 1;
     summary.riskCounts[row.riskLevel] += 1;
+    summary.healthBandCounts[row.healthBand] += 1;
+    summary.staleStatusCounts[row.staleStatus] += 1;
     if (row.needsAttention) summary.needsAttentionCount += 1;
     if (row.overdueNextAction) summary.overdueNextActionCount += 1;
     if (row.riskLevel === "high" || row.riskLevel === "critical") {
       summary.highRiskCount += 1;
     }
+    if (row.healthBand === "critical") summary.criticalHealthCount += 1;
+    if (row.staleStatus === "stale" || row.staleStatus === "severely_stale") {
+      summary.staleCount += 1;
+    }
+    if (
+      row.escalationStatus === "needs_manager_review" ||
+      row.escalationStatus === "ops_escalated"
+    ) {
+      summary.escalatedCount += 1;
+    }
+    if (row.needsManagerReview) summary.managerReviewCount += 1;
     if (row.activeBlockerCount > 0) summary.activeBlockerCount += 1;
     if (row.hasPaymentHold) summary.paymentHoldCount += 1;
   }

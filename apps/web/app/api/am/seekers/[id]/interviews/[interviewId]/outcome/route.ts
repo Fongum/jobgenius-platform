@@ -3,6 +3,8 @@ import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { hasJobSeekerAccess } from "@/lib/am-access";
 import { logActivity, recordFeedback } from "@/lib/feedback-loop";
 import { updateMatchOutcome, type MatchOutcome } from "@/lib/learned-ranker";
+import { writeOutcomeEvents } from "@/lib/outcomes-server";
+import type { OutcomeEventWriteInput } from "@/lib/outcomes";
 
 interface RouteParams {
   params: { id: string; interviewId: string };
@@ -88,6 +90,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Failed to update outcome" }, { status: 500 });
   }
 
+  const nowIso = new Date().toISOString();
+
   // If hired, update job_seeker placement fields
   if (outcome === "hired") {
     const { data: jobPost } = await supabaseAdmin
@@ -172,6 +176,51 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         outcome: rankerOutcome,
       });
     }
+  }
+
+  const outcomeWrites: OutcomeEventWriteInput[] = [
+    {
+      eventType: "interview_outcome_recorded",
+      occurredAt: updated?.outcome_recorded_at ?? nowIso,
+      jobSeekerId: seekerId,
+      interviewId,
+      actorUserId: amId,
+      actorAccountManagerId: amId,
+      sourceChannel: "am_portal",
+      sourceRecordType: `interview_outcome:${outcome}`,
+      sourceRecordId: interviewId,
+      metadata: {
+        outcome,
+        offer_amount: offer_amount || null,
+        hire_date: hire_date || null,
+        rejection_reason: rejection_reason || null,
+      },
+    },
+  ];
+
+  if (outcome === "hired") {
+    outcomeWrites.push({
+      eventType: "placement_confirmed",
+      occurredAt: hire_date || updated?.outcome_recorded_at || nowIso,
+      jobSeekerId: seekerId,
+      interviewId,
+      actorUserId: amId,
+      actorAccountManagerId: amId,
+      sourceChannel: "am_portal",
+      sourceRecordType: "interview_placement",
+      sourceRecordId: interviewId,
+      metadata: {
+        outcome,
+        offer_amount: offer_amount || null,
+        hire_date: hire_date || null,
+      },
+    });
+  }
+
+  try {
+    await writeOutcomeEvents(outcomeWrites);
+  } catch (err) {
+    console.error("[outcomes] interview outcome shadow writes failed:", err);
   }
 
   return NextResponse.json({ interview: updated });

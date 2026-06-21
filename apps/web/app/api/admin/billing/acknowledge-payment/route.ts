@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { logAdminAction } from "@/lib/audit";
+import { writeOutcomeEvents } from "@/lib/outcomes-server";
+import type { OutcomeEventWriteInput } from "@/lib/outcomes";
 import {
   getIntakeStateByJobSeekerId,
   upsertJobSeekerIntakeState,
@@ -37,6 +39,8 @@ export async function POST(request: Request) {
   }
 
   const now = new Date().toISOString();
+  let registrationPaymentId: string | null = null;
+  let firstPaymentActivated = false;
 
   // Acknowledge the screenshot
   const { error: ackError } = await supabaseAdmin
@@ -71,6 +75,7 @@ export async function POST(request: Request) {
 
     if (installments && installments.length > 0) {
       const regPaymentId = installments[0].registration_payment_id;
+      registrationPaymentId = regPaymentId as string;
       const amountPaid = installments
         .filter((i) => i.status === "paid")
         .reduce((sum, i) => sum + Number(i.amount), 0);
@@ -108,6 +113,7 @@ export async function POST(request: Request) {
           intakeState?.status === "approved_payment_pending" ||
           intakeState?.status === "active_client"
         ) {
+          firstPaymentActivated = true;
           await upsertJobSeekerIntakeState({
             jobSeekerId: screenshot.job_seeker_id,
             status: "active_client",
@@ -170,6 +176,52 @@ export async function POST(request: Request) {
     targetId: screenshotId,
     details: { job_seeker_id: screenshot.job_seeker_id, installment_id: screenshot.installment_id },
   }).catch((e) => console.error("Audit log failed", e));
+
+  const outcomeWrites: OutcomeEventWriteInput[] = [
+    {
+      eventType: "payment_confirmed",
+      occurredAt: now,
+      jobSeekerId: screenshot.job_seeker_id,
+      paymentScreenshotId: screenshotId,
+      registrationPaymentId,
+      actorUserId: auth.user.id,
+      actorAccountManagerId: auth.user.id,
+      sourceChannel: "billing",
+      sourceRecordType: "payment_screenshot",
+      sourceRecordId: screenshotId,
+      metadata: {
+        installment_id: screenshot.installment_id,
+        payment_request_id: screenshot.payment_request_id,
+        note: note ?? null,
+      },
+    },
+  ];
+
+  if (firstPaymentActivated) {
+    outcomeWrites.push({
+      eventType: "client_activated",
+      occurredAt: now,
+      jobSeekerId: screenshot.job_seeker_id,
+      paymentScreenshotId: screenshotId,
+      registrationPaymentId,
+      actorUserId: auth.user.id,
+      actorAccountManagerId: auth.user.id,
+      sourceChannel: "billing",
+      sourceRecordType: "payment_screenshot_activation",
+      sourceRecordId: screenshotId,
+      metadata: {
+        activation_reason: "first_confirmed_payment",
+        installment_id: screenshot.installment_id,
+        payment_request_id: screenshot.payment_request_id,
+      },
+    });
+  }
+
+  try {
+    await writeOutcomeEvents(outcomeWrites);
+  } catch (error) {
+    console.error("[outcomes] billing acknowledgement shadow writes failed:", error);
+  }
 
   return NextResponse.json({ ok: true });
 }

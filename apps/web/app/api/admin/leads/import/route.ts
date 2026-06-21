@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
+import { writeOutcomeEvents } from "@/lib/outcomes-server";
+import type { OutcomeEventWriteInput } from "@/lib/outcomes";
 import { normalizePhone } from "@/lib/voice/service";
 
 type ImportPayload = {
@@ -154,6 +156,7 @@ export async function POST(request: Request) {
   let insertedRows = 0;
   let errorRows = 0;
   const details: Array<{ row_number: number; status: string; reason?: string; lead_id?: string }> = [];
+  const outcomeWrites: OutcomeEventWriteInput[] = [];
 
   for (let i = 0; i < rows.length; i += 1) {
     const raw = rows[i];
@@ -202,6 +205,23 @@ export async function POST(request: Request) {
         } else {
           insertedRows += 1;
           leadId = lead.id as string;
+          outcomeWrites.push({
+            eventType: "lead_imported",
+            occurredAt: nowIso,
+            leadSubmissionId: leadId,
+            actorUserId: auth.user.id,
+            actorAccountManagerId: auth.user.id,
+            ownerAccountManagerIdSnapshot: auth.user.id,
+            sourceChannel: "excel_import",
+            sourceRecordType: "lead_submission",
+            sourceRecordId: leadId,
+            metadata: {
+              batch_id: batch.id,
+              row_number: rowNumber,
+              source_file: fileName,
+              import_source: source,
+            },
+          });
         }
       }
     }
@@ -241,6 +261,12 @@ export async function POST(request: Request) {
 
   if (batchUpdateError) {
     console.error("[leads-import] failed to update batch status:", batchUpdateError);
+  }
+
+  try {
+    await writeOutcomeEvents(outcomeWrites);
+  } catch (error) {
+    console.error("[outcomes] lead import shadow writes failed:", error);
   }
 
   return NextResponse.json({

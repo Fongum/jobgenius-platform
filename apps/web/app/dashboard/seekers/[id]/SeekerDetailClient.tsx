@@ -428,6 +428,7 @@ export default function SeekerDetailClient({
   financial = EMPTY_FINANCIAL_DATA,
   screeningAnswers: initialScreeningAnswers = [],
   failureScreenshots = [],
+  canReviewDeliveryCases = false,
 }: {
   backHref?: string;
   seeker: SeekerData;
@@ -447,6 +448,7 @@ export default function SeekerDetailClient({
   financial?: FinancialData;
   screeningAnswers?: ScreeningAnswer[];
   failureScreenshots?: FailureScreenshot[];
+  canReviewDeliveryCases?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -522,7 +524,15 @@ export default function SeekerDetailClient({
       <DeliveryCommandPanel
         seekerId={seeker.id}
         seekerName={seeker.full_name || "Unnamed Seeker"}
-        deliveryBundle={deliveryBundle ?? { snapshot: null, caseRecord: null, blockers: [] }}
+        deliveryBundle={
+          deliveryBundle ?? {
+            snapshot: null,
+            caseRecord: null,
+            blockers: [],
+            escalations: [],
+          }
+        }
+        canReviewCases={canReviewDeliveryCases}
       />
 
       {/* Tabs */}

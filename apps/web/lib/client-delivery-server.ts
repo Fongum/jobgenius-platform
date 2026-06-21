@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/auth";
 import { isAdminRole, isPeopleManagerRole } from "@/lib/auth/roles";
 import {
   buildClientDeliveryBoardSummary,
+  calculateDaysSinceTimestamp,
   compareClientDeliverySnapshots,
   type ClientDeliveryActionType,
   type ClientDeliveryCaseBundle,
@@ -10,10 +11,31 @@ import {
   type ClientDeliveryBlockerType,
   type ClientDeliveryBoardSummary,
   type ClientDeliveryCaseRecord,
+  type ClientDeliveryEscalationReason,
+  type ClientDeliveryEscalationRecord,
+  type ClientDeliveryEscalationStatus,
+  type ClientDeliveryHealthBand,
   type ClientDeliveryRiskLevel,
   type ClientDeliverySnapshotRecord,
   type ClientDeliveryStage,
+  type ClientDeliveryStaleStatus,
 } from "@/lib/client-delivery";
+import {
+  computeDeliveryHealthScore,
+  deriveBlockerAgeDays,
+  deriveBlockerDueState,
+  deriveDeliveryHealthBand,
+  deriveDeliveryNeedsManagerReview,
+  deriveDeliveryStaleStatus,
+  DELIVERY_CRITICAL_BLOCKER_OVERDUE_DAYS,
+  DELIVERY_HIGH_RISK_REVIEW_DAYS,
+  DELIVERY_PAUSED_STALE_DAYS,
+  DELIVERY_PAUSED_WARNING_DAYS,
+  DELIVERY_SEVERE_STALE_DAYS,
+  DELIVERY_STALE_DAYS,
+  DELIVERY_STALE_WARNING_DAYS,
+  type DeliveryBlockerDueState,
+} from "@/lib/delivery-sla";
 
 type DeliverySnapshotRow = {
   case_id: string | null;
@@ -78,6 +100,11 @@ type ClientDeliveryCaseRow = {
   stage_override: ClientDeliveryStage | null;
   risk_level: ClientDeliveryRiskLevel;
   paused: boolean;
+  escalation_status: ClientDeliveryEscalationStatus;
+  escalated_at: string | null;
+  escalated_by_account_manager_id: string | null;
+  manager_reviewed_at: string | null;
+  manager_reviewed_by_account_manager_id: string | null;
   next_action_type: ClientDeliveryActionType | null;
   next_action_title: string | null;
   next_action_notes: string | null;
@@ -108,6 +135,24 @@ type ClientDeliveryBlockerRow = {
   updated_at: string;
 };
 
+type ClientDeliveryEscalationRow = {
+  id: string;
+  delivery_case_id: string;
+  job_seeker_id: string;
+  status: ClientDeliveryEscalationStatus;
+  reason: ClientDeliveryEscalationReason;
+  details: string | null;
+  opened_by_account_manager_id: string | null;
+  reviewed_by_account_manager_id: string | null;
+  resolved_by_account_manager_id: string | null;
+  opened_at: string;
+  reviewed_at: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type AccountManagerRoleRow = {
   role: string | null;
 };
@@ -120,6 +165,10 @@ export type ClientDeliveryViewer = {
 export type ClientDeliveryListFilters = {
   effectiveStages?: ClientDeliveryStage[];
   riskLevels?: ClientDeliveryRiskLevel[];
+  healthBands?: ClientDeliveryHealthBand[];
+  staleStatuses?: ClientDeliveryStaleStatus[];
+  escalatedOnly?: boolean;
+  managerReviewOnly?: boolean;
   needsAttentionOnly?: boolean;
   search?: string;
 };
@@ -164,6 +213,22 @@ export type UpdateClientDeliveryBlockerInput = {
   actorAccountManagerId: string;
 };
 
+export type CreateClientDeliveryEscalationInput = {
+  jobSeekerId: string;
+  actorAccountManagerId: string;
+  reason: ClientDeliveryEscalationReason;
+  details?: string | null;
+  status?: ClientDeliveryEscalationStatus;
+};
+
+export type UpdateClientDeliveryEscalationInput = {
+  escalationId: string;
+  actorAccountManagerId: string;
+  status?: ClientDeliveryEscalationStatus;
+  details?: string | null;
+  resolutionNote?: string | null;
+};
+
 const SNAPSHOT_SELECT = [
   "case_id",
   "job_seeker_id",
@@ -184,6 +249,11 @@ const SNAPSHOT_SELECT = [
   "stage_override",
   "risk_level",
   "paused",
+  "escalation_status",
+  "escalated_at",
+  "escalated_by_account_manager_id",
+  "manager_reviewed_at",
+  "manager_reviewed_by_account_manager_id",
   "last_application_at",
   "applications_7d",
   "applications_30d",
@@ -227,6 +297,11 @@ const CASE_SELECT = [
   "stage_override",
   "risk_level",
   "paused",
+  "escalation_status",
+  "escalated_at",
+  "escalated_by_account_manager_id",
+  "manager_reviewed_at",
+  "manager_reviewed_by_account_manager_id",
   "next_action_type",
   "next_action_title",
   "next_action_notes",
@@ -236,6 +311,24 @@ const CASE_SELECT = [
   "manager_notes",
   "last_manual_review_at",
   "created_by",
+  "created_at",
+  "updated_at",
+].join(", ");
+
+const ESCALATION_SELECT = [
+  "id",
+  "delivery_case_id",
+  "job_seeker_id",
+  "status",
+  "reason",
+  "details",
+  "opened_by_account_manager_id",
+  "reviewed_by_account_manager_id",
+  "resolved_by_account_manager_id",
+  "opened_at",
+  "reviewed_at",
+  "resolved_at",
+  "resolution_note",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -336,6 +429,22 @@ function mapSnapshotRow(row: DeliverySnapshotRow): ClientDeliverySnapshotRecord 
     overdueNextAction: Boolean(row.overdue_next_action),
     lastTouchAt: row.last_touch_at,
     daysSinceLastTouch: normalizeCount(row.days_since_last_touch),
+    healthScore: 100,
+    healthBand: "healthy",
+    staleStatus: "none",
+    staleSinceAt: null,
+    escalationStatus: "none",
+    escalatedAt: null,
+    managerReviewedAt: null,
+    latestEscalationReason: null,
+    latestEscalationOpenedAt: null,
+    hasActiveEscalationRecord: false,
+    overdueBlockerCount: 0,
+    criticalOverdueBlockerCount: 0,
+    blockerMaxAgeDays: 0,
+    daysSinceLastApplication: calculateDaysSinceTimestamp(row.last_application_at),
+    daysSinceLastManualReview: calculateDaysSinceTimestamp(row.last_manual_review_at),
+    needsManagerReview: false,
     needsAttention: Boolean(row.needs_attention),
     caseCreatedAt: row.case_created_at,
     caseUpdatedAt: row.case_updated_at,
@@ -350,6 +459,11 @@ function mapCaseRow(row: ClientDeliveryCaseRow): ClientDeliveryCaseRecord {
     stageOverride: row.stage_override,
     riskLevel: row.risk_level,
     paused: row.paused,
+    escalationStatus: row.escalation_status,
+    escalatedAt: row.escalated_at,
+    escalatedByAccountManagerId: row.escalated_by_account_manager_id,
+    managerReviewedAt: row.manager_reviewed_at,
+    managerReviewedByAccountManagerId: row.manager_reviewed_by_account_manager_id,
     nextActionType: row.next_action_type,
     nextActionTitle: row.next_action_title ?? "",
     nextActionNotes: row.next_action_notes ?? "",
@@ -378,6 +492,28 @@ function mapBlockerRow(row: ClientDeliveryBlockerRow): ClientDeliveryBlockerReco
     resolvedAt: row.resolved_at,
     resolvedBy: row.resolved_by,
     createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapEscalationRow(
+  row: ClientDeliveryEscalationRow
+): ClientDeliveryEscalationRecord {
+  return {
+    id: row.id,
+    deliveryCaseId: row.delivery_case_id,
+    jobSeekerId: row.job_seeker_id,
+    status: row.status,
+    reason: row.reason,
+    details: row.details ?? "",
+    openedByAccountManagerId: row.opened_by_account_manager_id,
+    reviewedByAccountManagerId: row.reviewed_by_account_manager_id,
+    resolvedByAccountManagerId: row.resolved_by_account_manager_id,
+    openedAt: row.opened_at,
+    reviewedAt: row.reviewed_at,
+    resolvedAt: row.resolved_at,
+    resolutionNote: row.resolution_note ?? "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -426,6 +562,209 @@ function normalizeOptionalIsoTimestamp(
   return parsed.toISOString();
 }
 
+function isActiveEscalationStatus(
+  status: ClientDeliveryEscalationStatus
+): boolean {
+  return (
+    status === "needs_manager_review" ||
+    status === "manager_reviewed" ||
+    status === "ops_escalated"
+  );
+}
+
+function buildBlockerSignals(
+  blockers: ClientDeliveryBlockerRecord[],
+  now = new Date()
+): {
+  overdueBlockerCount: number;
+  criticalOverdueBlockerCount: number;
+  blockerMaxAgeDays: number;
+} {
+  let overdueBlockerCount = 0;
+  let criticalOverdueBlockerCount = 0;
+  let blockerMaxAgeDays = 0;
+
+  for (const blocker of blockers) {
+    if (blocker.status === "resolved") continue;
+
+    blockerMaxAgeDays = Math.max(
+      blockerMaxAgeDays,
+      deriveBlockerAgeDays(blocker.createdAt, now)
+    );
+
+    const dueState: DeliveryBlockerDueState = deriveBlockerDueState(
+      blocker.dueAt,
+      now
+    );
+
+    if (dueState === "overdue" || dueState === "critical_overdue") {
+      overdueBlockerCount += 1;
+    }
+
+    if (dueState === "critical_overdue") {
+      criticalOverdueBlockerCount += 1;
+    }
+  }
+
+  return {
+    overdueBlockerCount,
+    criticalOverdueBlockerCount,
+    blockerMaxAgeDays,
+  };
+}
+
+function deriveStaleSinceAt(args: {
+  snapshot: ClientDeliverySnapshotRecord;
+  staleStatus: ClientDeliveryStaleStatus;
+}): string | null {
+  if (args.staleStatus === "none") return null;
+
+  const { snapshot } = args;
+  const touchMs = Date.parse(snapshot.lastTouchAt);
+  const applicationMs = snapshot.lastApplicationAt
+    ? Date.parse(snapshot.lastApplicationAt)
+    : Number.NaN;
+
+  const msPerDay = 86_400_000;
+
+  if (
+    snapshot.effectiveStage === "active_search" &&
+    snapshot.applications7d === 0 &&
+    snapshot.daysSinceLastApplication !== null &&
+    snapshot.daysSinceLastApplication >= DELIVERY_STALE_DAYS &&
+    !Number.isNaN(applicationMs)
+  ) {
+    return new Date(applicationMs + DELIVERY_STALE_DAYS * msPerDay).toISOString();
+  }
+
+  if (Number.isNaN(touchMs)) return null;
+
+  const thresholdDays = snapshot.paused
+    ? args.staleStatus === "approaching_stale"
+      ? DELIVERY_PAUSED_WARNING_DAYS
+      : DELIVERY_PAUSED_STALE_DAYS
+    : args.staleStatus === "approaching_stale"
+      ? DELIVERY_STALE_WARNING_DAYS
+      : args.staleStatus === "stale"
+        ? DELIVERY_STALE_DAYS
+        : DELIVERY_SEVERE_STALE_DAYS;
+
+  return new Date(touchMs + thresholdDays * msPerDay).toISOString();
+}
+
+function enrichSnapshotRecord(args: {
+  row: ClientDeliverySnapshotRecord;
+  caseRecord: ClientDeliveryCaseRecord | null;
+  blockers: ClientDeliveryBlockerRecord[];
+  escalations: ClientDeliveryEscalationRecord[];
+  now?: Date;
+}): ClientDeliverySnapshotRecord {
+  const now = args.now ?? new Date();
+  const activeEscalations = args.escalations.filter((escalation) =>
+    isActiveEscalationStatus(escalation.status)
+  );
+  const latestEscalation =
+    activeEscalations[0] ??
+    args.escalations[0] ??
+    null;
+
+  const escalationStatus =
+    args.caseRecord?.escalationStatus ??
+    latestEscalation?.status ??
+    "none";
+  const hasActiveEscalationRecord =
+    isActiveEscalationStatus(escalationStatus) || activeEscalations.length > 0;
+
+  const blockerSignals = buildBlockerSignals(args.blockers, now);
+  const daysSinceLastManualReview = calculateDaysSinceTimestamp(
+    args.caseRecord?.lastManualReviewAt ?? args.row.lastManualReviewAt,
+    now
+  );
+  const daysSinceLastApplication = calculateDaysSinceTimestamp(
+    args.row.lastApplicationAt,
+    now
+  );
+
+  const staleStatus = deriveDeliveryStaleStatus({
+    paused: args.row.paused,
+    hasPlacedOffer: args.row.hasPlacedOffer,
+    daysSinceLastTouch: args.row.daysSinceLastTouch,
+    daysSinceLastApplication,
+    applications7d: args.row.applications7d,
+    lastManualReviewAt:
+      args.caseRecord?.lastManualReviewAt ?? args.row.lastManualReviewAt,
+    overdueNextAction: args.row.overdueNextAction,
+    activeThreadCount: args.row.activeThreadCount,
+    effectiveStage: args.row.effectiveStage,
+    now,
+  });
+
+  const healthScore = computeDeliveryHealthScore({
+    effectiveStage: args.row.effectiveStage,
+    riskLevel: args.row.riskLevel,
+    paused: args.row.paused,
+    overdueNextAction: args.row.overdueNextAction,
+    activeBlockerCount: args.row.activeBlockerCount,
+    overdueBlockerCount: blockerSignals.overdueBlockerCount,
+    criticalOverdueBlockerCount: blockerSignals.criticalOverdueBlockerCount,
+    hasPaymentHold: args.row.hasPaymentHold,
+    hasActiveEscalation: hasActiveEscalationRecord,
+    applications7d: args.row.applications7d,
+    nextInterviewAt: args.row.nextInterviewAt,
+    hasOpenOffer: args.row.hasOpenOffer,
+    daysSinceLastTouch: args.row.daysSinceLastTouch,
+    daysSinceLastApplication,
+    daysSinceLastManualReview,
+    nextFollowUpAt: args.row.nextFollowUpAt,
+    now,
+  });
+
+  const healthBand = deriveDeliveryHealthBand(healthScore);
+  const needsManagerReview = deriveDeliveryNeedsManagerReview({
+    escalationStatus,
+    healthBand,
+    staleStatus,
+    criticalOverdueBlockerCount: blockerSignals.criticalOverdueBlockerCount,
+    hasPaymentHold: args.row.hasPaymentHold,
+    riskLevel: args.row.riskLevel,
+    daysSinceLastManualReview,
+  });
+
+  return {
+    ...args.row,
+    hasActiveEscalation: hasActiveEscalationRecord,
+    healthScore,
+    healthBand,
+    staleStatus,
+    staleSinceAt: deriveStaleSinceAt({
+      snapshot: {
+        ...args.row,
+        daysSinceLastApplication,
+      },
+      staleStatus,
+    }),
+    escalationStatus,
+    escalatedAt:
+      args.caseRecord?.escalatedAt ?? latestEscalation?.openedAt ?? null,
+    managerReviewedAt:
+      args.caseRecord?.managerReviewedAt ?? latestEscalation?.reviewedAt ?? null,
+    latestEscalationReason: latestEscalation?.reason ?? null,
+    latestEscalationOpenedAt: latestEscalation?.openedAt ?? null,
+    hasActiveEscalationRecord,
+    overdueBlockerCount: blockerSignals.overdueBlockerCount,
+    criticalOverdueBlockerCount: blockerSignals.criticalOverdueBlockerCount,
+    blockerMaxAgeDays: blockerSignals.blockerMaxAgeDays,
+    daysSinceLastApplication,
+    daysSinceLastManualReview,
+    needsManagerReview,
+    needsAttention:
+      args.row.needsAttention ||
+      staleStatus !== "none" ||
+      healthBand === "critical" ||
+      blockerSignals.criticalOverdueBlockerCount > 0,
+  };
+}
+
 function matchesSearch(row: ClientDeliverySnapshotRecord, search: string): boolean {
   const needle = search.trim().toLowerCase();
   if (!needle) return true;
@@ -461,11 +800,33 @@ function applySnapshotFilters(
       return false;
     }
 
+    if (
+      filters.healthBands?.length &&
+      !filters.healthBands.includes(row.healthBand)
+    ) {
+      return false;
+    }
+
+    if (
+      filters.staleStatuses?.length &&
+      !filters.staleStatuses.includes(row.staleStatus)
+    ) {
+      return false;
+    }
+
+    if (filters.escalatedOnly && !row.hasActiveEscalationRecord) {
+      return false;
+    }
+
+    if (filters.managerReviewOnly && !row.needsManagerReview) {
+      return false;
+    }
+
     if (filters.search && !matchesSearch(row, filters.search)) {
       return false;
     }
 
-  return true;
+    return true;
   });
 }
 
@@ -517,6 +878,117 @@ async function upsertClientDeliveryCaseForSeeker(args: {
   }
 
   return mapCaseRow(data as unknown as ClientDeliveryCaseRow);
+}
+
+async function listClientDeliveryCasesByJobSeekerIds(
+  jobSeekerIds: string[]
+): Promise<Map<string, ClientDeliveryCaseRecord>> {
+  if (jobSeekerIds.length === 0) return new Map();
+
+  const { data, error } = await supabaseAdmin
+    .from("client_delivery_cases")
+    .select(CASE_SELECT)
+    .in("job_seeker_id", jobSeekerIds);
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  return new Map(
+    ((data as unknown as ClientDeliveryCaseRow[] | null) ?? []).map((row) => {
+      const mapped = mapCaseRow(row);
+      return [mapped.jobSeekerId, mapped] as const;
+    })
+  );
+}
+
+async function listClientDeliveryBlockersByCaseIds(
+  caseIds: string[]
+): Promise<Map<string, ClientDeliveryBlockerRecord[]>> {
+  if (caseIds.length === 0) return new Map();
+
+  const { data, error } = await supabaseAdmin
+    .from("client_delivery_blockers")
+    .select(BLOCKER_SELECT)
+    .in("case_id", caseIds)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  const grouped = new Map<string, ClientDeliveryBlockerRecord[]>();
+  for (const row of (data as unknown as ClientDeliveryBlockerRow[] | null) ?? []) {
+    const mapped = mapBlockerRow(row);
+    const current = grouped.get(mapped.caseId) ?? [];
+    current.push(mapped);
+    grouped.set(mapped.caseId, current);
+  }
+  return grouped;
+}
+
+async function listClientDeliveryEscalationsByCaseIds(
+  caseIds: string[]
+): Promise<Map<string, ClientDeliveryEscalationRecord[]>> {
+  if (caseIds.length === 0) return new Map();
+
+  const { data, error } = await supabaseAdmin
+    .from("client_delivery_escalations")
+    .select(ESCALATION_SELECT)
+    .in("delivery_case_id", caseIds)
+    .order("opened_at", { ascending: false });
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  const grouped = new Map<string, ClientDeliveryEscalationRecord[]>();
+  for (const row of (data as unknown as ClientDeliveryEscalationRow[] | null) ?? []) {
+    const mapped = mapEscalationRow(row);
+    const current = grouped.get(mapped.deliveryCaseId) ?? [];
+    current.push(mapped);
+    grouped.set(mapped.deliveryCaseId, current);
+  }
+  return grouped;
+}
+
+async function enrichSnapshots(
+  rows: ClientDeliverySnapshotRecord[]
+): Promise<ClientDeliverySnapshotRecord[]> {
+  if (rows.length === 0) return rows;
+
+  const jobSeekerIds = rows.map((row) => row.jobSeekerId);
+  const caseMap = await listClientDeliveryCasesByJobSeekerIds(jobSeekerIds);
+  const caseIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.caseId ?? caseMap.get(row.jobSeekerId)?.id ?? null)
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+
+  const [blockerMap, escalationMap] = await Promise.all([
+    listClientDeliveryBlockersByCaseIds(caseIds),
+    listClientDeliveryEscalationsByCaseIds(caseIds),
+  ]);
+
+  const now = new Date();
+  return rows.map((row) => {
+    const caseRecord = caseMap.get(row.jobSeekerId) ?? null;
+    const resolvedCaseId = row.caseId ?? caseRecord?.id ?? null;
+    const blockers = resolvedCaseId ? blockerMap.get(resolvedCaseId) ?? [] : [];
+    const escalations = resolvedCaseId
+      ? escalationMap.get(resolvedCaseId) ?? []
+      : [];
+
+    return enrichSnapshotRecord({
+      row,
+      caseRecord,
+      blockers,
+      escalations,
+      now,
+    });
+  });
 }
 
 export async function ensureClientDeliveryCasesForManagedSeekers(
@@ -622,9 +1094,10 @@ export async function listClientDeliverySnapshots(
     throw new ClientDeliveryError(500, error.message);
   }
 
-  const rows = ((data as unknown as DeliverySnapshotRow[] | null) ?? []).map(
+  const rawRows = ((data as unknown as DeliverySnapshotRow[] | null) ?? []).map(
     mapSnapshotRow
   );
+  const rows = await enrichSnapshots(rawRows);
   const filteredRows = applySnapshotFilters(rows, filters).sort(
     compareClientDeliverySnapshots
   );
@@ -658,7 +1131,10 @@ export async function getClientDeliverySnapshotForSeeker(
   }
 
   const row = (data as unknown as DeliverySnapshotRow | null) ?? null;
-  return row ? mapSnapshotRow(row) : null;
+  if (!row) return null;
+
+  const [enriched] = await enrichSnapshots([mapSnapshotRow(row)]);
+  return enriched ?? null;
 }
 
 export async function getClientDeliveryCaseForSeeker(
@@ -913,19 +1389,274 @@ export async function listClientDeliveryBlockersForSeeker(
   );
 }
 
+export async function listClientDeliveryEscalationsForSeeker(
+  jobSeekerId: string,
+  options: { activeOnly?: boolean } = {}
+): Promise<ClientDeliveryEscalationRecord[]> {
+  const caseRecord = await getClientDeliveryCaseForSeeker(jobSeekerId);
+  if (!caseRecord) return [];
+
+  let query = supabaseAdmin
+    .from("client_delivery_escalations")
+    .select(ESCALATION_SELECT)
+    .eq("delivery_case_id", caseRecord.id)
+    .order("opened_at", { ascending: false });
+
+  if (options.activeOnly) {
+    query = query.in("status", [
+      "needs_manager_review",
+      "manager_reviewed",
+      "ops_escalated",
+    ]);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  return ((data as unknown as ClientDeliveryEscalationRow[] | null) ?? []).map(
+    mapEscalationRow
+  );
+}
+
+export async function createClientDeliveryEscalation(
+  input: CreateClientDeliveryEscalationInput
+): Promise<ClientDeliveryEscalationRecord> {
+  const caseRecord = await upsertClientDeliveryCaseForSeeker({
+    jobSeekerId: input.jobSeekerId,
+    actorAccountManagerId: input.actorAccountManagerId,
+  });
+
+  const openedAt = new Date().toISOString();
+  const status = input.status ?? "needs_manager_review";
+
+  const { data, error } = await supabaseAdmin
+    .from("client_delivery_escalations")
+    .insert({
+      delivery_case_id: caseRecord.id,
+      job_seeker_id: input.jobSeekerId,
+      status,
+      reason: input.reason,
+      details: normalizeOptionalText(input.details) ?? null,
+      opened_by_account_manager_id: input.actorAccountManagerId,
+      opened_at: openedAt,
+      reviewed_at: status === "manager_reviewed" ? openedAt : null,
+      reviewed_by_account_manager_id:
+        status === "manager_reviewed" ? input.actorAccountManagerId : null,
+      resolved_at: status === "resolved" ? openedAt : null,
+      resolved_by_account_manager_id:
+        status === "resolved" ? input.actorAccountManagerId : null,
+      resolution_note: null,
+    })
+    .select(ESCALATION_SELECT)
+    .single();
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  const caseUpdates: Record<string, unknown> = {
+    escalation_status: status,
+    escalated_at: openedAt,
+    escalated_by_account_manager_id: input.actorAccountManagerId,
+    last_manual_review_at: openedAt,
+  };
+
+  if (status === "manager_reviewed") {
+    caseUpdates.manager_reviewed_at = openedAt;
+    caseUpdates.manager_reviewed_by_account_manager_id =
+      input.actorAccountManagerId;
+  }
+
+  if (status === "resolved") {
+    caseUpdates.manager_reviewed_at = openedAt;
+    caseUpdates.manager_reviewed_by_account_manager_id =
+      input.actorAccountManagerId;
+  }
+
+  const { error: caseError } = await supabaseAdmin
+    .from("client_delivery_cases")
+    .update(caseUpdates)
+    .eq("id", caseRecord.id);
+
+  if (caseError) {
+    throw new ClientDeliveryError(500, caseError.message);
+  }
+
+  return mapEscalationRow(data as unknown as ClientDeliveryEscalationRow);
+}
+
+export async function updateClientDeliveryEscalation(
+  input: UpdateClientDeliveryEscalationInput
+): Promise<ClientDeliveryEscalationRecord> {
+  const { data: existingData, error: existingError } = await supabaseAdmin
+    .from("client_delivery_escalations")
+    .select(ESCALATION_SELECT)
+    .eq("id", input.escalationId)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new ClientDeliveryError(500, existingError.message);
+  }
+
+  const existing =
+    (existingData as unknown as ClientDeliveryEscalationRow | null) ?? null;
+  if (!existing) {
+    throw new ClientDeliveryError(404, "Escalation not found.");
+  }
+
+  const nextStatus = input.status ?? existing.status;
+  const nowIso = new Date().toISOString();
+  const updates: Record<string, unknown> = {};
+
+  if (input.status !== undefined) {
+    updates.status = nextStatus;
+  }
+  if (input.details !== undefined) {
+    updates.details = normalizeOptionalText(input.details) ?? null;
+  }
+  if (input.resolutionNote !== undefined) {
+    updates.resolution_note = normalizeOptionalText(input.resolutionNote) ?? null;
+  }
+
+  if (
+    nextStatus === "manager_reviewed" ||
+    nextStatus === "ops_escalated" ||
+    nextStatus === "resolved"
+  ) {
+    updates.reviewed_at = existing.reviewed_at ?? nowIso;
+    updates.reviewed_by_account_manager_id =
+      existing.reviewed_by_account_manager_id ?? input.actorAccountManagerId;
+  }
+
+  if (nextStatus === "resolved") {
+    updates.resolved_at = nowIso;
+    updates.resolved_by_account_manager_id = input.actorAccountManagerId;
+  } else if (input.status !== undefined && existing.status === "resolved") {
+    updates.resolved_at = null;
+    updates.resolved_by_account_manager_id = null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("client_delivery_escalations")
+    .update(updates)
+    .eq("id", input.escalationId)
+    .select(ESCALATION_SELECT)
+    .single();
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  const mapped = mapEscalationRow(data as unknown as ClientDeliveryEscalationRow);
+  const caseUpdates: Record<string, unknown> = {
+    escalation_status: nextStatus,
+    last_manual_review_at: nowIso,
+  };
+
+  if (
+    nextStatus === "manager_reviewed" ||
+    nextStatus === "ops_escalated" ||
+    nextStatus === "resolved"
+  ) {
+    caseUpdates.manager_reviewed_at = mapped.reviewedAt ?? nowIso;
+    caseUpdates.manager_reviewed_by_account_manager_id =
+      mapped.reviewedByAccountManagerId ?? input.actorAccountManagerId;
+  }
+
+  if (
+    nextStatus === "needs_manager_review" ||
+    nextStatus === "manager_reviewed" ||
+    nextStatus === "ops_escalated"
+  ) {
+    caseUpdates.escalated_at = mapped.openedAt;
+    caseUpdates.escalated_by_account_manager_id =
+      mapped.openedByAccountManagerId ?? input.actorAccountManagerId;
+  }
+
+  const { error: caseError } = await supabaseAdmin
+    .from("client_delivery_cases")
+    .update(caseUpdates)
+    .eq("id", mapped.deliveryCaseId);
+
+  if (caseError) {
+    throw new ClientDeliveryError(500, caseError.message);
+  }
+
+  return mapped;
+}
+
+export async function markClientDeliveryCaseReviewed(args: {
+  jobSeekerId: string;
+  actorAccountManagerId: string;
+}): Promise<ClientDeliveryCaseRecord> {
+  const caseRecord = await upsertClientDeliveryCaseForSeeker({
+    jobSeekerId: args.jobSeekerId,
+    actorAccountManagerId: args.actorAccountManagerId,
+  });
+
+  const reviewedAt = new Date().toISOString();
+  const updates: Record<string, unknown> = {
+    last_manual_review_at: reviewedAt,
+  };
+
+  if (caseRecord.escalationStatus === "needs_manager_review") {
+    updates.escalation_status = "manager_reviewed";
+    updates.manager_reviewed_at = reviewedAt;
+    updates.manager_reviewed_by_account_manager_id = args.actorAccountManagerId;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("client_delivery_cases")
+    .update(updates)
+    .eq("id", caseRecord.id)
+    .select(CASE_SELECT)
+    .single();
+
+  if (error) {
+    throw new ClientDeliveryError(500, error.message);
+  }
+
+  if (caseRecord.escalationStatus === "needs_manager_review") {
+    const escalations = await listClientDeliveryEscalationsForSeeker(args.jobSeekerId, {
+      activeOnly: true,
+    });
+    const latestNeedsReview = escalations.find(
+      (escalation) => escalation.status === "needs_manager_review"
+    );
+
+    if (latestNeedsReview) {
+      await supabaseAdmin
+        .from("client_delivery_escalations")
+        .update({
+          status: "manager_reviewed",
+          reviewed_at: reviewedAt,
+          reviewed_by_account_manager_id: args.actorAccountManagerId,
+        })
+        .eq("id", latestNeedsReview.id);
+    }
+  }
+
+  return mapCaseRow(data as unknown as ClientDeliveryCaseRow);
+}
+
 export async function getClientDeliveryCaseBundleForSeeker(
   viewer: ClientDeliveryViewer,
   jobSeekerId: string
 ): Promise<ClientDeliveryCaseBundle> {
-  const [snapshot, caseRecord, blockers] = await Promise.all([
+  const [snapshot, caseRecord, blockers, escalations] = await Promise.all([
     getClientDeliverySnapshotForSeeker(viewer, jobSeekerId),
     getClientDeliveryCaseForSeeker(jobSeekerId),
     listClientDeliveryBlockersForSeeker(jobSeekerId),
+    listClientDeliveryEscalationsForSeeker(jobSeekerId),
   ]);
 
   return {
     snapshot,
     caseRecord,
     blockers,
+    escalations,
   };
 }

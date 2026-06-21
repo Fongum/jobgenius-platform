@@ -411,15 +411,31 @@ export default async function AdminLeadsPage({
                                 Resume: {resume.fileName || "uploaded file"}
                                 {resume.mimeType ? ` (${resume.mimeType})` : ""}
                               </p>
-                              <a
-                                href={`/api/admin/leads/${lead.id}/resume`}
-                                className="mt-1 inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
-                              >
-                                Download resume
-                              </a>
+                              <div className="mt-1 flex flex-wrap gap-2">
+                                <a
+                                  href={`/api/admin/leads/${lead.id}/resume`}
+                                  className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
+                                >
+                                  Download resume
+                                </a>
+                                <Link
+                                  href={`/dashboard/admin/outcomes?lead=${lead.id}`}
+                                  className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                                >
+                                  Open consultation desk
+                                </Link>
+                              </div>
                             </div>
                           ) : (
-                            <p className="text-xs text-gray-400">No resume uploaded</p>
+                            <div className="pt-1 flex flex-wrap gap-2">
+                              <p className="text-xs text-gray-400">No resume uploaded</p>
+                              <Link
+                                href={`/dashboard/admin/outcomes?lead=${lead.id}`}
+                                className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                              >
+                                Open consultation desk
+                              </Link>
+                            </div>
                           )}
                           {lead.notes && (
                             <p className="text-xs text-gray-500 line-clamp-2">{lead.notes}</p>

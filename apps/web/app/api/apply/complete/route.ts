@@ -12,6 +12,7 @@ import { logActivity } from "@/lib/feedback-loop";
 import { transitionRun } from "@/lib/runState";
 import { findLatestPendingTrialForRun, recordOutcome } from "@/lib/bandit";
 import { updateMatchOutcome } from "@/lib/learned-ranker";
+import { writeOutcomeEvent } from "@/lib/outcomes-server";
 
 type CompletePayload = {
   run_id?: string;
@@ -131,6 +132,7 @@ export async function POST(request: Request) {
   }
 
   const actor = getActorFromHeaders(request.headers);
+  const outcomeSourceChannel = actor === "AM_UI" ? "am_portal" : "application_runner";
 
   const { error: runEventError } = await supabaseServer.from("apply_run_events").insert({
     run_id: run.id,
@@ -351,6 +353,30 @@ export async function POST(request: Request) {
     refType: "application_runs",
     refId: run.id,
   }).catch((err) => console.error("[apply:complete] activity log failed:", err));
+
+  try {
+    await writeOutcomeEvent({
+      eventType: "application_submitted",
+      occurredAt: nowIso,
+      jobSeekerId: run.job_seeker_id,
+      applicationRunId: run.id,
+      actorUserId: access.amId,
+      actorAccountManagerId: access.amId,
+      sourceChannel: outcomeSourceChannel,
+      sourceRecordType: "application_run",
+      sourceRecordId: run.id,
+      metadata: {
+        actor,
+        ats_type: run.ats_type,
+        queue_id: run.queue_id ?? null,
+        job_post_id: run.job_post_id,
+        current_step: run.current_step,
+        note: payload.note ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("[outcomes] application completion shadow write failed:", error);
+  }
 
   return Response.json({
     success: true,

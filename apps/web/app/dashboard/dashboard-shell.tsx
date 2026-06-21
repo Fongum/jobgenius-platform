@@ -117,6 +117,7 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/assignments", label: "Assignments", icon: "link" },
     { href: "/dashboard/admin/broadcast", label: "Broadcast", icon: "megaphone" },
     { href: "/dashboard/admin/analytics", label: "Analytics", icon: "analytics" },
+    { href: "/dashboard/admin/outcomes", label: "Outcomes", icon: "analytics" },
     { href: "/dashboard/admin/notifications", label: "Internal Notifications", icon: "alert" },
     { href: "/dashboard/admin/application-analytics", label: "App Analytics", icon: "analytics" },
     { href: "/dashboard/admin/adapter-health", label: "Adapter Health", icon: "analytics" },

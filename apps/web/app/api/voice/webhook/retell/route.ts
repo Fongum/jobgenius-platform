@@ -4,6 +4,7 @@ import {
   verifyRetellWebhookSignature,
 } from "@/lib/voice/retell";
 import { supabaseServer } from "@/lib/supabase/server";
+import { writeOutcomeEvent } from "@/lib/outcomes-server";
 import {
   appendVoiceConversationNote,
   evaluateEscalation,
@@ -304,6 +305,30 @@ export async function POST(request: Request) {
       .from("lead_intake_submissions")
       .update({ last_call_at: nowIso, updated_at: nowIso })
       .eq("id", voiceCall.lead_submission_id);
+
+    try {
+      await writeOutcomeEvent({
+        eventType: "qualification_call_completed",
+        occurredAt: nowIso,
+        leadSubmissionId: voiceCall.lead_submission_id,
+        jobSeekerId: voiceCall.job_seeker_id,
+        voiceCallId: voiceCall.id,
+        ownerAccountManagerIdSnapshot: voiceCall.account_manager_id,
+        sourceChannel: "voice_automation",
+        sourceRecordType: "voice_call_completion",
+        sourceRecordId: voiceCall.id,
+        metadata: {
+          call_type: normalizedCallType,
+          final_status: newStatus,
+          disposition: normalized.disposition ?? null,
+          summary_present: Boolean(normalized.summary),
+          escalation_required: escalation.requiresEscalation,
+          escalation_reasons: escalation.reasons,
+        },
+      });
+    } catch (error) {
+      console.error("[outcomes] qualification call completion shadow write failed:", error);
+    }
   }
 
   return NextResponse.json({ success: true });

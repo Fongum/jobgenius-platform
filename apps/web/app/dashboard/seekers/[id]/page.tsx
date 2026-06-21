@@ -16,6 +16,9 @@ export default async function SeekerDetailPage({ params }: PageProps) {
   const isAdmin = user.userType === "am" && isAdminRole(user.role);
   const canViewAnySeeker =
     user.userType === "am" && isPeopleManagerRole(user.role);
+  const canReviewDeliveryCases =
+    user.userType === "am" &&
+    (isPeopleManagerRole(user.role) || isAdminRole(user.role));
 
   if (!canViewAnySeeker) {
     // Verify assignment for non-privileged AM users
@@ -273,6 +276,7 @@ export default async function SeekerDetailPage({ params }: PageProps) {
       auditLogs={(auditLogs || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["auditLogs"]}
       screeningAnswers={(screeningAnswers || []) as unknown as Parameters<typeof SeekerDetailClient>[0]["screeningAnswers"]}
       failureScreenshots={failureScreenshots as unknown as Parameters<typeof SeekerDetailClient>[0]["failureScreenshots"]}
+      canReviewDeliveryCases={canReviewDeliveryCases}
       financial={{
         contracts: (contractsRes.data || []) as unknown as FinancialProp["contracts"],
         registrationPayments: (registrationPaymentsRes.data || []) as unknown as FinancialProp["registrationPayments"],
