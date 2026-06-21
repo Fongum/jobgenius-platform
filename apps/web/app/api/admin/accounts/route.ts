@@ -49,14 +49,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email already exists
-    const { data: existing } = await supabaseAdmin
+    // Reuse an archived staff profile when the email already exists without a linked auth user.
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from("account_managers")
-      .select("id")
+      .select("id, auth_id")
       .eq("email", email)
       .maybeSingle();
 
-    if (existing) {
+    if (existingError) {
+      return NextResponse.json(
+        { error: existingError.message },
+        { status: 500 }
+      );
+    }
+
+    if (existing?.auth_id) {
       return NextResponse.json(
         { error: "An account with this email already exists." },
         { status: 409 }
@@ -81,16 +88,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create account manager record (auto-approved when created by admin)
-    const { data: am, error: amError } = await supabaseAdmin
-      .from("account_managers")
-      .insert({
-        email,
-        name: name || null,
-        auth_id: authData.user.id,
-        role: targetRole,
-        status: "approved", // Auto-approve accounts created by admins
-      })
+    // Create or reactivate the account manager record (auto-approved when created by admin)
+    const amMutation = existing
+      ? supabaseAdmin
+          .from("account_managers")
+          .update({
+            name: name || null,
+            auth_id: authData.user.id,
+            role: targetRole,
+            status: "approved",
+          })
+          .eq("id", existing.id)
+      : supabaseAdmin
+          .from("account_managers")
+          .insert({
+            email,
+            name: name || null,
+            auth_id: authData.user.id,
+            role: targetRole,
+            status: "approved", // Auto-approve accounts created by admins
+          });
+
+    const { data: am, error: amError } = await amMutation
       .select()
       .single();
 

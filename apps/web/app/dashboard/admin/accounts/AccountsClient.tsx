@@ -283,8 +283,8 @@ export default function AccountsClient({
   const deleteAccount = async (account: ManagedAccount) => {
     const prompt =
       account.userType === "job_seeker"
-        ? "Delete this job seeker account and its linked login? This also removes seeker-linked records."
-        : "Delete this account manager account and its linked login? This can remove AM-owned records.";
+        ? "Delete this job seeker's login access? Their historical JobGenius record will be archived."
+        : "Delete this account manager's login access? Their historical JobGenius record will be archived.";
 
     if (!window.confirm(prompt)) return;
 
@@ -304,7 +304,13 @@ export default function AccountsClient({
         return;
       }
 
-      setMessage({ type: "success", text: "Account deleted." });
+      setMessage({
+        type: "success",
+        text:
+          account.userType === "job_seeker"
+            ? "Job seeker login deleted and archived."
+            : "Staff login deleted and archived.",
+      });
       router.refresh();
     } catch {
       setMessage({ type: "error", text: "Network error." });

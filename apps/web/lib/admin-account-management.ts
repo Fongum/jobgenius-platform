@@ -581,7 +581,16 @@ export async function deleteManagedAccount(params: {
       }
     }
 
-    const { error } = await supabaseAdmin.from("job_seekers").delete().eq("id", source.id);
+    // Preserve historical seeker data and workflow references while removing portal access.
+    const { error } = await supabaseAdmin
+      .from("job_seekers")
+      .update({
+        auth_id: null,
+        status: "inactive",
+        last_login_at: null,
+      })
+      .eq("id", source.id);
+
     if (error) {
       throw new AdminAccountManagementError(500, error.message);
     }
@@ -615,7 +624,16 @@ export async function deleteManagedAccount(params: {
     }
   }
 
-  const { error } = await supabaseAdmin.from("account_managers").delete().eq("id", source.id);
+  // Preserve historical AM ownership and audit references while removing dashboard access.
+  const { error } = await supabaseAdmin
+    .from("account_managers")
+    .update({
+      auth_id: null,
+      status: "deleted",
+      last_login_at: null,
+    })
+    .eq("id", source.id);
+
   if (error) {
     throw new AdminAccountManagementError(500, error.message);
   }
