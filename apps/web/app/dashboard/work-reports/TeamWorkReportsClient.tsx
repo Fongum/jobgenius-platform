@@ -51,6 +51,22 @@ function formatReportDate(value: string) {
   });
 }
 
+function historyLabel(item: {
+  hasReport: boolean;
+  status: "draft" | "submitted" | "locked" | null;
+  manualTotal: number;
+}) {
+  if (item.hasReport) {
+    return labelizeWorkReportReviewState(
+      deriveWorkReportReviewState({
+        hasReport: true,
+        status: item.status,
+      })
+    );
+  }
+  return item.manualTotal > 0 ? `${item.manualTotal} manual logged` : "Activity only";
+}
+
 export default function TeamWorkReportsClient({
   summary,
   canReview,
@@ -158,15 +174,10 @@ export default function TeamWorkReportsClient({
                   </span>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">{row.accountManager.email}</p>
-                {row.reviewState === "missing" && row.recentReports.length > 0 && (
+                {row.reviewState === "missing" && row.recentHistory.length > 0 && (
                   <p className="mt-2 text-xs text-violet-700">
-                    Latest report on record: {formatReportDate(row.recentReports[0].reportDate)} ·{" "}
-                    {labelizeWorkReportReviewState(
-                      deriveWorkReportReviewState({
-                        hasReport: true,
-                        status: row.recentReports[0].status,
-                      })
-                    )}
+                    Latest activity on record: {formatReportDate(row.recentHistory[0].reportDate)} ·{" "}
+                    {historyLabel(row.recentHistory[0])}
                   </p>
                 )}
               </div>
@@ -254,31 +265,24 @@ export default function TeamWorkReportsClient({
               </div>
             )}
 
-            {row.recentReports.length > 0 && (
+            {row.recentHistory.length > 0 && (
               <div className="mt-5 rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">
-                  Recent reports
+                  Recent history
                 </p>
                 <p className="mt-1 text-sm text-violet-900">
-                  Past submissions stay visible here even when the selected day has no report yet.
+                  Past report days and manual-only activity days stay visible here even when the selected day has no report yet.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {row.recentReports.map((report) => (
+                  {row.recentHistory.map((report) => (
                     <Link
-                      key={report.id}
+                      key={`${row.accountManager.id}-${report.reportDate}`}
                       href={`/dashboard/work-reports?date=${report.reportDate}`}
                       className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-800 hover:border-violet-300 hover:bg-violet-100/60"
                     >
                       <span>{formatReportDate(report.reportDate)}</span>
                       <span className="text-violet-500">·</span>
-                      <span>
-                        {labelizeWorkReportReviewState(
-                          deriveWorkReportReviewState({
-                            hasReport: true,
-                            status: report.status,
-                          })
-                        )}
-                      </span>
+                      <span>{historyLabel(report)}</span>
                     </Link>
                   ))}
                 </div>

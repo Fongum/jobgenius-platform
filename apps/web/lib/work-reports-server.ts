@@ -124,6 +124,13 @@ export type DailyWorkReportBundle = {
   metrics: ReturnType<typeof buildDailyWorkMetricSummary>;
 };
 
+export type RecentWorkHistoryRecord = {
+  reportDate: string;
+  hasReport: boolean;
+  status: WorkReportStatus | null;
+  manualTotal: number;
+};
+
 export type TeamWorkReportRow = DailyWorkReportBundle & {
   accountManager: {
     id: string;
@@ -133,7 +140,7 @@ export type TeamWorkReportRow = DailyWorkReportBundle & {
     status: string | null;
   };
   reviewState: WorkReportReviewState;
-  recentReports: DailyWorkReportRecord[];
+  recentHistory: RecentWorkHistoryRecord[];
 };
 
 export type TeamWorkReportSummary = {
@@ -320,6 +327,34 @@ async function listRecentDailyWorkReports(
   }
 
   return ((data as DailyWorkReportRow[] | null) ?? []).filter((row) => row.status);
+}
+
+async function listRecentManualWorkActivities(
+  reportDate: string,
+  accountManagerIds: string[]
+): Promise<ManualWorkActivityLogRow[]> {
+  if (accountManagerIds.length === 0) return [];
+
+  const historyStart = new Date(`${reportDate}T00:00:00.000Z`);
+  historyStart.setUTCDate(historyStart.getUTCDate() - 60);
+  const historyStartDate = historyStart.toISOString().slice(0, 10);
+
+  const { data, error } = await supabaseAdmin
+    .from("manual_work_activity_logs")
+    .select("id, account_manager_id, report_date, activity_type, quantity, note, created_at, updated_at")
+    .gte("report_date", historyStartDate)
+    .lt("report_date", reportDate)
+    .in("account_manager_id", accountManagerIds)
+    .order("report_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new WorkReportError(500, error.message);
+  }
+
+  return ((data as ManualWorkActivityLogRow[] | null) ?? []).filter((row) =>
+    isManualWorkActivityType(row.activity_type)
+  );
 }
 
 async function listManualWorkActivitiesForDate(
@@ -574,10 +609,17 @@ export async function listTeamWorkReportRows(
   const accountManagers = await listReportableAccountManagers();
   const accountManagerIds = accountManagers.map((row) => row.id);
 
-  const [reportsForDay, recentReports, manualActivitiesForDay, systemCountsForDay] =
+  const [
+    reportsForDay,
+    recentReports,
+    recentManualActivities,
+    manualActivitiesForDay,
+    systemCountsForDay,
+  ] =
     await Promise.all([
     listDailyWorkReportsForDate(reportDate, accountManagerIds),
     listRecentDailyWorkReports(reportDate, accountManagerIds),
+    listRecentManualWorkActivities(reportDate, accountManagerIds),
     listManualWorkActivitiesForDate(reportDate, accountManagerIds),
     buildSystemCountsByAm(reportDate, accountManagerIds),
     ]);
@@ -587,7 +629,7 @@ export async function listTeamWorkReportRows(
   );
   const manualCountsByAm = buildManualCountsByAm(manualActivitiesForDay);
   const manualActivitiesByAm = new Map<string, ManualWorkActivityLogRow[]>();
-  const recentReportsByAm = new Map<string, DailyWorkReportRecord[]>();
+  const recentHistoryByAm = new Map<string, Map<string, RecentWorkHistoryRecord>>();
 
   for (const activity of manualActivitiesForDay) {
     const existing = manualActivitiesByAm.get(activity.account_manager_id) ?? [];
@@ -596,10 +638,27 @@ export async function listTeamWorkReportRows(
   }
 
   for (const row of recentReports) {
-    const existing = recentReportsByAm.get(row.account_manager_id) ?? [];
-    if (existing.length >= 6) continue;
-    existing.push(toReportRecord(row)!);
-    recentReportsByAm.set(row.account_manager_id, existing);
+    const byDate = recentHistoryByAm.get(row.account_manager_id) ?? new Map();
+    byDate.set(row.report_date, {
+      reportDate: row.report_date,
+      hasReport: true,
+      status: row.status,
+      manualTotal: byDate.get(row.report_date)?.manualTotal ?? 0,
+    });
+    recentHistoryByAm.set(row.account_manager_id, byDate);
+  }
+
+  for (const activity of recentManualActivities) {
+    const byDate = recentHistoryByAm.get(activity.account_manager_id) ?? new Map();
+    const existing = byDate.get(activity.report_date) ?? {
+      reportDate: activity.report_date,
+      hasReport: false,
+      status: null,
+      manualTotal: 0,
+    };
+    existing.manualTotal += activity.quantity;
+    byDate.set(activity.report_date, existing);
+    recentHistoryByAm.set(activity.account_manager_id, byDate);
   }
 
   const rows = accountManagers
@@ -625,7 +684,11 @@ export async function listTeamWorkReportRows(
           hasReport: Boolean(bundle.report),
           status: bundle.report?.status,
         }),
-        recentReports: recentReportsByAm.get(accountManager.id) ?? [],
+        recentHistory: Array.from(
+          (recentHistoryByAm.get(accountManager.id) ?? new Map()).values()
+        )
+          .sort((a, b) => b.reportDate.localeCompare(a.reportDate))
+          .slice(0, 6),
       };
     })
     .sort((a, b) => {
