@@ -133,6 +133,7 @@ export type TeamWorkReportRow = DailyWorkReportBundle & {
     status: string | null;
   };
   reviewState: WorkReportReviewState;
+  recentReports: DailyWorkReportRecord[];
 };
 
 export type TeamWorkReportSummary = {
@@ -285,6 +286,34 @@ async function listDailyWorkReportsForDate(
     )
     .eq("report_date", reportDate)
     .in("account_manager_id", accountManagerIds);
+
+  if (error) {
+    throw new WorkReportError(500, error.message);
+  }
+
+  return ((data as DailyWorkReportRow[] | null) ?? []).filter((row) => row.status);
+}
+
+async function listRecentDailyWorkReports(
+  reportDate: string,
+  accountManagerIds: string[]
+): Promise<DailyWorkReportRow[]> {
+  if (accountManagerIds.length === 0) return [];
+
+  const historyStart = new Date(`${reportDate}T00:00:00.000Z`);
+  historyStart.setUTCDate(historyStart.getUTCDate() - 60);
+  const historyStartDate = historyStart.toISOString().slice(0, 10);
+
+  const { data, error } = await supabaseAdmin
+    .from("daily_work_reports")
+    .select(
+      "id, account_manager_id, report_date, summary_comment, blockers_comment, focus_next_comment, status, submitted_at, locked_at, created_at, updated_at"
+    )
+    .gte("report_date", historyStartDate)
+    .lt("report_date", reportDate)
+    .in("account_manager_id", accountManagerIds)
+    .order("report_date", { ascending: false })
+    .order("updated_at", { ascending: false });
 
   if (error) {
     throw new WorkReportError(500, error.message);
@@ -545,20 +574,32 @@ export async function listTeamWorkReportRows(
   const accountManagers = await listReportableAccountManagers();
   const accountManagerIds = accountManagers.map((row) => row.id);
 
-  const [reports, manualActivities, systemCountsByAm] = await Promise.all([
+  const [reportsForDay, recentReports, manualActivitiesForDay, systemCountsForDay] =
+    await Promise.all([
     listDailyWorkReportsForDate(reportDate, accountManagerIds),
+    listRecentDailyWorkReports(reportDate, accountManagerIds),
     listManualWorkActivitiesForDate(reportDate, accountManagerIds),
     buildSystemCountsByAm(reportDate, accountManagerIds),
-  ]);
+    ]);
 
-  const reportMap = new Map(reports.map((report) => [report.account_manager_id, report]));
-  const manualCountsByAm = buildManualCountsByAm(manualActivities);
+  const reportMap = new Map(
+    reportsForDay.map((report) => [report.account_manager_id, report])
+  );
+  const manualCountsByAm = buildManualCountsByAm(manualActivitiesForDay);
   const manualActivitiesByAm = new Map<string, ManualWorkActivityLogRow[]>();
+  const recentReportsByAm = new Map<string, DailyWorkReportRecord[]>();
 
-  for (const activity of manualActivities) {
+  for (const activity of manualActivitiesForDay) {
     const existing = manualActivitiesByAm.get(activity.account_manager_id) ?? [];
     existing.push(activity);
     manualActivitiesByAm.set(activity.account_manager_id, existing);
+  }
+
+  for (const row of recentReports) {
+    const existing = recentReportsByAm.get(row.account_manager_id) ?? [];
+    if (existing.length >= 6) continue;
+    existing.push(toReportRecord(row)!);
+    recentReportsByAm.set(row.account_manager_id, existing);
   }
 
   const rows = accountManagers
@@ -567,7 +608,7 @@ export async function listTeamWorkReportRows(
         reportDate,
         report: reportMap.get(accountManager.id) ?? null,
         manualActivities: manualActivitiesByAm.get(accountManager.id) ?? [],
-        systemCounts: systemCountsByAm.get(accountManager.id),
+        systemCounts: systemCountsForDay.get(accountManager.id),
         manualCounts: manualCountsByAm.get(accountManager.id),
       });
 
@@ -584,6 +625,7 @@ export async function listTeamWorkReportRows(
           hasReport: Boolean(bundle.report),
           status: bundle.report?.status,
         }),
+        recentReports: recentReportsByAm.get(accountManager.id) ?? [],
       };
     })
     .sort((a, b) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { TeamWorkReportSummary } from "@/lib/work-reports-server";
@@ -38,6 +39,16 @@ function summaryCard(label: string, value: number, sub: string, accent: string) 
       <p className="mt-1 text-xs text-gray-500">{sub}</p>
     </div>
   );
+}
+
+function formatReportDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return parsed.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export default function TeamWorkReportsClient({
@@ -110,7 +121,12 @@ export default function TeamWorkReportsClient({
           `System ${summary.totals.offers.system} · Manual ${summary.totals.offers.manual}`,
           "text-amber-700"
         )}
-        {summaryCard("Missing", summary.missingCount, "No report created", "text-red-700")}
+        {summaryCard(
+          "Missing",
+          summary.missingCount,
+          "No report for selected day",
+          "text-red-700"
+        )}
         {summaryCard("Drafts", summary.draftCount, "Saved but not submitted", "text-amber-700")}
         {summaryCard("Submitted", summary.submittedCount, "Ready for manager review", "text-emerald-700")}
         {summaryCard("Locked", summary.lockedCount, "Closed for the day", "text-gray-900")}
@@ -142,6 +158,17 @@ export default function TeamWorkReportsClient({
                   </span>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">{row.accountManager.email}</p>
+                {row.reviewState === "missing" && row.recentReports.length > 0 && (
+                  <p className="mt-2 text-xs text-violet-700">
+                    Latest report on record: {formatReportDate(row.recentReports[0].reportDate)} ·{" "}
+                    {labelizeWorkReportReviewState(
+                      deriveWorkReportReviewState({
+                        hasReport: true,
+                        status: row.recentReports[0].status,
+                      })
+                    )}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 min-w-0 xl:min-w-[520px]">
@@ -227,6 +254,37 @@ export default function TeamWorkReportsClient({
               </div>
             )}
 
+            {row.recentReports.length > 0 && (
+              <div className="mt-5 rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">
+                  Recent reports
+                </p>
+                <p className="mt-1 text-sm text-violet-900">
+                  Past submissions stay visible here even when the selected day has no report yet.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {row.recentReports.map((report) => (
+                    <Link
+                      key={report.id}
+                      href={`/dashboard/work-reports?date=${report.reportDate}`}
+                      className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-800 hover:border-violet-300 hover:bg-violet-100/60"
+                    >
+                      <span>{formatReportDate(report.reportDate)}</span>
+                      <span className="text-violet-500">·</span>
+                      <span>
+                        {labelizeWorkReportReviewState(
+                          deriveWorkReportReviewState({
+                            hasReport: true,
+                            status: report.status,
+                          })
+                        )}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-5">
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
@@ -259,4 +317,3 @@ export default function TeamWorkReportsClient({
     </div>
   );
 }
-

@@ -124,7 +124,7 @@ export function deriveWorkReportReviewState(input: {
 export function labelizeWorkReportReviewState(state: WorkReportReviewState): string {
   switch (state) {
     case "missing":
-      return "Missing";
+      return "No report yet";
     case "draft":
       return "Draft";
     case "submitted":
