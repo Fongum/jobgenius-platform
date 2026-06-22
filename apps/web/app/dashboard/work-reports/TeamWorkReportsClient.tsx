@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { TeamWorkReportSummary } from "@/lib/work-reports-server";
 import {
@@ -77,6 +77,16 @@ export default function TeamWorkReportsClient({
   const router = useRouter();
   const [busyReportId, setBusyReportId] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const refresh = () => router.refresh();
+    const interval = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [router]);
 
   async function updateStatus(reportId: string, status: "locked" | "submitted") {
     setBusyReportId(reportId);

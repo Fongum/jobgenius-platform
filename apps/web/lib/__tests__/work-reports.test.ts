@@ -71,6 +71,7 @@ describe("work report helpers", () => {
 
   it("derives missing vs draft vs reviewed states cleanly", () => {
     expect(deriveWorkReportReviewState({ hasReport: false })).toBe("missing");
+    expect(deriveWorkReportReviewState({ hasReport: true })).toBe("draft");
     expect(deriveWorkReportReviewState({ hasReport: true, status: "draft" })).toBe("draft");
     expect(deriveWorkReportReviewState({ hasReport: true, status: "submitted" })).toBe(
       "submitted"

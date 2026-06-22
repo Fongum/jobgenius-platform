@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import type { DailyWorkReportBundle } from "@/lib/work-reports-server";
+import type {
+  DailyWorkReportBundle,
+  MyWorkReportHistoryRecord,
+} from "@/lib/work-reports-server";
 import {
   labelizeManualWorkActivityType,
   labelizeWorkReportStatus,
@@ -39,10 +43,21 @@ function metricCard(
   );
 }
 
+function formatReportDate(value: string) {
+  return new Date(`${value}T00:00:00.000Z`).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export default function MyWorkReportClient({
   initialBundle,
+  history,
 }: {
   initialBundle: DailyWorkReportBundle;
+  history: MyWorkReportHistoryRecord[];
 }) {
   const [bundle, setBundle] = useState(initialBundle);
   const [summaryComment, setSummaryComment] = useState(
@@ -203,10 +218,9 @@ export default function MyWorkReportClient({
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Daily report</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Quick daily report</h2>
               <p className="text-sm text-gray-500 mt-1">
-                System counts are pulled in automatically. Use comments and manual entries only
-                for work the platform could not see directly.
+                Add a summary and save. System and manual counts are included automatically.
               </p>
             </div>
             <span
@@ -233,7 +247,7 @@ export default function MyWorkReportClient({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-800 mb-2">
-                Summary comment
+                What did you work on?
               </label>
               <textarea
                 value={summaryComment}
@@ -245,6 +259,11 @@ export default function MyWorkReportClient({
               />
             </div>
 
+            <details className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                Add blockers or next focus (optional)
+              </summary>
+              <div className="mt-4 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-800 mb-2">
                 Blockers
@@ -272,24 +291,18 @@ export default function MyWorkReportClient({
                 placeholder="What are you prioritizing next?"
               />
             </div>
+              </div>
+            </details>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
               disabled={locked || saving}
-              onClick={() => void saveReport(false)}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save draft"}
-            </button>
-            <button
-              type="button"
-              disabled={locked || saving}
               onClick={() => void saveReport(true)}
               className="px-4 py-2 rounded-lg bg-violet-600 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Submit report"}
+              {saving ? "Saving..." : "Save report"}
             </button>
           </div>
         </div>
@@ -416,7 +429,57 @@ export default function MyWorkReportClient({
           </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900">Past reports</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Your submitted, draft, and manual-only report days are kept here.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          {history.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+              No past reports yet.
+            </div>
+          ) : (
+            history.map((item) => (
+              <Link
+                key={item.reportDate}
+                href={`/dashboard/work-reports/me?date=${item.reportDate}`}
+                className="block rounded-lg border border-gray-200 px-4 py-4 hover:border-violet-300 hover:bg-violet-50/40"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{formatReportDate(item.reportDate)}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-gray-600">
+                      {item.report?.summaryComment ||
+                        (item.manualTotal > 0
+                          ? `${item.manualTotal} manual activities logged.`
+                          : "No summary entered.")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {item.manualTotal > 0 && (
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                        {item.manualTotal} manual
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClasses(
+                        item.report?.status
+                      )}`}
+                    >
+                      {item.report
+                        ? labelizeWorkReportStatus(item.report.status)
+                        : "Activity only"}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
-

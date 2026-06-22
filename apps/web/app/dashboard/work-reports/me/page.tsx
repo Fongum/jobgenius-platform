@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getDailyWorkReportBundle } from "@/lib/work-reports-server";
+import {
+  getDailyWorkReportBundle,
+  listMyWorkReportHistory,
+} from "@/lib/work-reports-server";
 import { normalizeWorkReportDate } from "@/lib/work-reports";
 import MyWorkReportClient from "./MyWorkReportClient";
 
@@ -17,7 +20,10 @@ export default async function MyWorkReportPage({ searchParams }: PageProps) {
   }
 
   const reportDate = normalizeWorkReportDate(searchParams?.date);
-  const bundle = await getDailyWorkReportBundle(user.id, reportDate);
+  const [bundle, history] = await Promise.all([
+    getDailyWorkReportBundle(user.id, reportDate),
+    listMyWorkReportHistory(user.id, normalizeWorkReportDate()),
+  ]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -46,8 +52,10 @@ export default async function MyWorkReportPage({ searchParams }: PageProps) {
         </form>
       </div>
 
-      <MyWorkReportClient initialBundle={bundle} />
+      <MyWorkReportClient
+        initialBundle={bundle}
+        history={history.filter((item) => item.reportDate !== reportDate)}
+      />
     </div>
   );
 }
-

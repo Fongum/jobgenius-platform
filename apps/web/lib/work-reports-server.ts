@@ -131,6 +131,12 @@ export type RecentWorkHistoryRecord = {
   manualTotal: number;
 };
 
+export type MyWorkReportHistoryRecord = {
+  reportDate: string;
+  report: DailyWorkReportRecord | null;
+  manualTotal: number;
+};
+
 export type TeamWorkReportRow = DailyWorkReportBundle & {
   accountManager: {
     id: string;
@@ -270,6 +276,38 @@ async function getExistingDailyWorkReport(
   }
 
   return (data as DailyWorkReportRow | null) ?? null;
+}
+
+async function ensureDailyWorkReportExists(
+  accountManagerId: string,
+  reportDate: string
+) {
+  const existing = await ensureEditableReport(accountManagerId, reportDate);
+  if (existing) return existing;
+
+  const { error } = await supabaseAdmin
+    .from("daily_work_reports")
+    .upsert(
+      {
+        account_manager_id: accountManagerId,
+        report_date: reportDate,
+        status: "draft",
+      },
+      { onConflict: "account_manager_id,report_date", ignoreDuplicates: true }
+    );
+
+  if (error) {
+    throw new WorkReportError(500, error.message);
+  }
+
+  const created = await getExistingDailyWorkReport(accountManagerId, reportDate);
+  if (!created) {
+    throw new WorkReportError(500, "Failed to create daily report.");
+  }
+  if (created.status === "locked") {
+    throw new WorkReportError(409, "This report has been locked and cannot be edited.");
+  }
+  return created;
 }
 
 async function ensureEditableReport(accountManagerId: string, reportDate: string) {
@@ -602,6 +640,57 @@ export async function getDailyWorkReportBundle(
   });
 }
 
+export async function listMyWorkReportHistory(
+  accountManagerId: string,
+  beforeDateInput?: string | null
+): Promise<MyWorkReportHistoryRecord[]> {
+  const beforeDate = normalizeWorkReportDate(beforeDateInput);
+  const [{ data: reports, error: reportError }, { data: activities, error: activityError }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("daily_work_reports")
+        .select(
+          "id, account_manager_id, report_date, summary_comment, blockers_comment, focus_next_comment, status, submitted_at, locked_at, created_at, updated_at"
+        )
+        .eq("account_manager_id", accountManagerId)
+        .lt("report_date", beforeDate)
+        .order("report_date", { ascending: false }),
+      supabaseAdmin
+        .from("manual_work_activity_logs")
+        .select("id, account_manager_id, report_date, activity_type, quantity, note, created_at, updated_at")
+        .eq("account_manager_id", accountManagerId)
+        .lt("report_date", beforeDate)
+        .order("report_date", { ascending: false }),
+    ]);
+
+  if (reportError) throw new WorkReportError(500, reportError.message);
+  if (activityError) throw new WorkReportError(500, activityError.message);
+
+  const history = new Map<string, MyWorkReportHistoryRecord>();
+  for (const report of (reports as DailyWorkReportRow[] | null) ?? []) {
+    history.set(report.report_date, {
+      reportDate: report.report_date,
+      report: toReportRecord(report),
+      manualTotal: 0,
+    });
+  }
+
+  for (const activity of (activities as ManualWorkActivityLogRow[] | null) ?? []) {
+    if (!isManualWorkActivityType(activity.activity_type)) continue;
+    const existing = history.get(activity.report_date) ?? {
+      reportDate: activity.report_date,
+      report: null,
+      manualTotal: 0,
+    };
+    existing.manualTotal += activity.quantity;
+    history.set(activity.report_date, existing);
+  }
+
+  return Array.from(history.values()).sort((a, b) =>
+    b.reportDate.localeCompare(a.reportDate)
+  );
+}
+
 export async function listTeamWorkReportRows(
   reportDateInput?: string | null
 ): Promise<TeamWorkReportSummary> {
@@ -681,7 +770,9 @@ export async function listTeamWorkReportRows(
           status: accountManager.status,
         },
         reviewState: deriveWorkReportReviewState({
-          hasReport: Boolean(bundle.report),
+          // Existing manual-only days predate automatic draft creation but are
+          // still valid work reports and must not be presented as missing.
+          hasReport: Boolean(bundle.report) || bundle.manualActivities.length > 0,
           status: bundle.report?.status,
         }),
         recentHistory: Array.from(
@@ -801,7 +892,9 @@ export async function addManualWorkActivity(params: {
   note?: string | null;
 }) {
   const reportDate = normalizeWorkReportDate(params.reportDateInput);
-  await ensureEditableReport(params.accountManagerId, reportDate);
+  // Manual work is itself a daily report signal. Create the draft here so it
+  // appears on the team report without requiring a second submit action.
+  await ensureDailyWorkReportExists(params.accountManagerId, reportDate);
 
   const { error } = await supabaseAdmin.from("manual_work_activity_logs").insert({
     account_manager_id: params.accountManagerId,

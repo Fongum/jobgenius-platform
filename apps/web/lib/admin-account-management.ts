@@ -1,5 +1,6 @@
 import { AM_ROLE_VALUES, normalizeAMRole } from "@/lib/auth/roles";
 import { supabaseAdmin } from "@/lib/auth";
+import { isMissingAuthUserError } from "@/lib/auth/admin-errors";
 
 export type ManagedUserType = "am" | "job_seeker";
 
@@ -65,6 +66,16 @@ function isSuperAdmin(role: string | null | undefined) {
 function isAdmin(role: string | null | undefined) {
   const normalized = normalizeAMRole(role);
   return normalized === "admin" || normalized === "superadmin";
+}
+
+async function deleteAuthUserIfPresent(authId: string) {
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(authId);
+
+  // The application row can outlive its Supabase Auth user. Deleting such an
+  // account should still archive the application row and remove portal access.
+  if (error && !isMissingAuthUserError(error)) {
+    throw new AdminAccountManagementError(500, error.message);
+  }
 }
 
 async function countActiveAdminAccounts() {
@@ -575,10 +586,7 @@ export async function deleteManagedAccount(params: {
     }
 
     if (source.auth_id) {
-      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(source.auth_id);
-      if (authDeleteError) {
-        throw new AdminAccountManagementError(500, authDeleteError.message);
-      }
+      await deleteAuthUserIfPresent(source.auth_id);
     }
 
     // Preserve historical seeker data and workflow references while removing portal access.
@@ -618,10 +626,7 @@ export async function deleteManagedAccount(params: {
   }
 
   if (source.auth_id) {
-    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(source.auth_id);
-    if (authDeleteError) {
-      throw new AdminAccountManagementError(500, authDeleteError.message);
-    }
+    await deleteAuthUserIfPresent(source.auth_id);
   }
 
   // Preserve historical AM ownership and audit references while removing dashboard access.
