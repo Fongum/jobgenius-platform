@@ -87,6 +87,7 @@ interface OfferQuote {
 interface StepDefinition {
   id: StepId;
   label: string;
+  hidden?: boolean;
 }
 
 interface InitialIntakeState {
@@ -124,8 +125,8 @@ function buildSteps(offerPath: OfferPath): StepDefinition[] {
       { id: "workstyle", label: "Work Style" },
       { id: "salary", label: "Salary & Availability" },
       { id: "review", label: "Review" },
-      { id: "plan", label: "Choose Plan" },
-      { id: "preview", label: "Preview Terms" },
+      { id: "plan", label: "Choose Plan", hidden: true },
+      { id: "preview", label: "Preview Terms", hidden: true },
     ];
   }
 
@@ -136,9 +137,9 @@ function buildSteps(offerPath: OfferPath): StepDefinition[] {
     { id: "workstyle", label: "Work Style" },
     { id: "salary", label: "Salary & Availability" },
     { id: "review", label: "Review" },
-    { id: "plan", label: "Choose Plan" },
-    { id: "contract", label: "Agreement" },
-    { id: "payment", label: "Payment Plan" },
+    { id: "plan", label: "Choose Plan", hidden: true },
+    { id: "contract", label: "Agreement", hidden: true },
+    { id: "payment", label: "Payment Plan", hidden: true },
   ];
 }
 
@@ -149,22 +150,29 @@ function ProgressBar({
   currentStep: number;
   steps: StepDefinition[];
 }) {
+  const visibleSteps = steps.filter((step) => !step.hidden);
+  const matchedVisibleStepIndex = visibleSteps.findIndex((step) => step.id === steps[currentStep]?.id);
+  const currentVisibleStepIndex =
+    matchedVisibleStepIndex >= 0 ? matchedVisibleStepIndex : visibleSteps.length - 1;
+  const activeVisibleStep =
+    visibleSteps[currentVisibleStepIndex] ?? visibleSteps[visibleSteps.length - 1];
+
   return (
     <>
       <div className="hidden sm:flex items-center justify-between mb-8">
-        {steps.map((step, index) => (
+        {visibleSteps.map((step, index) => (
           <div key={step.id} className="flex items-center">
             <div className="flex flex-col items-center">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                  index < currentStep
+                  index < currentVisibleStepIndex
                     ? "bg-green-500 text-white"
-                    : index === currentStep
+                    : index === currentVisibleStepIndex
                     ? "bg-blue-600 text-white"
                     : "bg-gray-200 text-gray-500"
                 }`}
               >
-                {index < currentStep ? (
+                {index < currentVisibleStepIndex ? (
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
@@ -178,16 +186,18 @@ function ProgressBar({
               </div>
               <span
                 className={`text-xs mt-1 ${
-                  index === currentStep ? "text-blue-600 font-medium" : "text-gray-500"
+                  index === currentVisibleStepIndex
+                    ? "text-blue-600 font-medium"
+                    : "text-gray-500"
                 }`}
               >
                 {step.label}
               </span>
             </div>
-            {index < steps.length - 1 && (
+            {index < visibleSteps.length - 1 && (
               <div
                 className={`w-12 lg:w-20 h-0.5 mx-1 ${
-                  index < currentStep ? "bg-green-500" : "bg-gray-200"
+                  index < currentVisibleStepIndex ? "bg-green-500" : "bg-gray-200"
                 }`}
               />
             )}
@@ -198,14 +208,16 @@ function ProgressBar({
       <div className="sm:hidden mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-700">
-            Step {currentStep + 1} of {steps.length}
+            Step {currentVisibleStepIndex + 1} of {visibleSteps.length}
           </span>
-          <span className="text-sm text-gray-500">{steps[currentStep]?.label}</span>
+          <span className="text-sm text-gray-500">{activeVisibleStep?.label}</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
             className="bg-blue-600 h-2 rounded-full transition-all"
-            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+            style={{
+              width: `${((currentVisibleStepIndex + 1) / visibleSteps.length) * 100}%`,
+            }}
           />
         </div>
       </div>
