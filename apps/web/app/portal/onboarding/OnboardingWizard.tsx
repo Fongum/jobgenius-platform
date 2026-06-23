@@ -404,11 +404,6 @@ export default function OnboardingWizard({
   };
 
   const handleFinish = async () => {
-    if (!selectedPlan) {
-      setFinishError("Select a plan before submitting for review.");
-      return;
-    }
-
     setFinishError(null);
     setFinishing(true);
     const completedAt = new Date().toISOString();
@@ -420,31 +415,12 @@ export default function OnboardingWizard({
       return;
     }
 
-    const baseQuote = buildBaseQuote(selectedPlan);
-    const baseRegistrationFee = offerQuote?.baseFee ?? baseQuote.baseFee;
-    const discountAmount =
-      selectedOfferPath === "discount" ? offerQuote?.discountAmount ?? 0 : 0;
-    const finalRegistrationFee =
-      selectedOfferPath === "discount"
-        ? signedRegistrationFee ?? offerQuote?.finalFee ?? baseQuote.finalFee
-        : baseQuote.finalFee;
-
     try {
       const response = await fetch("/api/portal/intake/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          selectedPlan,
-          offerPath: selectedOfferPath,
-          submittedCode:
-            selectedOfferPath === "discount" ? appliedOfferCode : null,
-          baseRegistrationFee,
-          discountAmount,
-          finalRegistrationFee,
-          previewAgreedAt:
-            selectedOfferPath === "strategy_preview"
-              ? previewAgreedAt ?? new Date().toISOString()
-              : null,
+          selectedPlan: selectedPlan ?? null,
         }),
       });
 

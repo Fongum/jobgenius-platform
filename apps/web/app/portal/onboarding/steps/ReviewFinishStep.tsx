@@ -180,7 +180,7 @@ export default function ReviewFinishStep({
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-1">Review Your Profile</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Review your information below. After this screen you&apos;ll choose the plan, then confirm the agreement and payment details.
+        Review your information below. When you submit, onboarding is complete and the remaining plan, agreement, and payment details stay in your profile.
       </p>
 
       <div className="flex justify-center mb-8">
@@ -257,7 +257,7 @@ export default function ReviewFinishStep({
         >
           {saving
             ? "Saving..."
-            : "Continue to Plan"}
+            : "Submit Onboarding"}
         </button>
       </div>
     </div>
