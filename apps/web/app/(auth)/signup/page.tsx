@@ -19,6 +19,30 @@ type ParsedResume = {
   education?: unknown[];
 };
 
+type JobSeekerProfilePrefill = {
+  location?: string;
+  linkedin_url?: string;
+  address_line1?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
+  address_country?: string;
+  target_titles?: string[];
+  work_type?: string;
+  work_type_preferences?: string[];
+  employment_type_preferences?: string[];
+  preferred_locations?: string[];
+  preferred_industries?: string[];
+  salary_min?: number;
+  salary_max?: number;
+  years_experience?: number;
+  open_to_relocation?: boolean;
+  available_for_travel?: boolean;
+  authorized_to_work?: boolean;
+  requires_visa_sponsorship?: boolean;
+  citizenship_status?: string;
+};
+
 type PublicCapacityResponse = CapacityNoticeSummary & {
   capacityMonth: string;
 };
@@ -27,6 +51,24 @@ type LeadSubmissionResult = {
   leadId: string;
   voiceCallQueued: boolean;
 };
+
+function splitList(value: string): string[] {
+  return value
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeOptionalText(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function toOptionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 function JobSeekerSubmittedState({
   result,
@@ -113,6 +155,86 @@ function JobSeekerSubmittedState({
   );
 }
 
+function JobSeekerPasswordStep({
+  fullName,
+  email,
+  onCreateAccount,
+  creatingAccount,
+  createError,
+}: {
+  fullName: string;
+  email: string;
+  onCreateAccount: (password: string, confirmPassword: string) => Promise<void>;
+  creatingAccount: boolean;
+  createError: string;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  return (
+    <div className="mt-4 rounded-3xl border border-blue-200 bg-blue-50 p-6">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">
+        Account setup
+      </p>
+      <h3 className="mt-2 text-xl font-semibold text-gray-900">
+        Your intake is saved. Create your password to continue.
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-gray-700">
+        We will use this email for login and account recovery. Your name stays on the profile.
+      </p>
+
+      <div className="mt-4 rounded-2xl border border-blue-100 bg-white p-4 text-sm text-gray-700">
+        <p>
+          <span className="font-semibold text-gray-900">Name:</span> {fullName || "Not set"}
+        </p>
+        <p className="mt-1">
+          <span className="font-semibold text-gray-900">Email:</span> {email}
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-semibold text-gray-800">Password</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+            placeholder="Create a password"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-800">Confirm password</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+            placeholder="Confirm password"
+          />
+        </div>
+      </div>
+
+      {createError && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {createError}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => onCreateAccount(password, confirmPassword)}
+        disabled={creatingAccount}
+        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        {creatingAccount ? "Creating account..." : "Create password and continue"}
+      </button>
+    </div>
+  );
+}
+
 function SignUpForm() {
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +242,26 @@ function SignUpForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [location, setLocation] = useState("");
+  const [addressLine1, setAddressLine1] = useState("");
+  const [addressCity, setAddressCity] = useState("");
+  const [addressState, setAddressState] = useState("");
+  const [addressZip, setAddressZip] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [targetRoles, setTargetRoles] = useState("");
+  const [preferredLocations, setPreferredLocations] = useState("");
+  const [preferredIndustries, setPreferredIndustries] = useState("");
+  const [workType, setWorkType] = useState("");
+  const [employmentTypes, setEmploymentTypes] = useState("");
+  const [salaryMin, setSalaryMin] = useState("");
+  const [salaryMax, setSalaryMax] = useState("");
+  const [yearsExperience, setYearsExperience] = useState("");
+  const [authorizedToWork, setAuthorizedToWork] = useState(false);
+  const [requiresVisaSponsorship, setRequiresVisaSponsorship] = useState(false);
+  const [citizenshipStatus, setCitizenshipStatus] = useState("");
+  const [openToRelocation, setOpenToRelocation] = useState(false);
+  const [availableForTravel, setAvailableForTravel] = useState(false);
+  const [extraNotes, setExtraNotes] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [offerCode, setOfferCode] = useState("");
@@ -135,6 +277,8 @@ function SignUpForm() {
   const [resumeNotice, setResumeNotice] = useState("");
   const [capacitySummary, setCapacitySummary] = useState<PublicCapacityResponse | null>(null);
   const [leadSubmission, setLeadSubmission] = useState<LeadSubmissionResult | null>(null);
+  const [accountCreating, setAccountCreating] = useState(false);
+  const [accountError, setAccountError] = useState("");
 
   useEffect(() => {
     const incomingCode = searchParams.get("code") ?? searchParams.get("ref");
@@ -169,7 +313,33 @@ function SignUpForm() {
     setLeadSubmission(null);
     setError("");
     setLoading(false);
+    setAccountCreating(false);
+    setAccountError("");
   };
+
+  const buildJobSeekerProfilePrefill = (): JobSeekerProfilePrefill => ({
+    location: normalizeOptionalText(location),
+    linkedin_url: normalizeOptionalText(linkedinUrl),
+    address_line1: normalizeOptionalText(addressLine1),
+    address_city: normalizeOptionalText(addressCity),
+    address_state: normalizeOptionalText(addressState),
+    address_zip: normalizeOptionalText(addressZip),
+    address_country: "United States",
+    target_titles: splitList(targetRoles),
+    work_type: normalizeOptionalText(workType),
+    work_type_preferences: splitList(workType),
+    employment_type_preferences: splitList(employmentTypes),
+    preferred_locations: splitList(preferredLocations),
+    preferred_industries: splitList(preferredIndustries),
+    salary_min: toOptionalNumber(salaryMin),
+    salary_max: toOptionalNumber(salaryMax),
+    years_experience: toOptionalNumber(yearsExperience),
+    open_to_relocation: openToRelocation,
+    available_for_travel: availableForTravel,
+    authorized_to_work: authorizedToWork,
+    requires_visa_sponsorship: requiresVisaSponsorship,
+    citizenship_status: normalizeOptionalText(citizenshipStatus),
+  });
 
   const handleResumeUpload = async (file: File) => {
     setResumeError("");
@@ -305,10 +475,38 @@ function SignUpForm() {
     formData.append("full_name", name.trim());
     formData.append("email", email.trim());
     formData.append("phone", phone.trim());
+    if (location.trim()) {
+      formData.append("location", location.trim());
+    }
     formData.append("consent_voice", "true");
     formData.append("consent_marketing", "false");
     formData.append("source", "signup_form");
     formData.append("resume", resumeFile);
+
+    const leadNotes = [
+      targetRoles.trim() ? `Target roles: ${targetRoles.trim()}` : null,
+      workType.trim() ? `Work type: ${workType.trim()}` : null,
+      preferredLocations.trim() ? `Preferred locations: ${preferredLocations.trim()}` : null,
+      preferredIndustries.trim() ? `Preferred industries: ${preferredIndustries.trim()}` : null,
+      salaryMin.trim() || salaryMax.trim()
+        ? `Salary range: ${salaryMin.trim() || "?"} - ${salaryMax.trim() || "?"}`
+        : null,
+      yearsExperience.trim() ? `Years experience: ${yearsExperience.trim()}` : null,
+      citizenshipStatus.trim() ? `Work authorization: ${citizenshipStatus.trim()}` : null,
+      extraNotes.trim() ? `Notes: ${extraNotes.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    if (leadNotes) {
+      formData.append("notes", leadNotes);
+    }
+    if (targetRoles.trim()) {
+      formData.append("target_roles", targetRoles.trim());
+    }
+    if (linkedinUrl.trim()) {
+      formData.append("linkedin_url", linkedinUrl.trim());
+    }
 
     if (offerCode.trim()) {
       formData.append("offer_code", offerCode.trim().toUpperCase());
@@ -337,6 +535,61 @@ function SignUpForm() {
       leadId: String(data.lead_id),
       voiceCallQueued: Boolean(data.voice_call_id),
     });
+  };
+
+  const handleCreateJobSeekerAccount = async (passwordValue: string, confirmValue: string) => {
+    setAccountError("");
+
+    if (passwordValue !== confirmValue) {
+      setAccountError("Passwords do not match.");
+      return;
+    }
+
+    if (passwordValue.length < 8) {
+      setAccountError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setAccountCreating(true);
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password: passwordValue,
+          name,
+          userType: "job_seeker",
+          offerCode: offerCode.trim() || undefined,
+          resume: parsedResume
+            ? {
+                full_name: parsedResume.full_name,
+                phone: parsedResume.phone,
+                location: parsedResume.location,
+                linkedin_url: parsedResume.linkedin_url,
+                bio: parsedResume.bio,
+                skills: parsedResume.skills,
+                work_history: parsedResume.work_history,
+                education: parsedResume.education,
+                raw_text: parsedRawText,
+              }
+            : undefined,
+          profile: buildJobSeekerProfilePrefill(),
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        setAccountError(data.error || "Could not create your account.");
+        return;
+      }
+
+      window.location.href = "/portal/onboarding";
+    } catch {
+      setAccountError("Could not create your account right now.");
+    } finally {
+      setAccountCreating(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -452,18 +705,48 @@ function SignUpForm() {
         </div>
 
         {userType === "job_seeker" && leadSubmission ? (
-          <JobSeekerSubmittedState
-            result={leadSubmission}
-            offerCode={offerCode}
-            onStartOver={() => {
-              clearResume();
-              setName("");
-              setEmail("");
-              setPhone("");
-              setConsentVoice(false);
-              resetLeadState();
-            }}
-          />
+          <div className="space-y-4">
+            <JobSeekerSubmittedState
+              result={leadSubmission}
+              offerCode={offerCode}
+              onStartOver={() => {
+                clearResume();
+                setName("");
+                setEmail("");
+                setPhone("");
+                setLocation("");
+                setAddressLine1("");
+                setAddressCity("");
+                setAddressState("");
+                setAddressZip("");
+                setLinkedinUrl("");
+                setTargetRoles("");
+                setPreferredLocations("");
+                setPreferredIndustries("");
+                setWorkType("");
+                setEmploymentTypes("");
+                setSalaryMin("");
+                setSalaryMax("");
+                setYearsExperience("");
+                setAuthorizedToWork(false);
+                setRequiresVisaSponsorship(false);
+                setCitizenshipStatus("");
+                setOpenToRelocation(false);
+                setAvailableForTravel(false);
+                setExtraNotes("");
+                setConsentVoice(false);
+                setAccountError("");
+                resetLeadState();
+              }}
+            />
+            <JobSeekerPasswordStep
+              fullName={name}
+              email={email}
+              creatingAccount={accountCreating}
+              createError={accountError}
+              onCreateAccount={handleCreateJobSeekerAccount}
+            />
+          </div>
         ) : (
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-2xl shadow-violet-100/70 sm:p-8">
             <div className="mb-6">
@@ -525,6 +808,39 @@ function SignUpForm() {
                         className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
                         placeholder="John Doe"
                       />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="location" className="block text-sm font-semibold text-gray-800">
+                          Location
+                        </label>
+                        <input
+                          id="location"
+                          name="location"
+                          type="text"
+                          autoComplete="address-level2"
+                          value={location}
+                          onChange={(e) => setLocation(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="City, State"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="linkedinUrl" className="block text-sm font-semibold text-gray-800">
+                          LinkedIn URL
+                        </label>
+                        <input
+                          id="linkedinUrl"
+                          name="linkedinUrl"
+                          type="url"
+                          value={linkedinUrl}
+                          onChange={(e) => setLinkedinUrl(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="https://linkedin.com/in/..."
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -725,6 +1041,262 @@ function SignUpForm() {
                       />
                     </div>
 
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="addressLine1" className="block text-sm font-semibold text-gray-800">
+                          Street address
+                        </label>
+                        <input
+                          id="addressLine1"
+                          name="addressLine1"
+                          type="text"
+                          value={addressLine1}
+                          onChange={(e) => setAddressLine1(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="123 Main St"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="addressCity" className="block text-sm font-semibold text-gray-800">
+                          City
+                        </label>
+                        <input
+                          id="addressCity"
+                          name="addressCity"
+                          type="text"
+                          value={addressCity}
+                          onChange={(e) => setAddressCity(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="City"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="addressState" className="block text-sm font-semibold text-gray-800">
+                          State
+                        </label>
+                        <input
+                          id="addressState"
+                          name="addressState"
+                          type="text"
+                          value={addressState}
+                          onChange={(e) => setAddressState(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="State"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="addressZip" className="block text-sm font-semibold text-gray-800">
+                          Postal code
+                        </label>
+                        <input
+                          id="addressZip"
+                          name="addressZip"
+                          type="text"
+                          value={addressZip}
+                          onChange={(e) => setAddressZip(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="Postal code"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="targetRoles" className="block text-sm font-semibold text-gray-800">
+                        Target roles
+                      </label>
+                      <input
+                        id="targetRoles"
+                        name="targetRoles"
+                        type="text"
+                        value={targetRoles}
+                        onChange={(e) => setTargetRoles(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                        placeholder="e.g. Data Analyst, Azure DBA, SOC Analyst"
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <label htmlFor="workType" className="block text-sm font-semibold text-gray-800">
+                          Work type
+                        </label>
+                        <select
+                          id="workType"
+                          value={workType}
+                          onChange={(e) => setWorkType(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                        >
+                          <option value="">Select</option>
+                          <option value="remote">Remote</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="onsite">On-site</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="salaryMin" className="block text-sm font-semibold text-gray-800">
+                          Salary min
+                        </label>
+                        <input
+                          id="salaryMin"
+                          name="salaryMin"
+                          type="number"
+                          value={salaryMin}
+                          onChange={(e) => setSalaryMin(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="75000"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="salaryMax" className="block text-sm font-semibold text-gray-800">
+                          Salary max
+                        </label>
+                        <input
+                          id="salaryMax"
+                          name="salaryMax"
+                          type="number"
+                          value={salaryMax}
+                          onChange={(e) => setSalaryMax(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="120000"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <label htmlFor="yearsExperience" className="block text-sm font-semibold text-gray-800">
+                          Years of experience
+                        </label>
+                        <input
+                          id="yearsExperience"
+                          name="yearsExperience"
+                          type="number"
+                          value={yearsExperience}
+                          onChange={(e) => setYearsExperience(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="5"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="preferredLocations" className="block text-sm font-semibold text-gray-800">
+                          Preferred locations
+                        </label>
+                        <input
+                          id="preferredLocations"
+                          name="preferredLocations"
+                          type="text"
+                          value={preferredLocations}
+                          onChange={(e) => setPreferredLocations(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="Remote, Texas, Ontario"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="preferredIndustries" className="block text-sm font-semibold text-gray-800">
+                          Preferred industries
+                        </label>
+                        <input
+                          id="preferredIndustries"
+                          name="preferredIndustries"
+                          type="text"
+                          value={preferredIndustries}
+                          onChange={(e) => setPreferredIndustries(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="Healthcare, FinTech, SaaS"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="employmentTypes" className="block text-sm font-semibold text-gray-800">
+                          Employment types
+                        </label>
+                        <input
+                          id="employmentTypes"
+                          name="employmentTypes"
+                          type="text"
+                          value={employmentTypes}
+                          onChange={(e) => setEmploymentTypes(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="Full-time, contract"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="citizenshipStatus" className="block text-sm font-semibold text-gray-800">
+                          Work authorization
+                        </label>
+                        <select
+                          id="citizenshipStatus"
+                          value={citizenshipStatus}
+                          onChange={(e) => setCitizenshipStatus(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                        >
+                          <option value="">Select</option>
+                          <option value="US Citizen">US Citizen</option>
+                          <option value="Green Card Holder">Green Card Holder</option>
+                          <option value="Canadian Citizen">Canadian Citizen</option>
+                          <option value="Canadian PR">Canadian Permanent Resident</option>
+                          <option value="H1B Visa">H1B Visa</option>
+                          <option value="EAD">EAD</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={authorizedToWork}
+                          onChange={(e) => setAuthorizedToWork(e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>I am legally authorized to work where I apply.</span>
+                      </label>
+                      <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={requiresVisaSponsorship}
+                          onChange={(e) => setRequiresVisaSponsorship(e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>I need visa sponsorship now or in the future.</span>
+                      </label>
+                      <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={openToRelocation}
+                          onChange={(e) => setOpenToRelocation(e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>I am open to relocation.</span>
+                      </label>
+                      <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={availableForTravel}
+                          onChange={(e) => setAvailableForTravel(e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>I am available for travel if needed.</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label htmlFor="extraNotes" className="block text-sm font-semibold text-gray-800">
+                        Other details
+                      </label>
+                      <textarea
+                        id="extraNotes"
+                        value={extraNotes}
+                        onChange={(e) => setExtraNotes(e.target.value)}
+                        rows={3}
+                        className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                        placeholder="Anything else the team should know"
+                      />
+                    </div>
+
                     <div>
                       <label htmlFor="offerCode" className="block text-sm font-semibold text-gray-800">
                         Referral or promo code
@@ -767,14 +1339,14 @@ function SignUpForm() {
                   {loading
                     ? userType === "am"
                       ? "Creating account..."
-                      : "Submitting details..."
+                      : "Saving intake..."
                     : userType === "am"
                       ? "Create account"
-                      : "Send my resume and details"}
+                      : "Save intake and continue"}
                 </button>
                 {userType === "job_seeker" ? (
                   <p className="mt-3 text-center text-xs text-gray-500">
-                    No password. No onboarding. No app setup yet. We qualify first.
+                    Save your intake first. We will ask you to create your password right after.
                   </p>
                 ) : (
                   <p className="mt-3 text-center text-xs text-gray-500">
