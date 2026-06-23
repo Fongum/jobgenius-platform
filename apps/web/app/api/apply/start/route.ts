@@ -2,6 +2,7 @@ import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { getActorFromHeaders } from "@/lib/actor";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
+import { isActiveClient } from "@/lib/intake";
 
 type StartPayload = {
   queue_id?: string;
@@ -45,6 +46,16 @@ export async function POST(request: Request) {
   const access = await requireAMAccessToSeeker(request.headers, queueItem.job_seeker_id);
   if (!access.ok) return access.response;
 
+  if (!(await isActiveClient(queueItem.job_seeker_id))) {
+    return Response.json(
+      {
+        success: false,
+        error: "Live applications are only allowed for active clients.",
+      },
+      { status: 409 }
+    );
+  }
+
   const { data: existingRun, error: existingError } = await supabaseServer
     .from("application_runs")
     .select("id, status, ats_type, current_step")
@@ -59,21 +70,21 @@ export async function POST(request: Request) {
   }
 
   if (!existingRun) {
-  const { data: assignments, error: assignmentsError } = await supabaseServer
-    .from("job_seeker_assignments")
-    .select("job_seeker_id")
-    .eq("account_manager_id", access.amId);
+    const { data: assignments, error: assignmentsError } = await supabaseServer
+      .from("job_seeker_assignments")
+      .select("job_seeker_id")
+      .eq("account_manager_id", access.amId);
 
-  if (assignmentsError) {
-    return Response.json(
-      { success: false, error: "Failed to load job seeker assignments." },
-      { status: 500 }
-    );
-  }
+    if (assignmentsError) {
+      return Response.json(
+        { success: false, error: "Failed to load job seeker assignments." },
+        { status: 500 }
+      );
+    }
 
-  const assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
+    const assignedIds = (assignments ?? []).map((row) => row.job_seeker_id);
 
-  const { data: runningCountRows, error: runningCountError } =
+    const { data: runningCountRows, error: runningCountError } =
       await supabaseServer
         .from("application_runs")
         .select("id")

@@ -134,6 +134,17 @@ function buildIntakeStatusView(intakeState: IntakeStateRecord): IntakeViewModel 
         secondaryLabel: "Review Profile",
         meta: capacityLabel ? `Reserved against ${capacityLabel} preview capacity.` : undefined,
       };
+    case "call_completed":
+      return {
+        eyebrow: "First Call Complete",
+        title: "Your intro call is complete.",
+        body: "We have the information needed to move your preview forward. The next step is preview approval, which still happens before any financial commitment.",
+        tone: "green",
+        primaryHref: "/portal/billing",
+        primaryLabel: "Review Next Step",
+        secondaryHref: "/portal/profile",
+        secondaryLabel: "Review Profile",
+      };
     case "preview_active":
       return {
         eyebrow: "Strategy Preview",
@@ -166,7 +177,7 @@ function buildIntakeStatusView(intakeState: IntakeStateRecord): IntakeViewModel 
       return {
         eyebrow: "Pending Review",
         title: "Your onboarding is under review.",
-        body: "We review fit before a spot is reserved. Our team will confirm whether a dedicated account manager can take your search this month.",
+        body: "We review fit before a spot is reserved. If you are moving through preview, we will confirm the information is complete before any live application work or financial commitment starts.",
         tone: "amber",
         primaryHref: "/portal/billing",
         primaryLabel: "Review Billing",
@@ -239,6 +250,7 @@ export default async function PortalPage() {
     [
       "submitted",
       "pending_review",
+      "call_completed",
       "waitlisted",
       "rejected",
       "approved_payment_pending",

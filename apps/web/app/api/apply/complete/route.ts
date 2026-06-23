@@ -11,6 +11,7 @@ import { recordAdapterEvent } from "@/lib/adapter-health";
 import { logActivity } from "@/lib/feedback-loop";
 import { transitionRun } from "@/lib/runState";
 import { findLatestPendingTrialForRun, recordOutcome } from "@/lib/bandit";
+import { isActiveClient } from "@/lib/intake";
 import { updateMatchOutcome } from "@/lib/learned-ranker";
 import { writeOutcomeEvent } from "@/lib/outcomes-server";
 
@@ -62,6 +63,16 @@ export async function POST(request: Request) {
 
   const access = await requireAMAccessToSeeker(request.headers, run.job_seeker_id);
   if (!access.ok) return access.response;
+
+  if (!(await isActiveClient(run.job_seeker_id))) {
+    return Response.json(
+      {
+        success: false,
+        error: "Live applications are only allowed for active clients.",
+      },
+      { status: 409 }
+    );
+  }
 
   if (requiresClaimToken(request.headers)) {
     if (!payload.claim_token) {

@@ -1,5 +1,6 @@
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
+import { isActiveClient } from "@/lib/intake";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type ResumePayload = {
@@ -41,6 +42,16 @@ export async function POST(request: Request) {
 
   const access = await requireAMAccessToSeeker(request.headers, run.job_seeker_id);
   if (!access.ok) return access.response;
+
+  if (!(await isActiveClient(run.job_seeker_id))) {
+    return Response.json(
+      {
+        success: false,
+        error: "Live applications are only allowed for active clients.",
+      },
+      { status: 409 }
+    );
+  }
 
   const nowIso = new Date().toISOString();
 

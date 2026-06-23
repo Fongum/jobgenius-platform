@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { isActiveClient } from "@/lib/intake";
 import {
   buildAdjacentOpportunity,
   buildMatchExplanation,
@@ -61,6 +62,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Not authorized for this job seeker." },
         { status: 403 }
+      );
+    }
+
+    if (!(await isActiveClient(job_seeker_id))) {
+      return NextResponse.json(
+        { error: "Live applications are only allowed for active clients." },
+        { status: 409 }
       );
     }
 

@@ -1,6 +1,7 @@
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { getActorFromHeaders } from "@/lib/actor";
 import { getAccountManagerFromRequest, isRunnerAccountManager } from "@/lib/am-access";
+import { isActiveClient } from "@/lib/intake";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type StartBatchPayload = {
@@ -152,6 +153,11 @@ export async function POST(request: Request) {
   const errors: string[] = [];
 
   for (const item of queueItems) {
+    if (!(await isActiveClient(item.job_seeker_id))) {
+      blocked++;
+      continue;
+    }
+
     if (item.status !== "QUEUED") {
       continue;
     }

@@ -20,6 +20,7 @@ type IntakeStateRow = {
   preview_started_at: string | null;
   preview_expires_at: string | null;
   preview_converted_at: string | null;
+  call_completed_at: string | null;
   assigned_account_manager_id: string | null;
 };
 
@@ -51,7 +52,7 @@ export default async function IntakePage() {
       supabaseAdmin
         .from("job_seeker_intake_states")
         .select(
-          "id, job_seeker_id, selected_plan, offer_path, submitted_code, base_registration_fee, discount_amount, final_registration_fee, status, submitted_at, approved_at, capacity_month, preview_agreed_at, preview_started_at, preview_expires_at, preview_converted_at, assigned_account_manager_id"
+          "id, job_seeker_id, selected_plan, offer_path, submitted_code, base_registration_fee, discount_amount, final_registration_fee, status, submitted_at, approved_at, capacity_month, preview_agreed_at, preview_started_at, preview_expires_at, preview_converted_at, call_completed_at, assigned_account_manager_id"
         )
         .order("submitted_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false }),

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { getActorFromHeaders } from "@/lib/actor";
 import { detectAtsType } from "@/lib/apply";
+import { isActiveClient } from "@/lib/intake";
 import { verifyExtensionSession } from "@/lib/extension-auth";
 import { parseJobPost } from "@/lib/matching";
 import { normalizeJobUrl } from "@/lib/job-url";
@@ -58,6 +59,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Not authorized for this job seeker." },
         { status: 403 }
+      );
+    }
+
+    if (!(await isActiveClient(jobSeekerId))) {
+      return NextResponse.json(
+        { error: "Live applications are only allowed for active clients." },
+        { status: 409 }
       );
     }
 

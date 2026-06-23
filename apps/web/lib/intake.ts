@@ -10,6 +10,7 @@ export type IntakeStatus =
   | "draft"
   | "submitted"
   | "pending_review"
+  | "call_completed"
   | "waitlisted"
   | "approved_preview"
   | "preview_active"
@@ -49,6 +50,7 @@ export type IntakeStateRecord = {
   submitted_at: string | null;
   reviewed_at: string | null;
   approved_at: string | null;
+  call_completed_at: string | null;
   waitlisted_at: string | null;
   rejected_at: string | null;
   assigned_account_manager_id: string | null;
@@ -208,6 +210,11 @@ export async function getIntakeStateByJobSeekerId(
   return record;
 }
 
+export async function isActiveClient(jobSeekerId: string): Promise<boolean> {
+  const intakeState = await getIntakeStateByJobSeekerId(jobSeekerId);
+  return intakeState?.status === "active_client";
+}
+
 export async function getLatestRegistrationPaymentForSeeker(jobSeekerId: string) {
   const { data, error } = await supabaseAdmin
     .from("registration_payments")
@@ -348,6 +355,7 @@ export async function upsertJobSeekerIntakeState(args: {
   previewStartedAt?: string | null;
   previewExpiresAt?: string | null;
   previewConvertedAt?: string | null;
+  callCompletedAt?: string | null;
   notes?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<IntakeStateRecord | null> {
@@ -384,6 +392,9 @@ export async function upsertJobSeekerIntakeState(args: {
   if (args.previewExpiresAt !== undefined) payload.preview_expires_at = args.previewExpiresAt;
   if (args.previewConvertedAt !== undefined) {
     payload.preview_converted_at = args.previewConvertedAt;
+  }
+  if (args.callCompletedAt !== undefined) {
+    payload.call_completed_at = args.callCompletedAt;
   }
   if (args.notes !== undefined) payload.notes = args.notes;
   if (args.metadata !== undefined) {
@@ -422,6 +433,11 @@ export async function upsertJobSeekerIntakeState(args: {
       args.approvedAt === undefined
     ) {
       payload.approved_at = existing?.approved_at ?? nowIso;
+    }
+
+    if (args.status === "call_completed" && args.callCompletedAt === undefined) {
+      payload.call_completed_at = existing?.call_completed_at ?? nowIso;
+      payload.reviewed_at = existing?.reviewed_at ?? nowIso;
     }
 
     if (args.status === "waitlisted" && args.waitlistedAt === undefined) {

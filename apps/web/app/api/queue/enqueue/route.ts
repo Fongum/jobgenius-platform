@@ -1,5 +1,6 @@
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
+import { isActiveClient } from "@/lib/intake";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logActivity } from "@/lib/feedback-loop";
 import {
@@ -38,6 +39,16 @@ export async function POST(request: Request) {
 
   const access = await requireAMAccessToSeeker(request.headers, payload.job_seeker_id);
   if (!access.ok) return access.response;
+
+  if (!(await isActiveClient(payload.job_seeker_id))) {
+    return Response.json(
+      {
+        success: false,
+        error: "Live applications are only allowed for active clients.",
+      },
+      { status: 409 }
+    );
+  }
 
   const { data: existingQueue, error: existingQueueError } = await supabaseServer
     .from("application_queue")
@@ -165,4 +176,3 @@ export async function POST(request: Request) {
 
   return Response.json({ success: true });
 }
-

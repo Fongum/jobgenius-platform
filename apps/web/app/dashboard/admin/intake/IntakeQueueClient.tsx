@@ -46,6 +46,7 @@ type IntakeState = {
   preview_started_at: string | null;
   preview_expires_at: string | null;
   preview_converted_at: string | null;
+  call_completed_at: string | null;
   assigned_account_manager_id: string | null;
   jobSeeker: {
     id: string;
@@ -66,6 +67,7 @@ type RowActionState = {
 
 const FILTERS = [
   { key: "pending_review", label: "Pending Review" },
+  { key: "call_completed", label: "First Call Complete" },
   { key: "waitlisted", label: "Waitlisted" },
   { key: "approved_preview", label: "Preview Approved" },
   { key: "preview_active", label: "Preview Active" },
@@ -90,6 +92,8 @@ function statusClasses(status: string): string {
   switch (status) {
     case "approved_preview":
       return "bg-violet-100 text-violet-800";
+    case "call_completed":
+      return "bg-cyan-100 text-cyan-800";
     case "preview_active":
       return "bg-purple-100 text-purple-800";
     case "preview_expired":
@@ -210,6 +214,7 @@ export default function IntakeQueueClient({
       pendingReview: initialIntakeStates.filter((row) =>
         ["pending_review", "submitted"].includes(row.status)
       ).length,
+      callCompleted: initialIntakeStates.filter((row) => row.status === "call_completed").length,
       waitlisted: initialIntakeStates.filter((row) => row.status === "waitlisted").length,
       previewPipeline: initialIntakeStates.filter((row) =>
         ["approved_preview", "preview_active"].includes(row.status)
@@ -239,6 +244,7 @@ export default function IntakeQueueClient({
   async function runAction(
     id: string,
     action: "approve" | "waitlist" | "reject" | "startPreview" | "expirePreview"
+    | "markCallComplete"
   ) {
     const current = rowState[id] ?? { accountManagerId: "", notes: "" };
     if (action === "approve" && !current.accountManagerId) {
@@ -253,6 +259,8 @@ export default function IntakeQueueClient({
     const endpoint =
       action === "approve"
         ? `/api/admin/intake/${id}/approve`
+        : action === "markCallComplete"
+        ? `/api/admin/intake/${id}/mark-call-complete`
         : action === "startPreview"
         ? `/api/admin/intake/${id}/start-preview`
         : action === "expirePreview"
@@ -268,7 +276,7 @@ export default function IntakeQueueClient({
             capacityMonth: toCapacityMonth(selectedMonth),
             notes: current.notes || null,
           }
-        : action === "startPreview" || action === "expirePreview"
+        : action === "startPreview" || action === "expirePreview" || action === "markCallComplete"
         ? {}
         : {
             notes: current.notes || null,
@@ -288,8 +296,10 @@ export default function IntakeQueueClient({
       }
 
       setMessage(
-        action === "approve"
+          action === "approve"
           ? "Spot approved and reserved."
+          : action === "markCallComplete"
+          ? "First call marked complete."
           : action === "startPreview"
           ? "Strategy preview started."
           : action === "expirePreview"
@@ -348,8 +358,9 @@ export default function IntakeQueueClient({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-7">
         <SummaryCard label="Pending Review" value={counts.pendingReview} tone="amber" />
+        <SummaryCard label="First Call Complete" value={counts.callCompleted} tone="cyan" />
         <SummaryCard label="Waitlisted" value={counts.waitlisted} tone="blue" />
         <SummaryCard label="Preview Pipeline" value={counts.previewPipeline} tone="purple" />
         <SummaryCard
@@ -397,23 +408,27 @@ export default function IntakeQueueClient({
         ) : (
           <div className="divide-y divide-gray-100">
             {filteredStates.map((state) => {
-              const current = rowState[state.id] ?? {
-                accountManagerId: state.assigned_account_manager_id ?? "",
-                notes: "",
-              };
-              const showReviewActions = [
-                "pending_review",
-                "submitted",
-                "waitlisted",
-              ].includes(state.status);
-              const canStartPreview =
-                state.offer_path === "strategy_preview" &&
-                state.status === "approved_preview";
-              const canExpirePreview =
-                state.offer_path === "strategy_preview" &&
-                state.status === "preview_active";
-              const showSettledMessage =
-                !showReviewActions && !canStartPreview && !canExpirePreview;
+      const current = rowState[state.id] ?? {
+        accountManagerId: state.assigned_account_manager_id ?? "",
+        notes: "",
+      };
+      const showReviewActions = [
+        "pending_review",
+        "submitted",
+        "waitlisted",
+      ].includes(state.status);
+      const isStrategyPreview = state.offer_path === "strategy_preview";
+      const canMarkCallComplete =
+        isStrategyPreview && ["pending_review", "submitted"].includes(state.status);
+      const canApprovePreview = isStrategyPreview && state.status === "call_completed";
+      const canStartPreview =
+        isStrategyPreview &&
+        state.status === "approved_preview";
+      const canExpirePreview =
+        isStrategyPreview &&
+        state.status === "preview_active";
+      const showSettledMessage =
+        !showReviewActions && !canMarkCallComplete && !canApprovePreview && !canStartPreview && !canExpirePreview;
 
               return (
                 <div key={state.id} className="px-5 py-5">
@@ -450,6 +465,9 @@ export default function IntakeQueueClient({
                       </div>
                       {state.offer_path === "strategy_preview" && (
                         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
+                          {state.call_completed_at && (
+                            <span>Call complete: {formatDate(state.call_completed_at)}</span>
+                          )}
                           {state.preview_agreed_at && (
                             <span>Preview agreed: {formatDate(state.preview_agreed_at)}</span>
                           )}
@@ -537,13 +555,31 @@ export default function IntakeQueueClient({
 
                       {showReviewActions ? (
                         <div className="mt-4 flex flex-wrap gap-2">
-                          <button
-                            onClick={() => runAction(state.id, "approve")}
-                            disabled={processingId === state.id}
-                            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                          >
-                            {processingId === state.id ? "Saving..." : "Approve Spot"}
-                          </button>
+                          {canMarkCallComplete ? (
+                            <button
+                              onClick={() => runAction(state.id, "markCallComplete")}
+                              disabled={processingId === state.id}
+                              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700 disabled:opacity-50"
+                            >
+                              {processingId === state.id ? "Saving..." : "Mark Call Complete"}
+                            </button>
+                          ) : canApprovePreview ? (
+                            <button
+                              onClick={() => runAction(state.id, "approve")}
+                              disabled={processingId === state.id}
+                              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                            >
+                              {processingId === state.id ? "Saving..." : "Approve Preview"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => runAction(state.id, "approve")}
+                              disabled={processingId === state.id}
+                              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {processingId === state.id ? "Saving..." : "Approve Spot"}
+                            </button>
+                          )}
                           <button
                             onClick={() => runAction(state.id, "waitlist")}
                             disabled={processingId === state.id}
@@ -557,6 +593,16 @@ export default function IntakeQueueClient({
                             className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-50"
                           >
                             Reject
+                          </button>
+                        </div>
+                      ) : canApprovePreview ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            onClick={() => runAction(state.id, "approve")}
+                            disabled={processingId === state.id}
+                            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                          >
+                            {processingId === state.id ? "Saving..." : "Approve Preview"}
                           </button>
                         </div>
                       ) : canStartPreview ? (
@@ -616,12 +662,13 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  tone: "amber" | "blue" | "green" | "emerald" | "purple";
+  tone: "amber" | "blue" | "cyan" | "green" | "emerald" | "purple";
   loading?: boolean;
 }) {
-  const toneMap: Record<"amber" | "blue" | "green" | "emerald" | "purple", string> = {
+  const toneMap: Record<"amber" | "blue" | "cyan" | "green" | "emerald" | "purple", string> = {
     amber: "text-amber-600",
     blue: "text-blue-600",
+    cyan: "text-cyan-600",
     green: "text-green-600",
     emerald: "text-emerald-600",
     purple: "text-purple-600",

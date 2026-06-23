@@ -8,6 +8,7 @@ import {
   type JobPost,
 } from "@/lib/matching";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
+import { isActiveClient } from "@/lib/intake";
 import { logActivity } from "@/lib/feedback-loop";
 import {
   recordMatchFeatures,
@@ -395,7 +396,7 @@ export async function POST(request: Request) {
         category: "auto_matched",
       }));
 
-    if (toQueue.length > 0) {
+    if (toQueue.length > 0 && (await isActiveClient(seeker.id))) {
       const { error: queueError } = await supabaseServer
         .from("application_queue")
         .insert(toQueue);

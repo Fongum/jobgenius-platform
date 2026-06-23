@@ -69,6 +69,13 @@ export async function POST(request: Request, { params }: RouteContext) {
     );
   }
 
+  if (intakeState.offer_path === "strategy_preview" && intakeState.status !== "call_completed") {
+    return NextResponse.json(
+      { error: "Mark the first call complete before approving preview." },
+      { status: 409 }
+    );
+  }
+
   if (capacityRow.spotsLeft <= 0) {
     return NextResponse.json(
       { error: "That account manager has no spots left for this month." },

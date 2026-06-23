@@ -758,6 +758,12 @@ function getIntakeBanner(intakeState: IntakeState | null): {
         body: "Your preview slot is approved. Generate your full-service agreement whenever you are ready to move from planning into live execution.",
         className: "border-green-200 bg-green-50 text-green-900",
       };
+    case "call_completed":
+      return {
+        title: "First call complete",
+        body: "We have the information needed to move your preview forward. Preview approval still comes next, before any financial commitment.",
+        className: "border-cyan-200 bg-cyan-50 text-cyan-900",
+      };
     case "preview_active":
       return {
         title: "Strategy preview active",
