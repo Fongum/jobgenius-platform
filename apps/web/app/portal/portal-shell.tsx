@@ -164,9 +164,11 @@ function timeAgo(iso: string): string {
 
 export default function PortalShell({
   userName,
+  showBillingNav,
   children,
 }: {
   userName: string;
+  showBillingNav: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -260,7 +262,7 @@ export default function PortalShell({
         </div>
 
         <nav className="p-4 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => showBillingNav || item.href !== "/portal/billing").map((item) => {
             const isActive =
               item.href === "/portal"
                 ? pathname === "/portal"

@@ -63,8 +63,23 @@ export default async function BillingPage() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      getIntakeStateByJobSeekerId(seekerId),
-    ]);
+    getIntakeStateByJobSeekerId(seekerId),
+  ]);
+
+  const billingAllowed = Boolean(
+    intakeState &&
+      [
+        "approved_payment_pending",
+        "approved_preview",
+        "preview_active",
+        "preview_expired",
+        "active_client",
+      ].includes(intakeState.status)
+  );
+
+  if (!billingAllowed && !contractRes.data) {
+    redirect("/portal");
+  }
 
   return (
     <BillingClient
