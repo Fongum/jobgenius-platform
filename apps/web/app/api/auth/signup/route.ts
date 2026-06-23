@@ -50,6 +50,7 @@ type JobSeekerProfilePrefill = {
   authorized_to_work?: boolean;
   requires_visa_sponsorship?: boolean;
   citizenship_status?: string;
+  non_compete_subject?: boolean;
 };
 
 type SignUpPayload = {
@@ -248,6 +249,7 @@ export async function POST(request: Request) {
         authorized_to_work: toBoolean(profile.authorized_to_work),
         requires_visa_sponsorship: toBoolean(profile.requires_visa_sponsorship),
         citizenship_status: toText(profile.citizenship_status),
+        non_compete_subject: toBoolean(profile.non_compete_subject),
       };
 
       Object.entries(profileUpdates).forEach(([key, value]) => {

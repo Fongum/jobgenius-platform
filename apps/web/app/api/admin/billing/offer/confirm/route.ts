@@ -56,9 +56,9 @@ export async function POST(request: Request) {
   if (seekerConfirmed && amConfirmed) {
     const acceptedAt = new Date(offer.offer_accepted_at);
     const dueDate = new Date(acceptedAt);
-    dueDate.setDate(dueDate.getDate() + 60);
+    dueDate.setDate(dueDate.getDate() + 90);
     const extendedDueDate = new Date(acceptedAt);
-    extendedDueDate.setDate(extendedDueDate.getDate() + 90);
+    extendedDueDate.setDate(extendedDueDate.getDate() + 120);
 
     const commissionAmount = Number(offer.base_salary) * 0.05;
 

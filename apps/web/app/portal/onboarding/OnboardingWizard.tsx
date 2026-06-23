@@ -46,6 +46,7 @@ export interface ProfileData {
   employment_type_preferences?: string[];
   salary_min?: number;
   salary_max?: number;
+  non_compete_subject?: boolean;
   target_titles?: string[];
   skills?: string[];
   years_experience?: number;
@@ -118,26 +119,26 @@ function buildSteps(offerPath: OfferPath): StepDefinition[] {
   if (offerPath === "strategy_preview") {
     return [
       { id: "welcome", label: "Welcome" },
-      { id: "plan", label: "Choose Plan" },
-      { id: "preview", label: "Preview Terms" },
       { id: "about", label: "About You" },
       { id: "preferences", label: "Job Preferences" },
       { id: "workstyle", label: "Work Style" },
       { id: "salary", label: "Salary & Availability" },
       { id: "review", label: "Review" },
+      { id: "plan", label: "Choose Plan" },
+      { id: "preview", label: "Preview Terms" },
     ];
   }
 
   return [
     { id: "welcome", label: "Welcome" },
-    { id: "plan", label: "Choose Plan" },
-    { id: "contract", label: "Agreement" },
-    { id: "payment", label: "Payment Plan" },
     { id: "about", label: "About You" },
     { id: "preferences", label: "Job Preferences" },
     { id: "workstyle", label: "Work Style" },
     { id: "salary", label: "Salary & Availability" },
     { id: "review", label: "Review" },
+    { id: "plan", label: "Choose Plan" },
+    { id: "contract", label: "Agreement" },
+    { id: "payment", label: "Payment Plan" },
   ];
 }
 
@@ -508,7 +509,7 @@ export default function OnboardingWizard({
           initialAgreed={Boolean(previewAgreedAt)}
           onContinue={(agreedAt) => {
             setPreviewAgreedAt(agreedAt);
-            goNext();
+            handleFinish();
           }}
           onBack={goBack}
         />
@@ -534,7 +535,7 @@ export default function OnboardingWizard({
           registrationFee={
             signedRegistrationFee ?? offerQuote?.finalFee ?? PLAN_BASE_FEES[selectedPlan]
           }
-          onContinue={goNext}
+          onContinue={handleFinish}
           onBack={goBack}
         />
       )}
@@ -591,7 +592,7 @@ export default function OnboardingWizard({
           saving={saving || finishing}
           finishError={finishError}
           goToStep={goToStep}
-          onFinish={handleFinish}
+          onFinish={goNext}
           onBack={goBack}
         />
       )}

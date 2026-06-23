@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import CapacityNotice, { type CapacityNoticeSummary } from "@/app/components/CapacityNotice";
+import MultiCheckbox from "../../portal/components/MultiCheckbox";
 
 type UserType = "am" | "job_seeker";
 
@@ -28,7 +29,6 @@ type JobSeekerProfilePrefill = {
   address_zip?: string;
   address_country?: string;
   target_titles?: string[];
-  work_type?: string;
   work_type_preferences?: string[];
   employment_type_preferences?: string[];
   preferred_locations?: string[];
@@ -41,6 +41,7 @@ type JobSeekerProfilePrefill = {
   authorized_to_work?: boolean;
   requires_visa_sponsorship?: boolean;
   citizenship_status?: string;
+  non_compete_subject?: boolean;
 };
 
 type PublicCapacityResponse = CapacityNoticeSummary & {
@@ -251,7 +252,7 @@ function SignUpForm() {
   const [targetRoles, setTargetRoles] = useState("");
   const [preferredLocations, setPreferredLocations] = useState("");
   const [preferredIndustries, setPreferredIndustries] = useState("");
-  const [workType, setWorkType] = useState("");
+  const [workTypes, setWorkTypes] = useState<string[]>([]);
   const [employmentTypes, setEmploymentTypes] = useState("");
   const [salaryMin, setSalaryMin] = useState("");
   const [salaryMax, setSalaryMax] = useState("");
@@ -261,6 +262,7 @@ function SignUpForm() {
   const [citizenshipStatus, setCitizenshipStatus] = useState("");
   const [openToRelocation, setOpenToRelocation] = useState(false);
   const [availableForTravel, setAvailableForTravel] = useState(false);
+  const [nonCompete, setNonCompete] = useState(false);
   const [extraNotes, setExtraNotes] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -326,8 +328,7 @@ function SignUpForm() {
     address_zip: normalizeOptionalText(addressZip),
     address_country: "United States",
     target_titles: splitList(targetRoles),
-    work_type: normalizeOptionalText(workType),
-    work_type_preferences: splitList(workType),
+    work_type_preferences: workTypes.length > 0 ? workTypes : undefined,
     employment_type_preferences: splitList(employmentTypes),
     preferred_locations: splitList(preferredLocations),
     preferred_industries: splitList(preferredIndustries),
@@ -339,6 +340,7 @@ function SignUpForm() {
     authorized_to_work: authorizedToWork,
     requires_visa_sponsorship: requiresVisaSponsorship,
     citizenship_status: normalizeOptionalText(citizenshipStatus),
+    non_compete_subject: nonCompete,
   });
 
   const handleResumeUpload = async (file: File) => {
@@ -485,7 +487,7 @@ function SignUpForm() {
 
     const leadNotes = [
       targetRoles.trim() ? `Target roles: ${targetRoles.trim()}` : null,
-      workType.trim() ? `Work type: ${workType.trim()}` : null,
+      workTypes.length > 0 ? `Work type: ${workTypes.join(", ")}` : null,
       preferredLocations.trim() ? `Preferred locations: ${preferredLocations.trim()}` : null,
       preferredIndustries.trim() ? `Preferred industries: ${preferredIndustries.trim()}` : null,
       salaryMin.trim() || salaryMax.trim()
@@ -493,6 +495,7 @@ function SignUpForm() {
         : null,
       yearsExperience.trim() ? `Years experience: ${yearsExperience.trim()}` : null,
       citizenshipStatus.trim() ? `Work authorization: ${citizenshipStatus.trim()}` : null,
+      nonCompete ? "Non-compete: yes" : null,
       extraNotes.trim() ? `Notes: ${extraNotes.trim()}` : null,
     ]
       .filter(Boolean)
@@ -723,7 +726,7 @@ function SignUpForm() {
                 setTargetRoles("");
                 setPreferredLocations("");
                 setPreferredIndustries("");
-                setWorkType("");
+                setWorkTypes([]);
                 setEmploymentTypes("");
                 setSalaryMin("");
                 setSalaryMax("");
@@ -733,6 +736,7 @@ function SignUpForm() {
                 setCitizenshipStatus("");
                 setOpenToRelocation(false);
                 setAvailableForTravel(false);
+                setNonCompete(false);
                 setExtraNotes("");
                 setConsentVoice(false);
                 setAccountError("");
@@ -1117,20 +1121,20 @@ function SignUpForm() {
 
                     <div className="grid gap-4 sm:grid-cols-3">
                       <div>
-                        <label htmlFor="workType" className="block text-sm font-semibold text-gray-800">
+                        <label className="block text-sm font-semibold text-gray-800">
                           Work type
                         </label>
-                        <select
-                          id="workType"
-                          value={workType}
-                          onChange={(e) => setWorkType(e.target.value)}
-                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-violet-500"
-                        >
-                          <option value="">Select</option>
-                          <option value="remote">Remote</option>
-                          <option value="hybrid">Hybrid</option>
-                          <option value="onsite">On-site</option>
-                        </select>
+                        <div className="mt-1">
+                          <MultiCheckbox
+                            options={[
+                              { value: "remote", label: "Remote" },
+                              { value: "hybrid", label: "Hybrid" },
+                              { value: "onsite", label: "On-site" },
+                            ]}
+                            selected={workTypes}
+                            onChange={setWorkTypes}
+                          />
+                        </div>
                       </div>
                       <div>
                         <label htmlFor="salaryMin" className="block text-sm font-semibold text-gray-800">
@@ -1280,6 +1284,15 @@ function SignUpForm() {
                           className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                         />
                         <span>I am available for travel if needed.</span>
+                      </label>
+                      <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={nonCompete}
+                          onChange={(e) => setNonCompete(e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>I have a non-compete or other restriction.</span>
                       </label>
                     </div>
 

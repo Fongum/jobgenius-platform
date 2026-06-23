@@ -36,6 +36,7 @@ function calculateScore(profile: ProfileData): number {
   check(profile.notice_period);
   check(profile.authorized_to_work);
   check(profile.citizenship_status);
+  check(profile.non_compete_subject);
 
   return total > 0 ? Math.round((score / total) * 100) : 0;
 }
@@ -179,9 +180,7 @@ export default function ReviewFinishStep({
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-1">Review Your Profile</h2>
       <p className="text-sm text-gray-500 mb-6">
-        {offerPath === "strategy_preview"
-          ? "Review your information below. Once submitted, our team reviews fit before a strategy preview slot is reserved."
-          : "Review your information below. Once submitted, our team reviews fit before an onboarding spot is reserved."}
+        Review your information below. After this screen you&apos;ll choose the plan, then confirm the agreement and payment details.
       </p>
 
       <div className="flex justify-center mb-8">
@@ -242,6 +241,7 @@ export default function ReviewFinishStep({
             { label: "Salary Range", value: formatSalary(), missing: isEmpty(profile.salary_min) && isEmpty(profile.salary_max) },
             { label: "Start Date", value: profile.start_date, missing: isEmpty(profile.start_date) },
             { label: "Work Authorization", value: profile.authorized_to_work === true ? "Authorized" : profile.authorized_to_work === false ? "Not authorized" : undefined, missing: profile.authorized_to_work === undefined },
+            { label: "Non-Compete", value: profile.non_compete_subject === true ? "Yes" : profile.non_compete_subject === false ? "No" : undefined, missing: profile.non_compete_subject === undefined },
           ]}
         />
       </div>
@@ -256,10 +256,8 @@ export default function ReviewFinishStep({
           className="px-8 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
         >
           {saving
-            ? "Submitting..."
-            : offerPath === "strategy_preview"
-            ? "Submit Strategy Preview Request"
-            : "Submit for Review"}
+            ? "Saving..."
+            : "Continue to Plan"}
         </button>
       </div>
     </div>

@@ -98,9 +98,9 @@ export default function PlanSelectionStep({
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Choose Your Plan</h2>
         <p className="text-gray-500 mt-1 text-sm">
-          Pick your service tier, then choose either direct signup with a discount
-          or a 7-day strategy preview. The 5% success fee is still only due after
-          you accept an offer.
+          Pick your service tier here. We collect the rest of the details first,
+          then finalize either the preview path or the registration terms after
+          the intake is complete.
         </p>
       </div>
 
@@ -144,7 +144,7 @@ export default function PlanSelectionStep({
                 <p className={`text-3xl font-bold ${titleClass}`}>
                   {formatCurrency(pricing.baseFee)}
                 </p>
-                <p className="text-xs text-gray-500">standard registration fee</p>
+                <p className="text-xs text-gray-500">registration charge</p>
                 <p className="mt-2 text-sm font-medium text-emerald-700">
                   With a valid code: {formatCurrency(pricing.discountedFee)}
                 </p>
@@ -318,7 +318,7 @@ export default function PlanSelectionStep({
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-800">
         <strong>Commission note:</strong> Both plans include a 5% commission on your
-        first year&apos;s base salary, due within 60 days of accepting a job offer. A
+        first year&apos;s base salary, due within 90 days of accepting a job offer. A
         30-day extension is available on request.
       </div>
 

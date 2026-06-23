@@ -61,6 +61,7 @@ export default function SalaryAvailabilityStep({
       authorized_to_work: profile.authorized_to_work,
       requires_visa_sponsorship: profile.requires_visa_sponsorship,
       citizenship_status: profile.citizenship_status,
+      non_compete_subject: profile.non_compete_subject,
     });
     if (ok) onContinue();
   };
@@ -159,6 +160,13 @@ export default function SalaryAvailabilityStep({
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+            </div>
+            <div className="pt-3">
+              <BooleanToggle
+                label="Are you subject to a non-compete or other restrictive covenant?"
+                value={profile.non_compete_subject}
+                onChange={(v) => update("non_compete_subject", v)}
+              />
             </div>
           </div>
         </div>

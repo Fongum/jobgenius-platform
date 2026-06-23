@@ -104,7 +104,7 @@ export function generateContractHTML(params: ContractParams): string {
               </tr>`
           )
           .join("")
-      : `<tr><td colspan="3" style="padding:6px 12px;border:1px solid #e5e7eb;">Single payment of ${feeFormatted}</td></tr>`;
+      : `<tr><td colspan="3" style="padding:6px 12px;border:1px solid #e5e7eb;">One-time payment of ${feeFormatted}</td></tr>`;
 
   const essentialsFeatures = `
     <ul>
@@ -202,14 +202,14 @@ export function generateContractHTML(params: ContractParams): string {
   <h2>4. Commission Terms</h2>
   <p>Upon Client's acceptance of a job offer facilitated or supported by JobGenius, the Client agrees to pay a placement commission of <strong>${commissionPercent}% of the first year's base salary</strong>.</p>
   <ul>
-    <li>Commission is due within <strong>60 days</strong> of the offer acceptance date.</li>
+    <li>Commission is due within <strong>90 days</strong> of the offer acceptance date.</li>
     <li>Client must report the job offer through the JobGenius portal within 5 business days of acceptance.</li>
     <li>Commission applies to the base salary only (excluding bonuses, equity, or other compensation).</li>
     <li>Commission is owed regardless of employment duration, provided the position was facilitated or referred by JobGenius.</li>
   </ul>
 
   <h2>5. Extension Policy</h2>
-  <p>If the Client is unable to pay the commission within the 60-day window due to documented financial hardship, the Client may request a <strong>one-time 30-day extension</strong> through the portal prior to the due date.</p>
+  <p>If the Client is unable to pay the commission within the 90-day window due to documented financial hardship, the Client may request a <strong>one-time 30-day extension</strong> through the portal prior to the due date.</p>
   <ul>
     <li>Extension requests must be submitted at least 5 days before the commission due date.</li>
     <li>Only one extension is permitted per placement.</li>

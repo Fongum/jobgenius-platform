@@ -34,12 +34,13 @@ export default function StrategyPreviewAgreementStep({
           7-Day Strategy Preview
         </p>
         <h2 className="mt-2 text-xl font-semibold text-gray-900">
-          Try the strategy before you buy the execution
+          Review the strategy before you commit to execution
         </h2>
         <p className="mt-2 text-sm text-gray-600 leading-relaxed">
           Your preview includes a resume audit, a target-role plan, and an optional
           kickoff call. Live applications, recruiter outreach, and ongoing account
-          manager execution begin only after payment is confirmed.
+          manager execution begin only after the intake is complete and the plan is
+          finalized.
         </p>
       </div>
 
@@ -68,7 +69,7 @@ export default function StrategyPreviewAgreementStep({
           <span className="capitalize">{planType}</span>
         </p>
         <p className="mt-1 text-sm text-gray-600">
-          If you convert after the preview window, your registration fee will be{" "}
+          If you convert after the preview window, your registration charge will be{" "}
           <strong>{formatCurrency(baseRegistrationFee)}</strong> at the standard plan
           price.
         </p>
