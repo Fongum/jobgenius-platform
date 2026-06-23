@@ -3,10 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WelcomeResumeStep from "./steps/WelcomeResumeStep";
-import PlanSelectionStep from "./steps/PlanSelectionStep";
-import StrategyPreviewAgreementStep from "./steps/StrategyPreviewAgreementStep";
-import ContractStep from "./steps/ContractStep";
-import InstallmentPlanStep from "./steps/InstallmentPlanStep";
 import AboutYouStep from "./steps/AboutYouStep";
 import JobPreferencesStep from "./steps/JobPreferencesStep";
 import WorkStyleLocationStep from "./steps/WorkStyleLocationStep";
@@ -22,10 +18,6 @@ type PlanType = "essentials" | "premium";
 type OfferPath = "discount" | "strategy_preview";
 type StepId =
   | "welcome"
-  | "plan"
-  | "preview"
-  | "contract"
-  | "payment"
   | "about"
   | "preferences"
   | "workstyle"
@@ -117,19 +109,6 @@ function buildBaseQuote(planType: PlanType): OfferQuote {
 }
 
 function buildSteps(offerPath: OfferPath): StepDefinition[] {
-  if (offerPath === "strategy_preview") {
-    return [
-      { id: "welcome", label: "Welcome" },
-      { id: "about", label: "About You" },
-      { id: "preferences", label: "Job Preferences" },
-      { id: "workstyle", label: "Work Style" },
-      { id: "salary", label: "Salary & Availability" },
-      { id: "review", label: "Review" },
-      { id: "plan", label: "Choose Plan", hidden: true },
-      { id: "preview", label: "Preview Terms", hidden: true },
-    ];
-  }
-
   return [
     { id: "welcome", label: "Welcome" },
     { id: "about", label: "About You" },
@@ -137,9 +116,6 @@ function buildSteps(offerPath: OfferPath): StepDefinition[] {
     { id: "workstyle", label: "Work Style" },
     { id: "salary", label: "Salary & Availability" },
     { id: "review", label: "Review" },
-    { id: "plan", label: "Choose Plan", hidden: true },
-    { id: "contract", label: "Agreement", hidden: true },
-    { id: "payment", label: "Payment Plan", hidden: true },
   ];
 }
 
@@ -243,29 +219,10 @@ export default function OnboardingWizard({
   const [profile, setProfile] = useState<ProfileData>(initial);
   const [docs, setDocs] = useState<DocRecord[]>(initialDocs);
   const [saving, setSaving] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(
-    initialIntakeState?.selectedPlan ?? initial.plan_type ?? null
-  );
-  const [selectedOfferPath, setSelectedOfferPath] = useState<OfferPath>(
-    initialIntakeState?.offerPath ?? "discount"
-  );
-  const [offerCodeInput, setOfferCodeInput] = useState(
-    initialIntakeState?.submittedCode ?? initialOfferCode ?? initial.offer_code ?? ""
-  );
-  const [appliedOfferCode, setAppliedOfferCode] = useState<string | null>(
-    initialIntakeState?.submittedCode ?? initialOfferCode ?? initial.offer_code ?? null
-  );
-  const [offerQuote, setOfferQuote] = useState<OfferQuote | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [signedRegistrationFee, setSignedRegistrationFee] = useState<number | null>(null);
-  const [previewAgreedAt, setPreviewAgreedAt] = useState<string | null>(
-    initialIntakeState?.previewAgreedAt ?? null
-  );
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
 
-  const steps = useMemo(() => buildSteps(selectedOfferPath), [selectedOfferPath]);
+  const steps = useMemo(() => buildSteps("discount"), []);
   const currentStepId = steps[currentStep]?.id ?? steps[0].id;
 
   const summaryStepIndexes = useMemo(() => {
@@ -327,77 +284,6 @@ export default function OnboardingWizard({
     [steps.length]
   );
 
-  const applyOfferCode = useCallback(() => {
-    setSignedRegistrationFee(null);
-    const trimmedCode = offerCodeInput.trim();
-    setAppliedOfferCode(trimmedCode ? trimmedCode : null);
-  }, [offerCodeInput]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadQuote() {
-      if (!selectedPlan) {
-        setOfferQuote(null);
-        setQuoteError(null);
-        setQuoteLoading(false);
-        return;
-      }
-
-      if (selectedOfferPath === "strategy_preview") {
-        setOfferQuote(buildBaseQuote(selectedPlan));
-        setQuoteError(null);
-        setQuoteLoading(false);
-        return;
-      }
-
-      if (!appliedOfferCode) {
-        setOfferQuote(buildBaseQuote(selectedPlan));
-        setQuoteError(null);
-        setQuoteLoading(false);
-        return;
-      }
-
-      setQuoteLoading(true);
-      setQuoteError(null);
-      try {
-        const response = await fetch("/api/portal/billing/quote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            planType: selectedPlan,
-            code: appliedOfferCode,
-          }),
-        });
-        const data = await response.json().catch(() => ({}));
-        if (cancelled) return;
-
-        if (!response.ok || !data?.quote) {
-          setOfferQuote(buildBaseQuote(selectedPlan));
-          setQuoteError(data?.error || "Could not validate that code.");
-          return;
-        }
-
-        setOfferQuote(data.quote as OfferQuote);
-        setQuoteError(data.quote.invalidCode ? data.quote.message : null);
-      } catch {
-        if (!cancelled) {
-          setOfferQuote(buildBaseQuote(selectedPlan));
-          setQuoteError("Network error while validating your code.");
-        }
-      } finally {
-        if (!cancelled) {
-          setQuoteLoading(false);
-        }
-      }
-    }
-
-    loadQuote();
-    return () => {
-      cancelled = true;
-    };
-  }, [appliedOfferCode, selectedOfferPath, selectedPlan]);
-
   const handleSkip = () => {
     document.cookie = "jg_onboarding_skipped=1; path=/; max-age=86400; SameSite=Lax";
     router.push("/portal");
@@ -419,9 +305,7 @@ export default function OnboardingWizard({
       const response = await fetch("/api/portal/intake/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selectedPlan: selectedPlan ?? null,
-        }),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -464,67 +348,6 @@ export default function OnboardingWizard({
           updateMany={updateMany}
           onContinue={goNext}
           userName={profile.full_name || userEmail}
-        />
-      )}
-
-      {currentStepId === "plan" && (
-        <PlanSelectionStep
-          selectedPlan={selectedPlan}
-          onSelectPlan={(plan) => {
-            setSelectedPlan(plan);
-            setSignedRegistrationFee(null);
-          }}
-          offerPath={selectedOfferPath}
-          onOfferPathChange={(path) => {
-            setSelectedOfferPath(path);
-            setSignedRegistrationFee(null);
-          }}
-          offerCode={offerCodeInput}
-          onOfferCodeChange={(value) => setOfferCodeInput(value)}
-          onApplyOfferCode={applyOfferCode}
-          offerQuote={offerQuote}
-          quoteLoading={quoteLoading}
-          quoteError={quoteError}
-          onContinue={goNext}
-          onBack={goBack}
-        />
-      )}
-
-      {currentStepId === "preview" && selectedPlan && (
-        <StrategyPreviewAgreementStep
-          planType={selectedPlan}
-          baseRegistrationFee={PLAN_BASE_FEES[selectedPlan]}
-          initialAgreed={Boolean(previewAgreedAt)}
-          onContinue={(agreedAt) => {
-            setPreviewAgreedAt(agreedAt);
-            handleFinish();
-          }}
-          onBack={goBack}
-        />
-      )}
-
-      {currentStepId === "contract" && selectedPlan && (
-        <ContractStep
-          seekerName={profile.full_name || userEmail}
-          seekerEmail={profile.email || userEmail}
-          planType={selectedPlan}
-          offerCode={appliedOfferCode}
-          quote={offerQuote ?? buildBaseQuote(selectedPlan)}
-          onContinue={(registrationFee) => {
-            setSignedRegistrationFee(registrationFee);
-            goNext();
-          }}
-          onBack={goBack}
-        />
-      )}
-
-      {currentStepId === "payment" && selectedPlan && (
-        <InstallmentPlanStep
-          registrationFee={
-            signedRegistrationFee ?? offerQuote?.finalFee ?? PLAN_BASE_FEES[selectedPlan]
-          }
-          onContinue={handleFinish}
-          onBack={goBack}
         />
       )}
 
@@ -575,12 +398,11 @@ export default function OnboardingWizard({
       {currentStepId === "review" && (
         <ReviewFinishStep
           profile={profile}
-          offerPath={selectedOfferPath}
           summaryStepIndexes={summaryStepIndexes}
           saving={saving || finishing}
           finishError={finishError}
           goToStep={goToStep}
-          onFinish={goNext}
+          onFinish={handleFinish}
           onBack={goBack}
         />
       )}
