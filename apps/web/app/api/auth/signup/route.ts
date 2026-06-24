@@ -30,6 +30,8 @@ type ResumePrefillPayload = {
 
 type JobSeekerProfilePrefill = {
   location?: string;
+  phone?: string;
+  bio?: string;
   linkedin_url?: string;
   address_line1?: string;
   address_city?: string;
@@ -229,6 +231,8 @@ export async function POST(request: Request) {
     if (profile) {
       const profileUpdates: Record<string, unknown> = {
         location: toText(profile.location),
+        phone: toText(profile.phone),
+        bio: toText(profile.bio),
         linkedin_url: toText(profile.linkedin_url),
         address_line1: toText(profile.address_line1),
         address_city: toText(profile.address_city),
@@ -259,8 +263,10 @@ export async function POST(request: Request) {
       });
     }
     if (resume) {
-      if (resume.phone && typeof resume.phone === "string") updates.phone = resume.phone;
-      if (resume.linkedin_url && typeof resume.linkedin_url === "string") {
+      if (!updates.phone && resume.phone && typeof resume.phone === "string") {
+        updates.phone = resume.phone;
+      }
+      if (!updates.linkedin_url && resume.linkedin_url && typeof resume.linkedin_url === "string") {
         updates.linkedin_url = resume.linkedin_url;
       }
       if (Array.isArray(resume.work_history) && resume.work_history.length > 0) {

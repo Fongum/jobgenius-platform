@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import CapacityNotice, { type CapacityNoticeSummary } from "@/app/components/CapacityNotice";
 import MultiCheckbox from "../../portal/components/MultiCheckbox";
 
 type UserType = "am" | "job_seeker";
@@ -22,6 +21,8 @@ type ParsedResume = {
 
 type JobSeekerProfilePrefill = {
   location?: string;
+  phone?: string;
+  bio?: string;
   linkedin_url?: string;
   address_line1?: string;
   address_city?: string;
@@ -44,15 +45,6 @@ type JobSeekerProfilePrefill = {
   non_compete_subject?: boolean;
 };
 
-type PublicCapacityResponse = CapacityNoticeSummary & {
-  capacityMonth: string;
-};
-
-type LeadSubmissionResult = {
-  leadId: string;
-  voiceCallQueued: boolean;
-};
-
 function splitList(value: string): string[] {
   return value
     .split(/[,\n;]/)
@@ -69,171 +61,6 @@ function toOptionalNumber(value: string): number | undefined {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function JobSeekerSubmittedState({
-  result,
-  offerCode,
-  onStartOver,
-}: {
-  result: LeadSubmissionResult;
-  offerCode: string;
-  onStartOver: () => void;
-}) {
-  return (
-    <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-2xl shadow-emerald-100/70 sm:p-8">
-      <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-        Lead Submitted
-      </div>
-      <h2 className="mt-4 text-2xl font-semibold text-gray-900">You are in the queue.</h2>
-      <p className="mt-2 text-sm leading-6 text-gray-600">
-        We have your resume and contact details. Your lead is now visible to the internal team
-        for qualification and follow-up.
-      </p>
-
-      <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-        <p className="text-sm font-semibold text-gray-900">What happens next</p>
-        <div className="mt-4 space-y-3 text-sm text-gray-700">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
-              1
-            </span>
-            <p>Your details land in our internal lead queue with your resume attached.</p>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
-              2
-            </span>
-            <p>
-              {result.voiceCallQueued
-                ? "Our qualification call has been queued so we can confirm timing, role fit, and urgency."
-                : "Our team will reach out by phone to confirm timing, role fit, and urgency."}
-            </p>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
-              3
-            </span>
-            <p>An admin or account manager reviews the lead and reaches out to book a consultation.</p>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
-              4
-            </span>
-            <p>After you approve the service agreement and make payment, we activate your JobGenius app access and full onboarding.</p>
-          </div>
-        </div>
-      </div>
-
-      {offerCode && (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Offer code saved: <strong>{offerCode}</strong>. Your AM can apply it during consultation.
-        </div>
-      )}
-
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
-        Lead reference: <span className="font-mono text-gray-700">{result.leadId}</span>. Keep
-        this if the team asks you to confirm your submission.
-      </div>
-
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link
-          href="/"
-          className="inline-flex items-center justify-center rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700"
-        >
-          Return home
-        </Link>
-        <button
-          type="button"
-          onClick={onStartOver}
-          className="inline-flex items-center justify-center rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-        >
-          Submit another lead
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function JobSeekerPasswordStep({
-  fullName,
-  email,
-  onCreateAccount,
-  creatingAccount,
-  createError,
-}: {
-  fullName: string;
-  email: string;
-  onCreateAccount: (password: string, confirmPassword: string) => Promise<void>;
-  creatingAccount: boolean;
-  createError: string;
-}) {
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  return (
-    <div className="mt-4 rounded-3xl border border-blue-200 bg-blue-50 p-6">
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">
-        Account setup
-      </p>
-      <h3 className="mt-2 text-xl font-semibold text-gray-900">
-        Your intake is saved. Create your password to continue.
-      </h3>
-      <p className="mt-2 text-sm leading-6 text-gray-700">
-        We will use this email for login and account recovery. Your name stays on the profile.
-      </p>
-
-      <div className="mt-4 rounded-2xl border border-blue-100 bg-white p-4 text-sm text-gray-700">
-        <p>
-          <span className="font-semibold text-gray-900">Name:</span> {fullName || "Not set"}
-        </p>
-        <p className="mt-1">
-          <span className="font-semibold text-gray-900">Email:</span> {email}
-        </p>
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-semibold text-gray-800">Password</label>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-            placeholder="Create a password"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-semibold text-gray-800">Confirm password</label>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-            placeholder="Confirm password"
-          />
-        </div>
-      </div>
-
-      {createError && (
-        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {createError}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => onCreateAccount(password, confirmPassword)}
-        disabled={creatingAccount}
-        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-      >
-        {creatingAccount ? "Creating account..." : "Create password and continue"}
-      </button>
-    </div>
-  );
 }
 
 function SignUpForm() {
@@ -277,11 +104,6 @@ function SignUpForm() {
   const [parsedRawText, setParsedRawText] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState("");
   const [resumeNotice, setResumeNotice] = useState("");
-  const [capacitySummary, setCapacitySummary] = useState<PublicCapacityResponse | null>(null);
-  const [leadSubmission, setLeadSubmission] = useState<LeadSubmissionResult | null>(null);
-  const [accountCreating, setAccountCreating] = useState(false);
-  const [accountError, setAccountError] = useState("");
-
   useEffect(() => {
     const incomingCode = searchParams.get("code") ?? searchParams.get("ref");
     if (incomingCode) setOfferCode(incomingCode.trim().toUpperCase());
@@ -289,38 +111,10 @@ function SignUpForm() {
     if (oauthError) setError(oauthError);
   }, [searchParams]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadCapacity() {
-      try {
-        const response = await fetch("/api/public/capacity", { cache: "no-store" });
-        if (!response.ok || cancelled) return;
-        const data = (await response.json()) as PublicCapacityResponse;
-        if (!cancelled) {
-          setCapacitySummary(data);
-        }
-      } catch {
-        // Ignore capacity fetch failures on signup.
-      }
-    }
-
-    loadCapacity();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const resetLeadState = () => {
-    setLeadSubmission(null);
-    setError("");
-    setLoading(false);
-    setAccountCreating(false);
-    setAccountError("");
-  };
-
   const buildJobSeekerProfilePrefill = (): JobSeekerProfilePrefill => ({
     location: normalizeOptionalText(location),
+    phone: normalizeOptionalText(phone),
+    bio: normalizeOptionalText(extraNotes),
     linkedin_url: normalizeOptionalText(linkedinUrl),
     address_line1: normalizeOptionalText(addressLine1),
     address_city: normalizeOptionalText(addressCity),
@@ -468,131 +262,68 @@ function SignUpForm() {
       return;
     }
 
-    if (!consentVoice) {
-      setError("Please confirm we can call or text you to qualify the lead.");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("full_name", name.trim());
-    formData.append("email", email.trim());
-    formData.append("phone", phone.trim());
-    if (location.trim()) {
-      formData.append("location", location.trim());
-    }
-    formData.append("consent_voice", "true");
-    formData.append("consent_marketing", "false");
-    formData.append("source", "signup_form");
-    formData.append("resume", resumeFile);
-
-    const leadNotes = [
-      targetRoles.trim() ? `Target roles: ${targetRoles.trim()}` : null,
-      workTypes.length > 0 ? `Work type: ${workTypes.join(", ")}` : null,
-      preferredLocations.trim() ? `Preferred locations: ${preferredLocations.trim()}` : null,
-      preferredIndustries.trim() ? `Preferred industries: ${preferredIndustries.trim()}` : null,
-      salaryMin.trim() || salaryMax.trim()
-        ? `Salary range: ${salaryMin.trim() || "?"} - ${salaryMax.trim() || "?"}`
-        : null,
-      yearsExperience.trim() ? `Years experience: ${yearsExperience.trim()}` : null,
-      citizenshipStatus.trim() ? `Work authorization: ${citizenshipStatus.trim()}` : null,
-      nonCompete ? "Non-compete: yes" : null,
-      extraNotes.trim() ? `Notes: ${extraNotes.trim()}` : null,
-    ]
-      .filter(Boolean)
-      .join(" | ");
-
-    if (leadNotes) {
-      formData.append("notes", leadNotes);
-    }
-    if (targetRoles.trim()) {
-      formData.append("target_roles", targetRoles.trim());
-    }
-    if (linkedinUrl.trim()) {
-      formData.append("linkedin_url", linkedinUrl.trim());
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
     }
 
-    if (offerCode.trim()) {
-      formData.append("offer_code", offerCode.trim().toUpperCase());
-    }
-    if (parsedRawText) {
-      formData.append("resume_raw_text", parsedRawText);
-    }
-    if (parsedResume) {
-      formData.append("resume_parsed", JSON.stringify(parsedResume));
-      if (parsedResume.location) formData.append("location", parsedResume.location);
-      if (parsedResume.linkedin_url) formData.append("linkedin_url", parsedResume.linkedin_url);
+    if (!consentVoice) {
+      setError("Please confirm we can contact you about your job search.");
+      return;
     }
 
-    const response = await fetch("/api/marketing/lead", {
+    const response = await fetch("/api/auth/signup", {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim(),
+        password,
+        name: name.trim(),
+        userType: "job_seeker",
+        offerCode: offerCode.trim() || undefined,
+        resume: parsedResume
+          ? {
+              full_name: parsedResume.full_name,
+              phone: parsedResume.phone,
+              location: parsedResume.location,
+              linkedin_url: parsedResume.linkedin_url,
+              bio: parsedResume.bio,
+              skills: parsedResume.skills,
+              work_history: parsedResume.work_history,
+              education: parsedResume.education,
+              raw_text: parsedRawText,
+            }
+          : undefined,
+        profile: buildJobSeekerProfilePrefill(),
+      }),
     });
 
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(data.error || "Could not submit your details. Please try again.");
+    if (!response.ok || !data.success) {
+      setError(data.error || "Could not create your account. Please try again.");
       return;
     }
 
-    setLeadSubmission({
-      leadId: String(data.lead_id),
-      voiceCallQueued: Boolean(data.voice_call_id),
-    });
-  };
-
-  const handleCreateJobSeekerAccount = async (passwordValue: string, confirmValue: string) => {
-    setAccountError("");
-
-    if (passwordValue !== confirmValue) {
-      setAccountError("Passwords do not match.");
-      return;
-    }
-
-    if (passwordValue.length < 8) {
-      setAccountError("Password must be at least 8 characters.");
-      return;
-    }
-
-    setAccountCreating(true);
+    // The signup response sets the session cookies, so we can now attach the
+    // resume file to the new account. Best-effort: the onboarding flow lets the
+    // seeker re-upload if this fails.
     try {
-      const response = await fetch("/api/auth/signup", {
+      const resumeForm = new FormData();
+      resumeForm.append("file", resumeFile);
+      await fetch("/api/portal/resume/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password: passwordValue,
-          name,
-          userType: "job_seeker",
-          offerCode: offerCode.trim() || undefined,
-          resume: parsedResume
-            ? {
-                full_name: parsedResume.full_name,
-                phone: parsedResume.phone,
-                location: parsedResume.location,
-                linkedin_url: parsedResume.linkedin_url,
-                bio: parsedResume.bio,
-                skills: parsedResume.skills,
-                work_history: parsedResume.work_history,
-                education: parsedResume.education,
-                raw_text: parsedRawText,
-              }
-            : undefined,
-          profile: buildJobSeekerProfilePrefill(),
-        }),
+        body: resumeForm,
       });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.success) {
-        setAccountError(data.error || "Could not create your account.");
-        return;
-      }
-
-      window.location.href = "/portal/onboarding";
     } catch {
-      setAccountError("Could not create your account right now.");
-    } finally {
-      setAccountCreating(false);
+      // Non-fatal â€” continue into onboarding regardless.
     }
+
+    window.location.href = "/portal/onboarding";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -614,10 +345,10 @@ function SignUpForm() {
   };
 
   const jobSeekerSteps = [
-    "We capture your resume, contact details, and any promo or referral code.",
-    "We give you a call to confirm your timing, role fit, and urgency before we ever ask you to use the app.",
-    "An account manager reviews the lead and reaches out to book your consultation.",
-    "After you choose to activate a paid campaign, we activate JobGenius and collect the deeper search preferences inside the app.",
+    "Share your resume, contact details, search preferences, and any promo or referral code.",
+    "Create your login and we take you straight into onboarding to finish your profile.",
+    "An account manager reviews your profile and reaches out to plan your search.",
+    "Agreements and payment come later, only when you decide to activate a paid campaign.",
   ];
 
   const amSteps = [
@@ -658,12 +389,12 @@ function SignUpForm() {
           <h1 className="mt-4 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
             {userType === "am"
               ? "Create the workspace you will use to run client searches."
-              : "Start with your resume. We qualify first, then activate the app."}
+              : "Start with your resume. Create your account and jump into onboarding."}
           </h1>
           <p className="mt-4 max-w-xl text-lg leading-relaxed text-gray-600">
             {userType === "am"
               ? "Use this account to review seekers, manage applications, coordinate outreach, and keep every pipeline visible."
-              : "Job seekers should not have to create a full portal account before they are qualified. Send the essentials, let us qualify the fit, then move into consultation and payment."}
+              : "Share your resume and search preferences, create your login, and we will take you straight into onboarding to finish your profile. Agreements and payment come later, once you decide to activate a campaign."}
           </p>
 
           {offerCode && userType === "job_seeker" && (
@@ -695,76 +426,22 @@ function SignUpForm() {
                 forward.
               </div>
             )}
-
-            {userType === "job_seeker" && capacitySummary && (
-              <CapacityNotice
-                summary={capacitySummary}
-                variant="outline"
-                compact
-                className="mt-4"
-              />
-            )}
           </div>
         </div>
 
-        {userType === "job_seeker" && leadSubmission ? (
-          <div className="space-y-4">
-            <JobSeekerSubmittedState
-              result={leadSubmission}
-              offerCode={offerCode}
-              onStartOver={() => {
-                clearResume();
-                setName("");
-                setEmail("");
-                setPhone("");
-                setLocation("");
-                setAddressLine1("");
-                setAddressCity("");
-                setAddressState("");
-                setAddressZip("");
-                setLinkedinUrl("");
-                setTargetRoles("");
-                setPreferredLocations("");
-                setPreferredIndustries("");
-                setWorkTypes([]);
-                setEmploymentTypes("");
-                setSalaryMin("");
-                setSalaryMax("");
-                setYearsExperience("");
-                setAuthorizedToWork(false);
-                setRequiresVisaSponsorship(false);
-                setCitizenshipStatus("");
-                setOpenToRelocation(false);
-                setAvailableForTravel(false);
-                setNonCompete(false);
-                setExtraNotes("");
-                setConsentVoice(false);
-                setAccountError("");
-                resetLeadState();
-              }}
-            />
-            <JobSeekerPasswordStep
-              fullName={name}
-              email={email}
-              creatingAccount={accountCreating}
-              createError={accountError}
-              onCreateAccount={handleCreateJobSeekerAccount}
-            />
-          </div>
-        ) : (
-          <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-2xl shadow-violet-100/70 sm:p-8">
+        <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-2xl shadow-violet-100/70 sm:p-8">
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">
                 <span className="h-2 w-2 rounded-full bg-orange-500" />
-                {userType === "am" ? "Workspace access" : "Lead intake only"}
+                {userType === "am" ? "Workspace access" : "Create your account"}
               </div>
               <h2 className="mt-4 text-2xl font-semibold text-gray-900">
-                {userType === "am" ? "Create your account" : "Send your details"}
+                {userType === "am" ? "Create your account" : "Create your account"}
               </h2>
               <p className="mt-2 text-sm text-gray-600">
                 {userType === "am"
                   ? "Sign up as an account manager to start managing job seekers."
-                  : "Name, email, phone, and resume are enough to start. We will collect the deeper search preferences later."}
+                  : "Tell us about your search and create your login. We will take you straight into onboarding."}
               </p>
             </div>
 
@@ -908,7 +585,7 @@ function SignUpForm() {
                           Upload your resume first
                         </p>
                         <p className="mt-1 text-xs text-gray-600">
-                          We will use it to pre-fill contact details and give the AM context before the consultation.
+                          We will use it to pre-fill your profile and give your account manager context for your search.
                         </p>
                       </div>
                       <span className="inline-flex shrink-0 items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -1324,8 +1001,43 @@ function SignUpForm() {
                         placeholder="Optional"
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        Optional. We will carry this into consultation instead of forcing pricing choices now.
+                        Optional. We will carry this into your account and apply it when you activate a campaign.
                       </p>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="password" className="block text-sm font-semibold text-gray-800">
+                          Password
+                        </label>
+                        <input
+                          id="password"
+                          name="password"
+                          type="password"
+                          autoComplete="new-password"
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="At least 8 characters"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-800">
+                          Confirm password
+                        </label>
+                        <input
+                          id="confirmPassword"
+                          name="confirmPassword"
+                          type="password"
+                          autoComplete="new-password"
+                          required
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-gray-900 shadow-sm placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-violet-500"
+                          placeholder="Re-enter your password"
+                        />
+                      </div>
                     </div>
 
                     <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
@@ -1336,7 +1048,7 @@ function SignUpForm() {
                         className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                       />
                       <span>
-                        I agree to receive a qualification call or text from JobGenius so the team can verify fit and book a consultation.
+                        I agree to let JobGenius contact me by call or text about my job search and onboarding.
                       </span>
                     </label>
                   </div>
@@ -1350,16 +1062,14 @@ function SignUpForm() {
                   className="w-full rounded-md border border-transparent bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading
-                    ? userType === "am"
-                      ? "Creating account..."
-                      : "Saving intake..."
+                    ? "Creating account..."
                     : userType === "am"
                       ? "Create account"
-                      : "Save intake and continue"}
+                      : "Create account & continue"}
                 </button>
                 {userType === "job_seeker" ? (
                   <p className="mt-3 text-center text-xs text-gray-500">
-                    Save your intake first. We will ask you to create your password right after.
+                    We will take you straight into onboarding to finish setting up your profile.
                   </p>
                 ) : (
                   <p className="mt-3 text-center text-xs text-gray-500">
@@ -1376,7 +1086,6 @@ function SignUpForm() {
               </div>
             </form>
           </div>
-        )}
       </div>
     </div>
   );
