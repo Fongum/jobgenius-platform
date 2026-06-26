@@ -149,13 +149,22 @@
           return { status: "NEEDS_ATTENTION", reason: fillResult.reason };
         }
 
-        const missing = this.extractRequiredFields();
+        let missing = this.extractRequiredFields();
         if (missing.length > 0) {
-          return {
-            status: "NEEDS_ATTENTION",
-            reason: "REQUIRED_FIELDS",
-            missing_fields: missing,
-          };
+          // Ask the server's shared fill brain (learned rules → screening →
+          // LLM) to resolve the remaining required fields, then re-check.
+          const classifiedCount = await dom.classifyAndFill?.(ctx, missing);
+          if (classifiedCount > 0) {
+            await dom.sleep(400);
+            missing = this.extractRequiredFields();
+          }
+          if (missing.length > 0) {
+            return {
+              status: "NEEDS_ATTENTION",
+              reason: "REQUIRED_FIELDS",
+              missing_fields: missing,
+            };
+          }
         }
 
         if (ctx.dryRun) {

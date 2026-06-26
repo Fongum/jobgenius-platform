@@ -12,6 +12,7 @@ import {
   buildJobGeniusReportMessage,
   type JobGeniusReport,
 } from "@/lib/jobgenius/report";
+import { RESUME_TEMPLATES, type ResumeTemplateId } from "@/lib/resume-templates/types";
 import type { ClientDeliveryCaseBundle } from "@/lib/client-delivery";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
 
@@ -60,6 +61,9 @@ interface SeekerData {
   id: string;
   full_name: string | null;
   email: string;
+  collaboration_agreement_requested_at?: string | null;
+  collaboration_agreement_signed_at?: string | null;
+  resume_template_id?: ResumeTemplateId | null;
   phone: string | null;
   location: string | null;
   seniority: string | null;
@@ -727,6 +731,186 @@ function EditableChips({
   );
 }
 
+function ResumeTemplateCard({ seeker }: { seeker: SeekerData }) {
+  const [templateId, setTemplateId] = useState<ResumeTemplateId>(
+    seeker.resume_template_id ?? "classic"
+  );
+  const [saving, setSaving] = useState<ResumeTemplateId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Render the client's base resume in the selected template for a live preview.
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    fetch("/api/am/resume-template/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_seeker_id: seeker.id, template_id: templateId }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Preview unavailable.");
+        }
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setPreviewUrl(objectUrl);
+      })
+      .catch((e) => {
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : "Preview unavailable.");
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [templateId, seeker.id]);
+
+  const choose = async (next: ResumeTemplateId) => {
+    if (next === templateId) return;
+    setError(null);
+    setSaving(next);
+    const prev = templateId;
+    setTemplateId(next);
+    try {
+      const res = await fetch("/api/am/resume-template", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_seeker_id: seeker.id, template_id: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setTemplateId(prev);
+        setError(data.error || "Failed to update template.");
+      }
+    } catch {
+      setTemplateId(prev);
+      setError("Failed to update template.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <Section title="Resume Template">
+      <p className="mb-3 text-xs text-gray-500">
+        Every resume JobGenius tailors for this client uses this template. Change it anytime.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {RESUME_TEMPLATES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => choose(t.id)}
+            disabled={saving !== null}
+            className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-60 ${
+              templateId === t.id
+                ? "border-violet-500 bg-violet-50 text-violet-700 font-medium"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            <span className="flex items-center justify-between">
+              <span className="font-medium">{t.name}</span>
+              {saving === t.id ? (
+                <span className="text-[10px] text-gray-400">Saving…</span>
+              ) : templateId === t.id ? (
+                <span className="text-[10px] text-violet-500">Selected</span>
+              ) : null}
+            </span>
+            <span className="mt-0.5 block text-xs text-gray-400">{t.description}</span>
+          </button>
+        ))}
+      </div>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+
+      <div className="mt-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-500">Preview</span>
+          {previewLoading && <span className="text-[10px] text-gray-400">Rendering…</span>}
+        </div>
+        {previewError ? (
+          <p className="mt-1 text-xs text-amber-600">{previewError}</p>
+        ) : (
+          <iframe
+            title="Resume template preview"
+            src={previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&view=FitH` : undefined}
+            className="mt-1 h-80 w-full rounded-lg border border-gray-200 bg-gray-50"
+          />
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function AgreementPushCard({ seeker }: { seeker: SeekerData }) {
+  const [requestedAt, setRequestedAt] = useState<string | null>(
+    seeker.collaboration_agreement_requested_at ?? null
+  );
+  const signedAt = seeker.collaboration_agreement_signed_at ?? null;
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = async () => {
+    setError(null);
+    setSending(true);
+    try {
+      const res = await fetch("/api/am/agreement/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_seeker_id: seeker.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Failed to send the agreement.");
+        return;
+      }
+      setRequestedAt(data.requested_at);
+    } catch {
+      setError("Failed to send the agreement.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Section title="Service Agreement">
+      {signedAt ? (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+          Signed by client on {new Date(signedAt).toLocaleDateString()}.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">
+            {requestedAt
+              ? `Sent ${new Date(requestedAt).toLocaleDateString()} — awaiting the client's signature.`
+              : "The client can preview the agreement in their portal, but can only sign once you send it."}
+          </p>
+          <button
+            type="button"
+            onClick={send}
+            disabled={sending}
+            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-lg disabled:opacity-50"
+          >
+            {sending ? "Sending…" : requestedAt ? "Resend agreement" : "Send agreement to client"}
+          </button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function OverviewTab({
   seeker,
   references,
@@ -789,6 +973,10 @@ function OverviewTab({
             <InfoRow label="Portfolio" value={seeker.portfolio_url} link />
           </dl>
         </Section>
+
+        <ResumeTemplateCard seeker={seeker} />
+
+        <AgreementPushCard seeker={seeker} />
 
         <Section title={<span className="flex items-center gap-2">Target Titles {saving === "target_titles" && <span className="text-xs text-gray-400">Saving...</span>}{saveMsg?.field === "target_titles" && <span className={`text-xs ${saveMsg.type === "success" ? "text-green-600" : "text-red-600"}`}>{saveMsg.text}</span>}</span>}>
           <EditableChips

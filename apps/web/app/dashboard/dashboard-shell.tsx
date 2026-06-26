@@ -45,6 +45,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/pipeline", label: "Job Hub", icon: "briefcase" },
       { href: "/dashboard/attention", label: "Needs Attention", icon: "alert" },
+      { href: "/dashboard/apply-health", label: "Apply Health", icon: "chart" },
     ],
   },
   {

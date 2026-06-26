@@ -226,6 +226,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       tailored_resume: upserted,
       changes_summary: structuredResult.changesSummary,
+      coverage: structuredResult.coverage ?? null,
     });
   } catch (structuredErr) {
     // Fall back to plain-text tailoring

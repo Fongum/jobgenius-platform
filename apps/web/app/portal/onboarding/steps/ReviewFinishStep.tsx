@@ -244,6 +244,27 @@ export default function ReviewFinishStep({
         />
       </div>
 
+      {/* Glimpse of how JobGenius is paid — informational only, no signature here. */}
+      <div className="mt-6 rounded-lg border border-violet-200 bg-violet-50 p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
+            5%
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">How JobGenius is paid</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-600">
+              There&apos;s no upfront cost. We charge a 5% placement fee only when you accept a job we
+              help you land, due within two months of your start date. Your account manager will share
+              the full service agreement for signature when the time is right.{" "}
+              <a href="/portal/agreement" className="font-medium text-violet-700 hover:text-violet-900">
+                Preview the agreement
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-between mt-8">
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
           Back

@@ -1,5 +1,21 @@
 export async function extractRequiredFields(page) {
   return page.evaluate(() => {
+    // Pierce open shadow roots so web-component fields (Workday etc.) are seen.
+    const queryAllDeep = (selector, root = document) => {
+      const out = [];
+      const seen = new Set();
+      const visit = (node) => {
+        if (!node || seen.has(node) || typeof node.querySelectorAll !== "function") return;
+        seen.add(node);
+        node.querySelectorAll(selector).forEach((el) => out.push(el));
+        node.querySelectorAll("*").forEach((el) => {
+          if (el.shadowRoot) visit(el.shadowRoot);
+        });
+      };
+      visit(root);
+      return out;
+    };
+
     const getLabelText = (input) => {
       const id = input.getAttribute("id");
       if (id) {
@@ -56,7 +72,7 @@ export async function extractRequiredFields(page) {
 
     const requiredFields = [];
     const radioGroups = new Map();
-    const inputs = Array.from(document.querySelectorAll("input, textarea, select"));
+    const inputs = queryAllDeep("input, textarea, select");
 
     for (const input of inputs) {
       if (
@@ -366,15 +382,12 @@ async function fillSelectFields(page, profile) {
     if (!hint) continue;
 
     let candidates = null;
-    if (hint.includes("authorized") || hint.includes("legally work") || hint.includes("work authorization")) {
-      candidates = ["yes", "authorized", "u.s. citizen", "citizen"];
-    } else if (hint.includes("sponsor") || hint.includes("sponsorship")) {
-      candidates = ["no", "does not require", "will not require"];
-    } else if (hint.includes("country")) {
+    // Sensitive / preference-bearing fields (work authorization, sponsorship,
+    // EEO/demographics) are deferred to the screening-aware classify step,
+    // which honors the seeker's configured screening answers before any default.
+    if (hint.includes("country")) {
       const country = pickFirst(profile?.address_country);
       candidates = country ? [country.toLowerCase(), "united states", "usa"] : ["united states", "usa"];
-    } else if (hint.includes("gender") || hint.includes("race") || hint.includes("veteran") || hint.includes("disability")) {
-      candidates = ["prefer not to answer", "decline to self-identify", "decline to answer"];
     }
 
     if (!candidates) continue;
@@ -418,13 +431,10 @@ async function fillRadioGroups(page, profile) {
     const hint = await getGroupHint(firstRadio);
     if (!hint) continue;
 
-    let targetLabel = null;
-    if (hint.includes("authorized") || hint.includes("eligible to work")) targetLabel = "yes";
-    else if (hint.includes("sponsor")) targetLabel = "no";
-    else if (hint.includes("relocate")) targetLabel = "yes";
-    else if (hint.includes("gender") || hint.includes("race") || hint.includes("veteran") || hint.includes("disability")) {
-      targetLabel = "prefer not";
-    }
+    // Work authorization, sponsorship, relocation, and EEO radio groups are
+    // deferred to the screening-aware classify step rather than answered with
+    // blind defaults that could override the seeker's configured answers.
+    const targetLabel = null;
 
     if (!targetLabel) continue;
 

@@ -288,12 +288,20 @@ async function runAutoAdvance({
       : await extractRequiredFields(page);
 
     if (missingFields.length > 0) {
-      // Try LLM field classifier + screening answers before giving up
+      // Resolve via learned-rule cache → screening answers → LLM, and learn
+      // from any LLM result so the next application is a cache hit.
+      let urlHost = "";
+      try {
+        urlHost = new URL(page.url()).hostname.toLowerCase();
+      } catch {
+        urlHost = "";
+      }
       const classifiedValues = await classifyFields(
         missingFields,
         ctx.profile,
         ctx.screeningAnswers ?? [],
-        ctx.job ?? null
+        ctx.job ?? null,
+        { apiBaseUrl, authToken, claimToken, runnerId, atsType: ctx.atsType, urlHost }
       );
       if (Object.keys(classifiedValues).length > 0) {
         await fillClassifiedFields(page, classifiedValues);

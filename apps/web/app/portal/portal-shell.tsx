@@ -8,7 +8,9 @@ import LogoutButton from "./logout-button";
 const NAV_ITEMS = [
   { href: "/portal", label: "Dashboard", icon: "home" },
   { href: "/portal/profile", label: "Profile", icon: "user" },
+  { href: "/portal/resumes", label: "Resumes", icon: "academic" },
   { href: "/portal/billing", label: "Billing", icon: "credit-card" },
+  { href: "/portal/agreement", label: "Agreement", icon: "book" },
   { href: "/portal/conversations", label: "Questions & Tasks", icon: "chat" },
   { href: "/portal/references", label: "References", icon: "users" },
   { href: "/portal/applications", label: "Applications", icon: "briefcase" },

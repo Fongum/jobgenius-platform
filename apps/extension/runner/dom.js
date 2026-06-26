@@ -3,6 +3,29 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // Collects matches across the document AND all open shadow roots, so inputs
+  // and controls inside web components (Workday, some Ashby boards, etc.) are
+  // detected and fillable. Falls back to a plain query on closed/odd nodes.
+  function queryAllDeep(selector, root = document) {
+    const out = [];
+    const seen = new Set();
+    const visit = (node) => {
+      if (!node || seen.has(node)) return;
+      seen.add(node);
+      if (typeof node.querySelectorAll !== "function") return;
+      node.querySelectorAll(selector).forEach((el) => out.push(el));
+      node.querySelectorAll("*").forEach((el) => {
+        if (el.shadowRoot) visit(el.shadowRoot);
+      });
+    };
+    visit(root);
+    return out;
+  }
+
+  function queryDeep(selector, root = document) {
+    return queryAllDeep(selector, root)[0] ?? null;
+  }
+
   function normalizeButtonTexts(texts) {
     return (texts ?? [])
       .map((text) => (text ?? "").toString().trim().toLowerCase())
@@ -42,7 +65,7 @@
     if (targets.length === 0) return null;
 
     const buttons = Array.from(
-      document.querySelectorAll(
+      queryAllDeep(
         "button, input[type='submit'], input[type='button'], [role='button']"
       )
     );
@@ -60,7 +83,7 @@
     if (targets.length === 0) return null;
 
     const controls = Array.from(
-      document.querySelectorAll(
+      queryAllDeep(
         "button, input[type='submit'], input[type='button'], [role='button'], a[href], a[role='button']"
       )
     );
@@ -86,7 +109,7 @@
 
   function hasBlockingCaptchaIframe() {
     const iframes = Array.from(
-      document.querySelectorAll(
+      queryAllDeep(
         "iframe[src*='captcha'], iframe[src*='recaptcha'], iframe[src*='turnstile'], iframe[title*='captcha' i], iframe[title*='challenge' i]"
       )
     );
@@ -126,7 +149,7 @@
     ];
 
     const candidates = selectors.flatMap((selector) =>
-      Array.from(document.querySelectorAll(selector))
+      Array.from(queryAllDeep(selector))
     );
 
     return candidates.some((node) => {
@@ -212,7 +235,7 @@
   }
 
   function getOtpInputCandidates() {
-    return Array.from(document.querySelectorAll("input, textarea"))
+    return Array.from(queryAllDeep("input, textarea"))
       .filter((input) => looksLikeOtpInput(input))
       .sort((a, b) => {
         const aPriority = normalizeHint(a.getAttribute("autocomplete")) === "one-time-code" ? 1 : 0;
@@ -412,7 +435,7 @@
   function fillTextInputs(defaultEmail, profile = null) {
     let filled = 0;
     const inputs = Array.from(
-      document.querySelectorAll(
+      queryAllDeep(
         "input[type='text'], input[type='email'], input[type='tel'], input:not([type])"
       )
     );
@@ -435,7 +458,7 @@
 
   function fillSelectInputs(defaultEmail, profile = null) {
     let filled = 0;
-    const selects = Array.from(document.querySelectorAll("select"));
+    const selects = Array.from(queryAllDeep("select"));
 
     selects.forEach((select) => {
       if (select.disabled) return;
@@ -449,12 +472,12 @@
 
       let candidates = null;
 
-      if (hint.includes("authorized") || hint.includes("legally work") ||
-          hint.includes("eligible to work") || hint.includes("work authorization")) {
-        candidates = ["yes", "authorized", "u.s. citizen", "citizen", "legally authorized", "i am authorized"];
-      } else if (hint.includes("sponsor") || hint.includes("sponsorship")) {
-        candidates = ["no", "does not require", "will not require", "no sponsorship", "i will not"];
-      } else if (hint.includes("country")) {
+      // Sensitive / preference-bearing fields (work authorization, sponsorship,
+      // EEO/demographics, relocation) are intentionally NOT answered here with
+      // blind defaults — they are deferred to the screening-aware classify step
+      // (/api/apply/classify-fields), which honors the seeker's configured
+      // screening answers before applying any default.
+      if (hint.includes("country")) {
         const country = pickFirst(profile?.address_country);
         const primary = country ? [country.toLowerCase()] : [];
         candidates = [...primary, "united states", "usa", "us", "united states of america"];
@@ -462,17 +485,6 @@
         candidates = ["3-5 years", "3 to 5", "5+ years", "5 years", "4 years", "3 years", "2-5", "1-3"];
       } else if (hint.includes("employment type") || hint.includes("job type") || hint.includes("work type")) {
         candidates = ["full-time", "full time", "permanent", "regular"];
-      } else if (hint.includes("gender") || hint.includes("race") || hint.includes("ethnicity") ||
-                 hint.includes("veteran") || hint.includes("disability")) {
-        candidates = [
-          "prefer not to answer",
-          "decline to self-identify",
-          "i do not wish",
-          "prefer not to say",
-          "choose not to disclose",
-          "i prefer not",
-          "decline to answer",
-        ];
       }
 
       if (!candidates) return;
@@ -492,7 +504,7 @@
 
   function fillRadioGroups(profile) {
     let filled = 0;
-    const radios = Array.from(document.querySelectorAll("input[type='radio']"));
+    const radios = Array.from(queryAllDeep("input[type='radio']"));
 
     const groups = new Map();
     radios.forEach((radio) => {
@@ -510,20 +522,11 @@
       const groupHint = getGroupHint(firstRadio);
       if (!groupHint) return;
 
+      // Work authorization, sponsorship, relocation, and EEO/demographic radio
+      // groups are deferred to the screening-aware classify step rather than
+      // answered with blind defaults that could override the seeker's own
+      // configured screening answers.
       let targetLabel = null;
-
-      if (groupHint.includes("authorized") || groupHint.includes("eligible to work") ||
-          groupHint.includes("legally authorized") || groupHint.includes("work in the u")) {
-        targetLabel = "yes";
-      } else if (groupHint.includes("sponsor") || groupHint.includes("sponsorship")) {
-        targetLabel = "no";
-      } else if (groupHint.includes("relocate") || groupHint.includes("relocation")) {
-        targetLabel = "yes";
-      } else if (groupHint.includes("gender") || groupHint.includes("race") ||
-                 groupHint.includes("ethnicity") || groupHint.includes("veteran") ||
-                 groupHint.includes("disability")) {
-        targetLabel = "prefer not to answer";
-      }
 
       if (!targetLabel) return;
 
@@ -549,7 +552,7 @@
 
   function fillCheckboxes() {
     let filled = 0;
-    const checkboxes = Array.from(document.querySelectorAll("input[type='checkbox']"));
+    const checkboxes = Array.from(queryAllDeep("input[type='checkbox']"));
     const autoCheckKeywords = [
       "agree", "accept", "certify", "confirm", "acknowledge",
       "terms", "conditions", "correct", "authorize",
@@ -571,7 +574,7 @@
 
   function fillTextAreas(profile, job) {
     let filled = 0;
-    const textareas = Array.from(document.querySelectorAll("textarea"));
+    const textareas = Array.from(queryAllDeep("textarea"));
     const fullName = pickFirst(profile?.full_name, profile?.name);
     const jobTitle = pickFirst(job?.title, "this position");
     const company = pickFirst(job?.company, "your company");
@@ -630,7 +633,7 @@
   }
 
   async function uploadResume(resumeUrl) {
-    const fileInputs = Array.from(document.querySelectorAll("input[type='file']"))
+    const fileInputs = Array.from(queryAllDeep("input[type='file']"))
       .filter((input) => !input.disabled);
     const input =
       fileInputs.find((fileInput) => {
@@ -704,7 +707,7 @@
   function extractRequiredFields() {
     const requiredFields = [];
     const radioGroups = new Map();
-    const inputs = Array.from(document.querySelectorAll("input, textarea, select"));
+    const inputs = Array.from(queryAllDeep("input, textarea, select"));
 
     inputs.forEach((input) => {
       if (input.disabled || !isRequiredField(input)) {
@@ -777,7 +780,7 @@
       document.querySelector("h1, h2, [role='heading']")?.textContent?.trim() ?? "";
     const requiredCount = extractRequiredFields().length;
     const buttonSnapshot = Array.from(
-      document.querySelectorAll(
+      queryAllDeep(
         "button, input[type='submit'], input[type='button'], [role='button']"
       )
     )
@@ -848,7 +851,7 @@
       "[data-testid='cookie-accept']",
     ];
     for (const sel of cookieSelectors) {
-      const btn = document.querySelector(sel);
+      const btn = queryDeep(sel);
       if (btn instanceof HTMLElement && btn.offsetParent !== null) {
         btn.click();
         dismissed = true;
@@ -864,7 +867,7 @@
       "[data-dismiss='modal']",
     ];
     for (const sel of modalSelectors) {
-      const btn = document.querySelector(sel);
+      const btn = queryDeep(sel);
       if (btn instanceof HTMLElement && btn.offsetParent !== null) {
         btn.click();
         dismissed = true;
@@ -882,14 +885,14 @@
     if (!resumeUrl) return { ok: false, reason: "NO_INPUT_OR_URL" };
 
     // Try standard input first
-    const fileInputs = Array.from(document.querySelectorAll("input[type='file']"))
+    const fileInputs = Array.from(queryAllDeep("input[type='file']"))
       .filter((input) => !input.disabled);
     if (fileInputs.length > 0) {
       return uploadResume(resumeUrl); // Use existing method
     }
 
     // Look for drop zones
-    const dropZone = document.querySelector(
+    const dropZone = queryDeep(
       "[class*='dropzone'], [class*='drop-zone'], [class*='upload-area'], " +
       "[class*='file-upload'], [class*='drag-drop'], " +
       ".dz-clickable, .filepond--root"
@@ -899,13 +902,166 @@
       // Clicking often reveals a file input
       dropZone.click();
       await sleep(1000);
-      const revealedInput = document.querySelector("input[type='file']");
+      const revealedInput = queryDeep("input[type='file']");
       if (revealedInput) {
         return uploadResume(resumeUrl);
       }
     }
 
     return { ok: false, reason: "NO_UPLOAD_ELEMENT" };
+  }
+
+  // ─── Shared fill brain: apply { label -> value } answers resolved by the
+  //     server (/api/apply/classify-fields: learned rules → screening → LLM). ───
+
+  function normLabel(value) {
+    return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  function setNativeValue(el, value) {
+    const proto =
+      el.tagName.toLowerCase() === "textarea"
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (setter) {
+      setter.call(el, value);
+    } else {
+      el.value = value;
+    }
+  }
+
+  function setValueOnElement(el, value) {
+    // Bring the field into view before touching it: improves reliability on
+    // lazy-rendered forms and looks more human than instant off-screen edits.
+    try {
+      el.scrollIntoView({ block: "center" });
+    } catch {
+      /* not scrollable / detached — ignore */
+    }
+    const tag = el.tagName.toLowerCase();
+    const type = normalizeHint(el.getAttribute("type") || tag);
+    const text = String(value ?? "");
+
+    if (tag === "select") {
+      const options = Array.from(el.options);
+      const match =
+        options.find((o) => normLabel(o.textContent) === normLabel(text) || normLabel(o.value) === normLabel(text)) ||
+        options.find((o) => normLabel(o.textContent) && normLabel(o.textContent).includes(normLabel(text))) ||
+        options.find((o) => normLabel(o.textContent) && normLabel(text).includes(normLabel(o.textContent)));
+      if (!match) return false;
+      el.value = match.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+
+    if (type === "checkbox") {
+      const affirmative = ["yes", "true", "1", "on", "agree", "i agree"].includes(normLabel(text));
+      if (el.checked !== affirmative) el.click();
+      return true;
+    }
+
+    el.focus();
+    setNativeValue(el, text);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    if (typeof el.blur === "function") el.blur();
+    return true;
+  }
+
+  function fillRadioByLabel(target, value) {
+    const radios = Array.from(queryAllDeep("input[type='radio']"));
+    const groups = new Map();
+    radios.forEach((r) => {
+      const key = r.getAttribute("name") || r.getAttribute("id") || getLabelText(r);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    });
+    for (const group of groups.values()) {
+      const rep = normLabel(getLabelText(group[0]) || getGroupHint(group[0]));
+      if (rep !== target && !rep.includes(target) && !target.includes(rep)) continue;
+      const pick = group.find((r) => {
+        if (r.disabled) return false;
+        const optText = normLabel(
+          r.getAttribute("aria-label") || r.getAttribute("value") || getLabelText(r)
+        );
+        return optText === normLabel(value) || optText.includes(normLabel(value)) || normLabel(value).includes(optText);
+      });
+      if (pick) {
+        pick.click();
+        pick.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function fillFieldsByLabel(values) {
+    if (!values || typeof values !== "object") return 0;
+    const entries = Object.entries(values).filter(
+      ([, v]) => v !== null && v !== undefined && String(v).trim()
+    );
+    if (entries.length === 0) return 0;
+
+    const inputs = Array.from(queryAllDeep("input, textarea, select"));
+    let filled = 0;
+
+    for (const [label, value] of entries) {
+      const target = normLabel(label);
+      if (!target) continue;
+
+      const el = inputs.find((i) => {
+        if (i.disabled) return false;
+        const type = normalizeHint(i.getAttribute("type") || i.tagName.toLowerCase());
+        if (type === "radio" || type === "file") return false;
+        return normLabel(getLabelText(i)) === target;
+      });
+
+      if (el && setValueOnElement(el, value)) {
+        filled += 1;
+        continue;
+      }
+
+      if (fillRadioByLabel(target, value)) {
+        filled += 1;
+      }
+    }
+
+    return filled;
+  }
+
+  async function classifyAndFill(ctx, fields) {
+    if (!ctx?.apiBaseUrl || !ctx?.authToken || !ctx?.jobSeekerId) return 0;
+    if (!Array.isArray(fields) || fields.length === 0) return 0;
+    try {
+      const response = await fetch(`${ctx.apiBaseUrl}/api/apply/classify-fields`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ctx.authToken}`,
+          "x-runner": "extension",
+          "x-claim-token": ctx.claimToken ?? "",
+        },
+        body: JSON.stringify({
+          job_seeker_id: ctx.jobSeekerId,
+          ats_type: ctx.atsType ?? null,
+          url_host: window.location.hostname,
+          fields: fields.map((f) => ({ label: f.label, type: f.type, options: f.options })),
+          job: ctx.job ? { title: ctx.job.title ?? null, company: ctx.job.company ?? null } : null,
+        }),
+      });
+      if (!response.ok) return 0;
+      const data = await response.json();
+      const filled = fillFieldsByLabel(data?.map ?? {});
+      // Jittered pause so the follow-up submit doesn't fire instantly after a
+      // burst of fills (less bot-like, lets validation/JS settle).
+      if (filled > 0) await sleep(200 + Math.floor(Math.random() * 350));
+      return filled;
+    } catch (error) {
+      console.warn("classifyAndFill failed:", error);
+      return 0;
+    }
   }
 
   window.JobGeniusDom = {
@@ -921,6 +1077,8 @@
     fillCheckboxes,
     fillTextAreas,
     fillAllFields,
+    fillFieldsByLabel,
+    classifyAndFill,
     uploadResume,
     uploadViaDragDrop,
     findOtpInput,

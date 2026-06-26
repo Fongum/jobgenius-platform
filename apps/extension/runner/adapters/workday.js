@@ -89,13 +89,20 @@
         const fillResult = await this.fillKnownFields(ctx);
         if (!fillResult.ok) return { status: "NEEDS_ATTENTION", reason: fillResult.reason };
 
-        const missing = this.extractRequiredFields();
+        let missing = this.extractRequiredFields();
         if (missing.length > 0) {
-          return {
-            status: "NEEDS_ATTENTION",
-            reason: "REQUIRED_FIELDS",
-            missing_fields: missing,
-          };
+          const classifiedCount = await dom.classifyAndFill?.(ctx, missing);
+          if (classifiedCount > 0) {
+            await dom.sleep(400);
+            missing = this.extractRequiredFields();
+          }
+          if (missing.length > 0) {
+            return {
+              status: "NEEDS_ATTENTION",
+              reason: "REQUIRED_FIELDS",
+              missing_fields: missing,
+            };
+          }
         }
 
         const before = dom.captureFlowFingerprint?.() ?? window.location.href;

@@ -214,9 +214,20 @@
   }
 
   async function handleMissingFields(ctx, adapter, stepName) {
-    const missingFields = adapter.extractRequiredFields
+    let missingFields = adapter.extractRequiredFields
       ? adapter.extractRequiredFields()
       : dom.extractRequiredFields();
+
+    if (missingFields.length > 0) {
+      // Resolve via the server's shared fill brain before pausing for a human.
+      const classifiedCount = await dom.classifyAndFill?.(ctx, missingFields);
+      if (classifiedCount > 0) {
+        await dom.sleep(400);
+        missingFields = adapter.extractRequiredFields
+          ? adapter.extractRequiredFields()
+          : dom.extractRequiredFields();
+      }
+    }
 
     if (missingFields.length > 0) {
       sidebarReportMissing(missingFields);
@@ -326,9 +337,19 @@
         sidebarReportFill(fillSummary);
       }
 
-      const missingFields = adapter.extractRequiredFields
+      let missingFields = adapter.extractRequiredFields
         ? adapter.extractRequiredFields()
         : dom.extractRequiredFields();
+
+      if (missingFields.length > 0) {
+        const classifiedCount = await dom.classifyAndFill?.(ctx, missingFields);
+        if (classifiedCount > 0) {
+          await dom.sleep(400);
+          missingFields = adapter.extractRequiredFields
+            ? adapter.extractRequiredFields()
+            : dom.extractRequiredFields();
+        }
+      }
 
       if (missingFields.length > 0) {
         sidebarReportMissing(missingFields);

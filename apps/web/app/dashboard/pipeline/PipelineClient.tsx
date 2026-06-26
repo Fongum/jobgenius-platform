@@ -2112,6 +2112,14 @@ function ResumesTab({
                   </button>
                 ))}
               </div>
+              {selectedItem && (
+                <ExactPdfPreview
+                  jobSeekerId={selectedItem.job_seeker_id}
+                  jobPostId={selectedItem.job_post_id}
+                  templateId={selectedTemplate}
+                  hasTailored={Boolean(activeData)}
+                />
+              )}
             </div>
 
             <div className="flex items-center justify-between">
@@ -2854,5 +2862,92 @@ function ScoreBadge({ score }: { score: number }) {
     <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${color}`}>
       {score}
     </span>
+  );
+}
+
+// Exact-PDF fidelity preview for the selected template. The inline ResumePreview
+// above is an editable HTML approximation; this shows the real rendered PDF
+// (the tailored resume if one exists, otherwise the base resume in that template).
+function ExactPdfPreview({
+  jobSeekerId,
+  jobPostId,
+  templateId,
+  hasTailored,
+}: {
+  jobSeekerId: string;
+  jobPostId: string;
+  templateId: ResumeTemplateId;
+  hasTailored: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setLoading(true);
+    setError(null);
+    const endpoint = hasTailored
+      ? "/api/am/resume-tailor/pdf"
+      : "/api/am/resume-template/preview";
+    const body = hasTailored
+      ? { job_seeker_id: jobSeekerId, job_post_id: jobPostId, template_id: templateId }
+      : { job_seeker_id: jobSeekerId, template_id: templateId };
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Preview unavailable.");
+        }
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setUrl(objectUrl);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Preview unavailable.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [open, templateId, jobSeekerId, jobPostId, hasTailored]);
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs font-medium text-blue-600 hover:text-blue-800"
+      >
+        {open ? "Hide exact PDF" : "View exact PDF"}
+      </button>
+      {open && (
+        <div className="mt-2">
+          {loading && <p className="text-xs text-gray-400">Rendering…</p>}
+          {error && <p className="text-xs text-amber-600">{error}</p>}
+          {url && (
+            <iframe
+              title="Exact PDF preview"
+              src={`${url}#toolbar=0&navpanes=0&view=FitH`}
+              className="h-96 w-full rounded-lg border border-gray-200 bg-gray-50"
+            />
+          )}
+        </div>
+      )}
+    </div>
   );
 }

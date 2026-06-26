@@ -5,6 +5,37 @@
   const sidebar = window.JobGeniusRunnerSidebar;
   const MIN_PLAN_VERSION = 4;
 
+  const ATS_FRAME_HOSTS = [
+    "greenhouse.io",
+    "lever.co",
+    "myworkdayjobs.com",
+    "workday.com",
+    "ashbyhq.com",
+    "workable.com",
+    "icims.com",
+    "smartrecruiters.com",
+    "jobvite.com",
+    "breezy.hr",
+    "bamboohr.com",
+  ];
+
+  // With all-frames injection every frame receives START_RUN. Exactly one
+  // frame should actually drive the run, so each frame self-elects:
+  //   • a child frame runs only if it is a known ATS application frame;
+  //   • the top frame runs unless it embeds a known ATS iframe (then it
+  //     defers to that iframe's own runner).
+  function shouldRunInThisFrame() {
+    const isTop = window.top === window.self;
+    if (!isTop) {
+      const host = window.location.hostname.toLowerCase();
+      return ATS_FRAME_HOSTS.some((h) => host.includes(h));
+    }
+    const hasAtsIframe = ATS_FRAME_HOSTS.some((h) =>
+      document.querySelector(`iframe[src*='${h}']`)
+    );
+    return !hasAtsIframe;
+  }
+
   function detectAtsType() {
     const host = window.location.hostname.toLowerCase();
     if (host.includes("linkedin")) return "LINKEDIN";
@@ -16,6 +47,8 @@
     if (host.includes("jobvite.com")) return "JOBVITE";
     if (host.includes("breezy.hr")) return "BREEZY";
     if (host.includes("ashbyhq.com")) return "ASHBY";
+    if (host.includes("workable.com")) return "WORKABLE";
+    if (host.includes("bamboohr.com")) return "BAMBOOHR";
     return "GENERIC";
   }
 
@@ -241,6 +274,9 @@
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type !== "START_RUN") return;
+    // Only the elected frame drives the run; other frames stay silent so they
+    // don't race or emit a premature RUN_COMPLETE.
+    if (!shouldRunInThisFrame()) return;
     runAutomation(message).catch(async (error) => {
       console.error("Runner error:", error);
       sidebar?.finish?.("Error", error?.message ?? "Runner failed.");

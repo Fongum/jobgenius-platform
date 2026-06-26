@@ -9,6 +9,7 @@ import { workdayAdapter } from "./adapters/workday.js";
 import { genericAdapter } from "./adapters/generic.js";
 import { leverAdapter } from "./adapters/lever.js";
 import { smartRecruitersAdapter } from "./adapters/smartrecruiters.js";
+import { hostedAtsAdapters } from "./adapters/hosted-ats.js";
 import { start as startDiscoveryAgent } from "./discovery/agent.js";
 import { logLine } from "./logger.js";
 import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
@@ -75,7 +76,7 @@ if (!STATE_KEY && process.env.NODE_ENV === "production") {
   });
 }
 
-const adapters = [linkedinAdapter, greenhouseAdapter, workdayAdapter, leverAdapter, smartRecruitersAdapter, genericAdapter];
+const adapters = [linkedinAdapter, greenhouseAdapter, workdayAdapter, leverAdapter, smartRecruitersAdapter, ...hostedAtsAdapters, genericAdapter];
 const activeRuns = new Set();
 const jobSeekerHistory = new Map();
 const jobSeekerAuthFailures = new Map();

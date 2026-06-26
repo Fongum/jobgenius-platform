@@ -50,6 +50,7 @@ const els = {
   showAppliedJobsBtn: document.getElementById("showAppliedJobs"),
   myJobsList: document.getElementById("myJobsList"),
   myJobsEmpty: document.getElementById("myJobsEmpty"),
+  applySummary: document.getElementById("applySummary"),
   referrerPanel: document.getElementById("referrerPanel"),
   referrerTitle: document.getElementById("referrerTitle"),
   referrerStatus: document.getElementById("referrerStatus"),
@@ -112,11 +113,16 @@ function getApiBaseUrl() {
   return normalizeUrl(apiBaseUrl || DEFAULT_API_BASE_URL);
 }
 
+function extVersion() {
+  return chrome.runtime?.getManifest?.().version ?? "";
+}
+
 function getHeaders() {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${authToken}`,
     "x-runner": "extension",
+    "x-ext-version": extVersion(),
   };
 }
 
@@ -124,7 +130,23 @@ function getManualHeaders() {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${authToken}`,
+    "x-ext-version": extVersion(),
   };
+}
+
+// Semver-ish compare: returns true when `current` is older than `minimum`.
+function isVersionOutdated(current, minimum) {
+  if (!minimum) return false;
+  const toParts = (v) => String(v || "0").split(".").map((n) => parseInt(n, 10) || 0);
+  const c = toParts(current);
+  const m = toParts(minimum);
+  for (let i = 0; i < Math.max(c.length, m.length); i += 1) {
+    const a = c[i] ?? 0;
+    const b = m[i] ?? 0;
+    if (a < b) return true;
+    if (a > b) return false;
+  }
+  return false;
 }
 
 function mapSameSite(value) {
@@ -223,8 +245,15 @@ async function verifySession() {
     const data = await response.json();
     amInfo = data.account_manager;
     await chrome.storage.local.set({ [STORAGE_KEYS.amInfo]: amInfo });
+    maybeShowUpdateBanner(data.min_extension_version);
     return true;
   } catch { return false; }
+}
+
+function maybeShowUpdateBanner(minVersion) {
+  const banner = document.getElementById("updateBanner");
+  if (!banner) return;
+  banner.classList.toggle("hidden", !isVersionOutdated(extVersion(), minVersion));
 }
 
 // ─── UI State Management ──────────────────────────────────────
@@ -563,9 +592,35 @@ function renderReferrerGroup(label, rows) {
   `;
 }
 
+function updateApplySummary(items) {
+  if (!els.applySummary) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    els.applySummary.textContent = "";
+    return;
+  }
+  let applied = 0;
+  let needsYou = 0;
+  let inQueue = 0;
+  let running = 0;
+  for (const item of items) {
+    const s = String(item.run_status || item.queue_status || "").toUpperCase();
+    if (["APPLIED", "COMPLETED", "SUBMITTED"].includes(s)) applied += 1;
+    else if (s === "NEEDS_ATTENTION") needsYou += 1;
+    else if (s === "RUNNING") running += 1;
+    else if (["QUEUED", "READY", "RETRYING"].includes(s)) inQueue += 1;
+  }
+  const parts = [];
+  if (inQueue) parts.push(`${inQueue} in queue`);
+  if (running) parts.push(`${running} running`);
+  if (needsYou) parts.push(`${needsYou} need you`);
+  if (includeAppliedJobs && applied) parts.push(`${applied} applied`);
+  els.applySummary.textContent = parts.join("  ·  ");
+}
+
 async function loadMyJobs() {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !authToken || !activeSeekerId) {
+    if (els.applySummary) els.applySummary.textContent = "";
     if (els.myJobsEmpty) {
       els.myJobsEmpty.style.display = "block";
     }
@@ -610,6 +665,7 @@ async function loadMyJobs() {
 
     const data = await response.json();
     const items = data.items || [];
+    updateApplySummary(items);
 
     if (items.length === 0) {
       if (els.myJobsList) {
@@ -872,6 +928,7 @@ async function queueAndResolveRun(jobPostId) {
   return {
     runId: started.run_id,
     status: String(started.status || "READY").toUpperCase(),
+    alreadyApplied: Boolean(started.already_applied),
   };
 }
 
@@ -889,7 +946,7 @@ async function confirmAutofill() {
 
   try {
     const resolved = await queueAndResolveRun(jobId);
-    if (!resolved.runId) {
+    if (!resolved.runId || resolved.alreadyApplied || ["APPLIED", "COMPLETED", "SUBMITTED"].includes(resolved.status)) {
       setStatus(els.saveStatus, "This job is already marked applied.", "info");
       await Promise.all([loadMatchedJobs(), loadMyJobs()]);
       return;
@@ -1769,7 +1826,7 @@ els.tabs.forEach((tab) => {
     tab.classList.add("active");
     document.getElementById(`panel-${targetId}`).classList.add("active");
     if (targetId === "matched") loadMatchedJobs();
-    if (targetId === "myjobs") loadMyJobs();
+    if (targetId === "apply") loadMyJobs();
     if (targetId === "contacts") loadContacts();
   });
 });
@@ -1823,6 +1880,12 @@ els.dryRun.addEventListener("change", () => {
 // ─── Initialize ───────────────────────────────────────────────
 
 async function init() {
+  // Keep the header version in sync with the manifest (no more stale strings).
+  const versionEl = document.getElementById("appVersion");
+  if (versionEl && chrome.runtime?.getManifest) {
+    versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+  }
+
   const result = await chrome.storage.local.get(Object.values(STORAGE_KEYS));
 
   authToken = result[STORAGE_KEYS.authToken] || null;

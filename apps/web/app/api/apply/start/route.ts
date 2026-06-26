@@ -110,12 +110,18 @@ export async function POST(request: Request) {
   }
 
   if (existingRun) {
+    // Never re-drive an apply for a run that already reached a terminal
+    // applied state — surface it so callers skip launching the runner.
+    const alreadyApplied = ["APPLIED", "COMPLETED", "SUBMITTED"].includes(
+      String(existingRun.status ?? "").toUpperCase()
+    );
     return Response.json({
       success: true,
       run_id: existingRun.id,
       status: existingRun.status,
       ats_type: existingRun.ats_type,
       current_step: existingRun.current_step,
+      already_applied: alreadyApplied,
     });
   }
 

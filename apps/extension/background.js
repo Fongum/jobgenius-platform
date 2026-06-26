@@ -70,6 +70,7 @@ const RUNNER_SCRIPT_FILES = [
   "runner/adapters/workday.js",
   "runner/adapters/lever.js",
   "runner/adapters/smartrecruiters.js",
+  "runner/adapters/hosted-ats.js",
   "runner/adapters/generic.js",
   "runner/engine.js",
   "runner/index.js",
@@ -429,8 +430,11 @@ async function startRunnerInExistingTab(tabId, payload) {
     await maybeSyncSessionStateForTab(tabId, tab.url, { force: true });
   }
 
+  // Inject into all frames so application forms embedded in cross-origin ATS
+  // iframes (Greenhouse/Lever/Workday embeds) are reachable. Each frame
+  // self-elects via shouldRunInThisFrame() so exactly one frame actually runs.
   await chrome.scripting.executeScript({
-    target: { tabId },
+    target: { tabId, allFrames: true },
     files: RUNNER_SCRIPT_FILES,
   });
 

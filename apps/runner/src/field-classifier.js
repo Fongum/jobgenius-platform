@@ -24,45 +24,70 @@ const CLASSIFIER_TIMEOUT_MS = Number(process.env.FIELD_CLASSIFIER_TIMEOUT_MS ?? 
  * @param {object} profile - job seeker profile data
  * @param {object[]} screeningAnswers - pre-configured screening answers
  * @param {object} job - job details (title, company)
+ * @param {object} [learnCtx] - { apiBaseUrl, authToken, claimToken, runnerId, atsType, urlHost }
  * @returns {Promise<string|null>} suggested value or null
  */
-export async function classifyField(field, profile, screeningAnswers, job) {
-  if (!ENABLED) return null;
-
-  // First try screening answers (fast, no LLM needed)
-  const screeningMatch = matchScreeningAnswer(field, screeningAnswers ?? []);
-  if (screeningMatch) return screeningMatch;
-
-  // Then try LLM classification
-  return callLlmClassifier(field, profile, job);
+export async function classifyField(field, profile, screeningAnswers, job, learnCtx) {
+  const results = await classifyFields([field], profile, screeningAnswers, job, learnCtx);
+  return results[field.label] ?? null;
 }
 
 /**
  * Classify multiple missing fields at once (batch mode).
+ *
+ * Resolution order per field:
+ *   1. learned_field_rules cache  (GET /api/apply/field-rules)  — needs learnCtx
+ *   2. per-seeker screening answer (local, fast)
+ *   3. LLM classification          (gated by FIELD_CLASSIFIER_ENABLED) → recorded back
+ *
+ * Screening answers and the learned cache work even when the LLM flag is
+ * off, so the runner still benefits from prior learning without an API key.
  */
-export async function classifyFields(fields, profile, screeningAnswers, job) {
-  if (!ENABLED || !fields?.length) return {};
+export async function classifyFields(fields, profile, screeningAnswers, job, learnCtx) {
+  if (!fields?.length) return {};
 
   const results = {};
-
-  // First pass: screening answers (no LLM needed)
   const remaining = [];
+
   for (const field of fields) {
+    // Pass 1: learned-rule cache (cross-application memory).
+    const cached = await lookupLearnedRule(field, learnCtx);
+    if (cached) {
+      results[field.label] = coerceToOptions(field, cached);
+      continue;
+    }
+
+    // Pass 2: this seeker's configured screening answer.
     const match = matchScreeningAnswer(field, screeningAnswers ?? []);
     if (match) {
       results[field.label] = match;
-    } else {
-      remaining.push(field);
+      continue;
+    }
+
+    remaining.push(field);
+  }
+
+  // Pass 3: batch LLM for whatever is left, then learn from it.
+  if (remaining.length > 0 && ENABLED) {
+    const llmResults = await callLlmClassifierBatch(remaining, profile, job);
+    for (const field of remaining) {
+      const value = llmResults[field.label];
+      if (value === undefined || value === null || value === "") continue;
+      const coerced = coerceToOptions(field, value);
+      results[field.label] = coerced;
+      // Record so the next application with this signature is a cache hit.
+      void recordLearnedRule(field, coerced, learnCtx);
     }
   }
 
-  // Second pass: batch LLM call for remaining
-  if (remaining.length > 0) {
-    const llmResults = await callLlmClassifierBatch(remaining, profile, job);
-    Object.assign(results, llmResults);
-  }
-
   return results;
+}
+
+function coerceToOptions(field, value) {
+  if (field?.options?.length > 0) {
+    return findBestOptionMatch(field.options, value) ?? value;
+  }
+  return value;
 }
 
 // ─── Screening answer matching ───
@@ -105,6 +130,17 @@ function matchScreeningAnswer(field, screeningAnswers) {
     }
   }
 
+  // Deterministic safe defaults for gating questions when the seeker has not
+  // configured an explicit answer. Seeker screening answers above always win.
+  const workAuthPatterns = ["authorized", "legally work", "eligible to work", "work authorization", "right to work"];
+  if (workAuthPatterns.some((p) => label.includes(p))) {
+    return coerceAffirmative(field, true);
+  }
+  const sponsorshipPatterns = ["sponsor", "sponsorship", "visa sponsor"];
+  if (sponsorshipPatterns.some((p) => label.includes(p))) {
+    return coerceAffirmative(field, false);
+  }
+
   // EEO / demographic fields - default to "Prefer not to answer"
   const eeoKeywords = ["gender", "race", "ethnicity", "veteran", "disability", "demographic"];
   if (eeoKeywords.some((kw) => label.includes(kw))) {
@@ -119,6 +155,18 @@ function matchScreeningAnswer(field, screeningAnswers) {
   return null;
 }
 
+function coerceAffirmative(field, yes) {
+  if (field.options?.length > 0) {
+    return (
+      findBestOptionMatch(field.options, yes ? "yes" : "no") ??
+      findBestOptionMatch(field.options, yes ? "authorized" : "does not require") ??
+      findBestOptionMatch(field.options, yes ? "i am authorized" : "will not require") ??
+      (yes ? "Yes" : "No")
+    );
+  }
+  return yes ? "Yes" : "No";
+}
+
 function findBestOptionMatch(options, target) {
   if (!options?.length || !target) return null;
   const normalized = target.toLowerCase();
@@ -130,20 +178,74 @@ function findBestOptionMatch(options, target) {
   return reverse ?? null;
 }
 
-// ─── LLM classification ───
+// ─── Learned-rule cache (learned_field_rules via /api/apply/field-rules) ───
 
-async function callLlmClassifier(field, profile, job) {
-  const prompt = buildPrompt([field], profile, job);
-  const response = await callLlm(prompt);
-  if (!response) return null;
+function learnReady(learnCtx) {
+  return Boolean(learnCtx?.apiBaseUrl && learnCtx?.urlHost);
+}
 
+function learnHeaders(learnCtx) {
+  const headers = { "Content-Type": "application/json", "x-runner": "cloud" };
+  if (learnCtx?.authToken) headers.Authorization = `Bearer ${learnCtx.authToken}`;
+  if (learnCtx?.claimToken) headers["x-claim-token"] = learnCtx.claimToken;
+  if (learnCtx?.runnerId) headers["x-runner-id"] = learnCtx.runnerId;
+  return headers;
+}
+
+async function lookupLearnedRule(field, learnCtx) {
+  if (!learnReady(learnCtx) || !field?.label) return null;
   try {
-    const parsed = JSON.parse(response);
-    return parsed[field.label] ?? null;
-  } catch {
-    return response.trim() || null;
+    const params = new URLSearchParams({
+      ats: String(learnCtx.atsType ?? "UNKNOWN"),
+      host: String(learnCtx.urlHost),
+      label: String(field.label),
+    });
+    if (field.type) params.set("type", String(field.type));
+    if (field.options?.length > 0) params.set("options", field.options.join(","));
+
+    const response = await fetch(
+      `${learnCtx.apiBaseUrl}/api/apply/field-rules?${params.toString()}`,
+      { headers: learnHeaders(learnCtx) }
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const value = data?.rule?.mapping?.value;
+    return typeof value === "string" && value.trim() ? value : null;
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      step: "FIELD_CLASSIFIER",
+      msg: `learned-rule lookup failed: ${error?.message ?? "unknown"}`,
+    });
+    return null;
   }
 }
+
+async function recordLearnedRule(field, value, learnCtx) {
+  if (!learnReady(learnCtx) || !field?.label) return;
+  try {
+    await fetch(`${learnCtx.apiBaseUrl}/api/apply/field-rules`, {
+      method: "POST",
+      headers: learnHeaders(learnCtx),
+      body: JSON.stringify({
+        ats_type: learnCtx.atsType ?? "UNKNOWN",
+        url_host: learnCtx.urlHost,
+        field: { label: field.label, type: field.type ?? null, options: field.options ?? null },
+        mapping: { kind: "static", value },
+        source: "llm",
+        confidence: 0.6,
+      }),
+    });
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      step: "FIELD_CLASSIFIER",
+      msg: `learned-rule record failed: ${error?.message ?? "unknown"}`,
+    });
+  }
+}
+
+// ─── LLM classification ───
 
 async function callLlmClassifierBatch(fields, profile, job) {
   const prompt = buildPrompt(fields, profile, job);
