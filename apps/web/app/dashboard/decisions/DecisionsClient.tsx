@@ -21,7 +21,7 @@ const VERDICT_ORDER: Decision["verdict"][] = ["escalate", "ask", "pause", "act"]
 const VERDICT_STYLE: Record<Decision["verdict"], { chip: string; label: string }> = {
   escalate: { chip: "bg-red-100 text-red-700", label: "Escalate" },
   ask: { chip: "bg-amber-100 text-amber-700", label: "Ask client" },
-  pause: { chip: "bg-blue-100 text-blue-700", label: "Pause" },
+  pause: { chip: "bg-violet-100 text-violet-700", label: "Pause" },
   act: { chip: "bg-green-100 text-green-700", label: "Act" },
 };
 
@@ -106,7 +106,7 @@ export default function DecisionsClient() {
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <a
                         href={`/dashboard/seekers/${d.job_seeker_id}`}
-                        className="text-xs text-blue-600 hover:text-blue-800"
+                        className="text-xs text-violet-600 hover:text-violet-800"
                       >
                         Open client
                       </a>

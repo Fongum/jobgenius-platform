@@ -206,20 +206,20 @@ export default function LearningTrackView({
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/portal/learning"
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-violet-600 hover:text-violet-800"
           >
             &larr; Back to Learning
           </Link>
           <div className="flex items-center gap-3">
             <Link
               href="/portal/learning/review"
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-violet-600 hover:text-violet-800"
             >
               Review Queue
             </Link>
             <Link
               href="/portal/learning/bookmarks"
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-violet-600 hover:text-violet-800"
             >
               Bookmarks
             </Link>
@@ -236,7 +236,7 @@ export default function LearningTrackView({
             {track.category}
           </span>
           {track.target_skill && (
-            <span className="text-xs text-blue-600 px-2 py-0.5 bg-blue-50 rounded">
+            <span className="text-xs text-violet-600 px-2 py-0.5 bg-violet-50 rounded">
               Focus: {track.target_skill}
             </span>
           )}
@@ -272,7 +272,7 @@ export default function LearningTrackView({
                 <button
                   onClick={() => startDiagnostic(true)}
                   disabled={diagnosticSaving}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
                 >
                   {diagnosticSaving ? "Starting..." : "Retake Diagnostic"}
                 </button>
@@ -280,7 +280,7 @@ export default function LearningTrackView({
                 <button
                   onClick={() => startDiagnostic(false)}
                   disabled={diagnosticSaving}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
                 >
                   {diagnosticSaving ? "Starting..." : diagnostic ? "Resume Diagnostic" : "Start Diagnostic"}
                 </button>
@@ -346,7 +346,7 @@ export default function LearningTrackView({
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2.5">
           <div
-            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+            className="bg-violet-600 h-2.5 rounded-full transition-all duration-300"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -377,7 +377,7 @@ export default function LearningTrackView({
                     isCompleted
                       ? "bg-green-100 text-green-700"
                       : isInProgress
-                      ? "bg-blue-100 text-blue-700"
+                      ? "bg-violet-100 text-violet-700"
                       : "bg-gray-100 text-gray-500"
                   }`}
                 >

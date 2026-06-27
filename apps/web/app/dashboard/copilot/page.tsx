@@ -26,14 +26,14 @@ const KIND_BADGE: Record<string, { label: string; cls: string }> = {
   attention_item: { label: "Attention", cls: "bg-amber-100 text-amber-700" },
   billing_overdue: { label: "Billing", cls: "bg-red-100 text-red-700" },
   payslip_sign: { label: "Payslip", cls: "bg-emerald-100 text-emerald-700" },
-  outreach_reply: { label: "Reply", cls: "bg-blue-100 text-blue-700" },
+  outreach_reply: { label: "Reply", cls: "bg-violet-100 text-violet-700" },
   interview_upcoming: { label: "Interview", cls: "bg-purple-100 text-purple-700" },
 };
 
 const VERDICT_BADGE: Record<string, { label: string; cls: string }> = {
   escalate: { label: "Escalate", cls: "bg-red-100 text-red-700" },
   ask: { label: "Ask client", cls: "bg-amber-100 text-amber-700" },
-  pause: { label: "Pause", cls: "bg-blue-100 text-blue-700" },
+  pause: { label: "Pause", cls: "bg-violet-100 text-violet-700" },
 };
 
 function seekerName(d: DecisionRow): string {

@@ -11,11 +11,11 @@ export interface PeriodSummary {
 }
 
 const INPUT =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-violet-600 focus:ring-1 focus:ring-violet-600";
 
 const STATUS_STYLES: Record<PayPeriodStatus, string> = {
   draft: "bg-gray-100 text-gray-600",
-  finalized: "bg-blue-100 text-blue-700",
+  finalized: "bg-violet-100 text-violet-700",
   paid: "bg-green-100 text-green-700",
 };
 
@@ -84,7 +84,7 @@ export default function PeriodsClient({
         <div>
           <Link
             href="/dashboard/admin/payroll"
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            className="text-sm text-violet-600 hover:text-violet-700 font-medium"
           >
             ← Payroll
           </Link>
@@ -95,7 +95,7 @@ export default function PeriodsClient({
         </div>
         <button
           onClick={() => setShowForm((s) => !s)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+          className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
         >
           {showForm ? "Cancel" : "New pay period"}
         </button>
@@ -135,7 +135,7 @@ export default function PeriodsClient({
             </label>
           </div>
           <div className="flex justify-end">
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
               {saving ? "Creating…" : "Create period"}
             </button>
           </div>
@@ -167,7 +167,7 @@ export default function PeriodsClient({
                     <td className="px-4 py-3">
                       <Link
                         href={`/dashboard/admin/payroll/periods/${p.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-700"
+                        className="font-medium text-violet-600 hover:text-violet-700"
                       >
                         {p.label}
                       </Link>

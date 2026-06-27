@@ -287,7 +287,7 @@ export default function EmployeeSocialClient({
               {activeElection.status === "nominations_open" && (
                 <div className="space-y-3">
                   {myCandidate ? (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                    <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
                       Your candidacy is currently {labelizePeopleValue(myCandidate.status)}.
                     </div>
                   ) : (
@@ -295,7 +295,7 @@ export default function EmployeeSocialClient({
                       type="button"
                       onClick={handleNominate}
                       disabled={!eligibility?.eligible || busyAction === "nominate"}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                      className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
                     >
                       {busyAction === "nominate" ? "Submitting..." : "Stand for election"}
                     </button>

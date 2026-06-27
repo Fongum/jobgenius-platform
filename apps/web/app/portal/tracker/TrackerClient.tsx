@@ -26,8 +26,8 @@ type Summary = {
 
 const STATUS_CONFIG: Record<string, { color: string; label: string; icon: string }> = {
   QUEUED: { color: "bg-yellow-100 text-yellow-800", label: "Queued", icon: "clock" },
-  READY: { color: "bg-blue-100 text-blue-800", label: "Starting...", icon: "play" },
-  RUNNING: { color: "bg-blue-100 text-blue-800", label: "In Progress", icon: "spinner" },
+  READY: { color: "bg-violet-100 text-violet-800", label: "Starting...", icon: "play" },
+  RUNNING: { color: "bg-violet-100 text-violet-800", label: "In Progress", icon: "spinner" },
   RETRYING: { color: "bg-orange-100 text-orange-800", label: "Retrying", icon: "refresh" },
   APPLIED: { color: "bg-green-100 text-green-800", label: "Applied!", icon: "check" },
   FAILED: { color: "bg-red-100 text-red-800", label: "Failed", icon: "x" },
@@ -101,7 +101,7 @@ export default function TrackerClient() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryCard label="Total" value={data.summary.total} color="text-gray-900" />
-        <SummaryCard label="In Progress" value={data.summary.in_progress + data.summary.queued} color="text-blue-600" />
+        <SummaryCard label="In Progress" value={data.summary.in_progress + data.summary.queued} color="text-violet-600" />
         <SummaryCard label="Applied" value={data.summary.applied} color="text-green-600" />
         <SummaryCard label="Failed" value={data.summary.failed} color="text-red-600" />
       </div>
@@ -118,7 +118,7 @@ export default function TrackerClient() {
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              filter === f.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              filter === f.id ? "border-violet-600 text-violet-600" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
             {f.label}
@@ -139,7 +139,7 @@ export default function TrackerClient() {
             const isActive = ["RUNNING", "READY", "RETRYING"].includes(app.status);
 
             return (
-              <div key={app.queue_id} className={`bg-white rounded-xl border overflow-hidden ${isActive ? "border-blue-200 shadow-sm" : ""}`}>
+              <div key={app.queue_id} className={`bg-white rounded-xl border overflow-hidden ${isActive ? "border-violet-200 shadow-sm" : ""}`}>
                 <button
                   onClick={() => setExpandedId(isExpanded ? null : app.queue_id)}
                   className="w-full px-5 py-4 flex items-center justify-between text-left"
@@ -151,7 +151,7 @@ export default function TrackerClient() {
                         {config.label}
                       </span>
                       {isActive && (
-                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-violet-500 rounded-full animate-pulse" />
                       )}
                     </div>
 
@@ -168,7 +168,7 @@ export default function TrackerClient() {
                   <div className="flex items-center gap-3 shrink-0">
                     {/* Current step for active applications */}
                     {isActive && app.current_step && (
-                      <span className="hidden sm:inline text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                      <span className="hidden sm:inline text-xs text-violet-600 bg-violet-50 px-2 py-1 rounded">
                         {STEP_LABELS[app.current_step] ?? app.current_step}
                       </span>
                     )}
@@ -201,7 +201,7 @@ export default function TrackerClient() {
                             <div key={i} className="flex items-start gap-3 text-sm">
                               <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
                                 t.event === "FAILED" ? "bg-red-400" :
-                                t.event === "SUCCESS" ? "bg-green-400" : "bg-blue-400"
+                                t.event === "SUCCESS" ? "bg-green-400" : "bg-violet-400"
                               }`} />
                               <div>
                                 <span className="text-gray-700">{STEP_LABELS[t.step] ?? t.step}</span>
@@ -235,7 +235,7 @@ export default function TrackerClient() {
                         href={app.job.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                        className="inline-flex items-center gap-1 text-sm text-violet-600 hover:text-violet-800"
                       >
                         View job posting →
                       </a>
@@ -283,10 +283,10 @@ function StepProgress({ atsType, currentStep }: { atsType: string; currentStep: 
           <div key={step} className="flex items-center flex-1">
             <div className="flex flex-col items-center flex-1">
               <div className={`w-full h-1.5 rounded-full ${
-                isDone ? "bg-green-400" : isCurrent ? "bg-blue-400 animate-pulse" : "bg-gray-200"
+                isDone ? "bg-green-400" : isCurrent ? "bg-violet-400 animate-pulse" : "bg-gray-200"
               }`} />
               <span className={`text-[9px] mt-1 ${
-                isCurrent ? "text-blue-600 font-medium" : isDone ? "text-green-600" : "text-gray-400"
+                isCurrent ? "text-violet-600 font-medium" : isDone ? "text-green-600" : "text-gray-400"
               }`}>
                 {STEP_LABELS[step] ?? step}
               </span>

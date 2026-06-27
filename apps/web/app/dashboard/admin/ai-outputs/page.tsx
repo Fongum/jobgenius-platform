@@ -90,7 +90,7 @@ export default async function AdminAiOutputsPage({ searchParams }: PageProps) {
               href={`/dashboard/admin/ai-outputs?${url.toString()}`}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 statusFilter === s
-                  ? "bg-blue-600 text-white"
+                  ? "bg-violet-600 text-white"
                   : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
               }`}
             >

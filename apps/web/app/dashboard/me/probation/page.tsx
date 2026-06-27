@@ -61,7 +61,7 @@ export default async function EmployeeProbationPage() {
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Verified offers
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">
+          <p className="text-3xl font-bold text-violet-700 mt-2">
             {summary?.verifiedAcceptedOffersCount ?? 0}
           </p>
         </div>
@@ -149,7 +149,7 @@ export default async function EmployeeProbationPage() {
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
                           review
-                            ? "bg-blue-100 text-blue-700"
+                            ? "bg-violet-100 text-violet-700"
                             : due
                             ? "bg-amber-100 text-amber-700"
                             : "bg-gray-100 text-gray-700"

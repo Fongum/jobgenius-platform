@@ -91,7 +91,7 @@ function SummaryCard({
         <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
         <button
           onClick={() => goToStep(stepIndex)}
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          className="text-xs text-violet-600 hover:text-violet-800 font-medium"
         >
           Edit
         </button>

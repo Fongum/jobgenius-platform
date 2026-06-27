@@ -37,7 +37,7 @@ interface EditableLine {
 }
 
 const INPUT =
-  "w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600";
+  "w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-violet-600 focus:ring-1 focus:ring-violet-600";
 
 function labelize(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -275,7 +275,7 @@ export default function PayslipDetailClient({
     <div className="max-w-3xl mx-auto">
       <Link
         href={`/dashboard/admin/payroll/periods/${payslip.pay_period_id}`}
-        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+        className="text-sm text-violet-600 hover:text-violet-700 font-medium"
       >
         ← {period?.label ?? "Pay period"}
       </Link>
@@ -348,7 +348,7 @@ export default function PayslipDetailClient({
               <button
                 onClick={addCommission}
                 disabled={saving}
-                className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                className="text-xs text-violet-600 hover:text-violet-700 disabled:opacity-50"
               >
                 Pull placement commission
               </button>
@@ -460,7 +460,7 @@ export default function PayslipDetailClient({
           <button
             onClick={markIssued}
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
           >
             Issue payslip
           </button>
@@ -511,7 +511,7 @@ export default function PayslipDetailClient({
           <div className="flex items-center justify-between mt-4">
             <div>
               {hasProof && (
-                <button onClick={viewProof} className="text-xs text-blue-600 hover:text-blue-700">
+                <button onClick={viewProof} className="text-xs text-violet-600 hover:text-violet-700">
                   View proof on file
                 </button>
               )}

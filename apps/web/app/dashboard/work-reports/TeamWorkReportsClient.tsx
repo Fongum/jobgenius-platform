@@ -133,7 +133,7 @@ export default function TeamWorkReportsClient({
           "Follow-Ups",
           summary.totals.followUps.total,
           `System ${summary.totals.followUps.system} · Manual ${summary.totals.followUps.manual}`,
-          "text-blue-700"
+          "text-violet-700"
         )}
         {summaryCard(
           "Interviews",
@@ -204,14 +204,14 @@ export default function TeamWorkReportsClient({
                     {row.metrics.applications.system} auto · {row.metrics.applications.manual} manual
                   </p>
                 </div>
-                <div className="rounded-lg bg-blue-50 px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+                <div className="rounded-lg bg-violet-50 px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-600">
                     Follow-Ups
                   </p>
-                  <p className="text-2xl font-bold text-blue-900 mt-1">
+                  <p className="text-2xl font-bold text-violet-900 mt-1">
                     {row.metrics.followUps.total}
                   </p>
-                  <p className="text-xs text-blue-700 mt-1">
+                  <p className="text-xs text-violet-700 mt-1">
                     {row.metrics.followUps.system} system · {row.metrics.followUps.manual} manual
                   </p>
                 </div>

@@ -171,7 +171,7 @@ export default async function DiscoverySourceDetailPage({ params }: PageProps) {
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard/admin/discovery"
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-violet-600 hover:text-violet-800"
             >
               Back to Discovery
             </Link>
@@ -216,7 +216,7 @@ export default async function DiscoverySourceDetailPage({ params }: PageProps) {
         </div>
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">Hidden Recovery</p>
-          <p className="text-2xl font-bold text-blue-600">
+          <p className="text-2xl font-bold text-violet-600">
             {percent(drilldown.hiddenRecoveryRate)}
           </p>
         </div>

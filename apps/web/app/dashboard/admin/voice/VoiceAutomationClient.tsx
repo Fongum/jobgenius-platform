@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -729,7 +729,7 @@ export default function VoiceAutomationClient({
                     <button
                       onClick={() => savePlaybook(playbook.id)}
                       disabled={savingPlaybookId === playbook.id}
-                      className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                      className="px-3 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
                     >
                       {savingPlaybookId === playbook.id ? "Saving..." : "Save Playbook"}
                     </button>

@@ -276,7 +276,7 @@ export default function PortalShell({
                 onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-blue-50 text-blue-700"
+                    ? "bg-violet-50 text-violet-700"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
               >
@@ -367,7 +367,7 @@ export default function PortalShell({
                                   ? "bg-amber-400"
                                   : item.conversation_type === "application_question"
                                   ? "bg-purple-400"
-                                  : "bg-blue-400"
+                                  : "bg-violet-400"
                               }`} />
                               <p className="text-sm font-medium text-gray-900 truncate">{item.subject}</p>
                             </div>
@@ -383,7 +383,7 @@ export default function PortalShell({
                     <Link
                       href="/portal/conversations"
                       onClick={() => setBellOpen(false)}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                      className="text-xs font-medium text-violet-600 hover:text-violet-700"
                     >
                       View all conversations →
                     </Link>
@@ -403,7 +403,7 @@ export default function PortalShell({
           {(notifications?.unread_announcements ?? []).map((ann) => (
             <div
               key={ann.id}
-              className="mb-4 bg-blue-600 text-white rounded-xl px-5 py-4 flex items-start justify-between gap-4 shadow-sm"
+              className="mb-4 bg-violet-600 text-white rounded-xl px-5 py-4 flex items-start justify-between gap-4 shadow-sm"
             >
               <div className="flex items-start gap-3 min-w-0">
                 <svg className="w-5 h-5 flex-shrink-0 mt-0.5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -411,12 +411,12 @@ export default function PortalShell({
                 </svg>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">{ann.subject}</p>
-                  <p className="text-sm text-blue-100 mt-0.5 whitespace-pre-line">{ann.body}</p>
+                  <p className="text-sm text-violet-100 mt-0.5 whitespace-pre-line">{ann.body}</p>
                 </div>
               </div>
               <button
                 onClick={() => dismissAnnouncement(ann.id)}
-                className="flex-shrink-0 p-1 rounded hover:bg-blue-500 transition-colors"
+                className="flex-shrink-0 p-1 rounded hover:bg-violet-500 transition-colors"
                 aria-label="Dismiss"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

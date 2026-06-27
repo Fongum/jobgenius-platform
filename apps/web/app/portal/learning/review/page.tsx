@@ -33,7 +33,7 @@ export default async function LearningReviewQueuePage() {
         </div>
         <Link
           href="/portal/learning"
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-sm text-violet-600 hover:text-violet-800"
         >
           &larr; Back to Learning
         </Link>
@@ -73,7 +73,7 @@ export default async function LearningReviewQueuePage() {
                       {item.contentType}
                     </span>
                     {item.track.targetSkill && (
-                      <span className="text-xs text-blue-600 px-2 py-0.5 bg-blue-50 rounded">
+                      <span className="text-xs text-violet-600 px-2 py-0.5 bg-violet-50 rounded">
                         {item.track.targetSkill}
                       </span>
                     )}

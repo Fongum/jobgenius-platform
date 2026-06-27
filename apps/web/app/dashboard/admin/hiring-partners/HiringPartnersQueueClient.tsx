@@ -101,7 +101,7 @@ function formatPercent(value: number) {
 function statusClasses(status: string) {
   switch (status) {
     case "reviewing":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     case "qualified":
       return "bg-violet-100 text-violet-800";
     case "awaiting_details":
@@ -406,7 +406,7 @@ export default function HiringPartnersQueueClient({
                 contacts.
               </p>
             </div>
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
+            <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
               Phase 4
             </span>
           </div>
@@ -821,7 +821,7 @@ function SummaryCard({
   const toneMap: Record<"orange" | "violet" | "blue" | "emerald" | "red" | "gray", string> = {
     orange: "text-orange-600",
     violet: "text-violet-600",
-    blue: "text-blue-600",
+    blue: "text-violet-600",
     emerald: "text-emerald-600",
     red: "text-red-600",
     gray: "text-gray-700",
@@ -871,7 +871,7 @@ function PipelineTile({
     string
   > = {
     orange: "text-orange-600",
-    blue: "text-blue-600",
+    blue: "text-violet-600",
     violet: "text-violet-600",
     amber: "text-amber-600",
     cyan: "text-cyan-600",

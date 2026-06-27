@@ -33,12 +33,12 @@ export interface WorkerPayslipRow extends Payslip {
 
 const PAYSLIP_STATUS_STYLES: Record<PayslipStatus, string> = {
   draft: "bg-gray-100 text-gray-600",
-  issued: "bg-blue-100 text-blue-700",
+  issued: "bg-violet-100 text-violet-700",
   paid: "bg-green-100 text-green-700",
 };
 
 const INPUT =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-violet-600 focus:ring-1 focus:ring-violet-600";
 
 function labelize(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -65,7 +65,7 @@ export default function WorkerDetailClient({
       <div>
         <Link
           href="/dashboard/admin/payroll/workers"
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-sm text-violet-600 hover:text-violet-700 font-medium"
         >
           ← Workers
         </Link>
@@ -249,7 +249,7 @@ function ProfileTab({
         <textarea className={`${INPUT} min-h-[60px]`} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
       </Field>
       <div className="flex justify-end">
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
           {saving ? "Saving…" : "Save changes"}
         </button>
       </div>
@@ -357,7 +357,7 @@ function ComponentsTab({
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Gross / period" value={formatCurrency(preview.gross, worker.currency)} tone="text-green-700" />
         <Stat label="Deductions" value={formatCurrency(preview.deductions, worker.currency)} tone="text-red-600" />
-        <Stat label="Net / period" value={formatCurrency(preview.net, worker.currency)} tone="text-blue-700" />
+        <Stat label="Net / period" value={formatCurrency(preview.net, worker.currency)} tone="text-violet-700" />
       </div>
 
       <form onSubmit={add} className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
@@ -390,7 +390,7 @@ function ComponentsTab({
           </Field>
         </div>
         <div className="flex justify-end">
-          <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          <button type="submit" disabled={saving} className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
             {saving ? "Adding…" : "Add component"}
           </button>
         </div>
@@ -453,7 +453,7 @@ function ComponentList({
 
 const CONTRACT_STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600",
-  sent: "bg-blue-100 text-blue-700",
+  sent: "bg-violet-100 text-violet-700",
   signed: "bg-green-100 text-green-700",
   active: "bg-emerald-100 text-emerald-700",
   terminated: "bg-red-100 text-red-700",
@@ -559,7 +559,7 @@ function ContractsTab({
           <textarea className={`${INPUT} min-h-[60px]`} value={form.commission_terms} onChange={(e) => set("commission_terms", e.target.value)} placeholder="e.g. 5% of each placement commission collected" />
         </Field>
         <div className="flex justify-end">
-          <button type="submit" disabled={creating} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          <button type="submit" disabled={creating} className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
             {creating ? "Generating…" : "Generate contract"}
           </button>
         </div>
@@ -590,7 +590,7 @@ function ContractsTab({
                       href={`/api/admin/payroll/contracts/${c.id}/pdf`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-700"
+                      className="text-xs text-violet-600 hover:text-violet-700"
                     >
                       View
                     </a>
@@ -617,7 +617,7 @@ function ContractsTab({
           <span className="text-sm font-semibold text-gray-900">Payslip history</span>
           <Link
             href="/dashboard/admin/payroll/periods"
-            className="text-xs font-medium text-blue-600 hover:text-blue-700"
+            className="text-xs font-medium text-violet-600 hover:text-violet-700"
           >
             + Generate payslip →
           </Link>
@@ -628,7 +628,7 @@ function ContractsTab({
             <br />
             <Link
               href="/dashboard/admin/payroll/periods"
-              className="mt-3 inline-block px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+              className="mt-3 inline-block px-3 py-2 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
             >
               Open Pay Periods to generate
             </Link>
@@ -645,7 +645,7 @@ function ContractsTab({
                   <td className="px-5 py-3">
                     <Link
                       href={`/dashboard/admin/payroll/payslips/${p.id}`}
-                      className="font-medium text-blue-600 hover:text-blue-700"
+                      className="font-medium text-violet-600 hover:text-violet-700"
                     >
                       {p.periodLabel}
                     </Link>

@@ -48,7 +48,7 @@ export default async function FinanceOverviewPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard/finance/bonuses"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Manage bonuses
           </Link>
@@ -76,7 +76,7 @@ export default async function FinanceOverviewPage() {
           {
             label: "Bonuses payable this month",
             value: bonusesPayableThisMonth.length,
-            tone: "text-blue-700",
+            tone: "text-violet-700",
           },
           {
             label: "Social fund balance",
@@ -107,7 +107,7 @@ export default async function FinanceOverviewPage() {
             </div>
             <Link
               href="/dashboard/finance/bonuses"
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="text-sm text-violet-600 hover:text-violet-700"
             >
               View all
             </Link>
@@ -157,7 +157,7 @@ export default async function FinanceOverviewPage() {
             </div>
             <Link
               href="/dashboard/finance/social-fund"
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="text-sm text-violet-600 hover:text-violet-700"
             >
               Manage fund
             </Link>
@@ -209,7 +209,7 @@ export default async function FinanceOverviewPage() {
                   <span
                     className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
                       expense.status === "approved"
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-violet-100 text-violet-700"
                         : "bg-amber-100 text-amber-700"
                     }`}
                   >

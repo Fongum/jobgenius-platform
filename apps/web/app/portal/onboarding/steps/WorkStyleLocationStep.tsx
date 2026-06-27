@@ -24,10 +24,10 @@ const WORK_TYPES: {
   {
     value: "remote",
     label: "Remote",
-    color: "text-blue-700",
-    bgColor: "bg-blue-50",
-    borderColor: "border-blue-300",
-    selectedBg: "bg-blue-100",
+    color: "text-violet-700",
+    bgColor: "bg-violet-50",
+    borderColor: "border-violet-300",
+    selectedBg: "bg-violet-100",
     icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
     description: "Work from anywhere with timezone flexibility.",
     subTip: "Remote roles let you work from any location. Consider specifying timezone preferences.",
@@ -67,7 +67,7 @@ function MarketInsightChart() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-600 w-14">Remote</span>
           <div className="flex-1 bg-gray-200 rounded-full h-3">
-            <div className="bg-blue-500 h-3 rounded-full" style={{ width: "35%" }} />
+            <div className="bg-violet-500 h-3 rounded-full" style={{ width: "35%" }} />
           </div>
           <span className="text-xs font-medium text-gray-700 w-8">35%</span>
         </div>
@@ -119,7 +119,7 @@ function SmartGuidance({ activeTypes, openToRelocation }: { activeTypes: string[
   if (!message) return null;
 
   const colors = {
-    info: "bg-blue-50 border-blue-200 text-blue-800",
+    info: "bg-violet-50 border-violet-200 text-violet-800",
     success: "bg-green-50 border-green-200 text-green-800",
     warning: "bg-amber-50 border-amber-200 text-amber-800",
   };
@@ -258,7 +258,7 @@ export default function WorkStyleLocationStep({
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
           Back
         </button>
-        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
           {saving ? "Saving..." : "Continue"}
         </button>
       </div>

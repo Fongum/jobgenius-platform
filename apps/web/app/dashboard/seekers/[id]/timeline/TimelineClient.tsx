@@ -30,7 +30,7 @@ interface NextActionResult {
 }
 
 const KIND_STYLES: Record<string, string> = {
-  application_run: "bg-blue-100 text-blue-700",
+  application_run: "bg-violet-100 text-violet-700",
   outreach_reply: "bg-emerald-100 text-emerald-700",
   outreach_send: "bg-gray-100 text-gray-700",
   interview: "bg-purple-100 text-purple-700",
@@ -279,7 +279,7 @@ export default function TimelineClient({
             onClick={() => setFilter("all")}
             className={`px-3 py-1.5 rounded-full text-xs font-medium ${
               filter === "all"
-                ? "bg-blue-600 text-white"
+                ? "bg-violet-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -365,7 +365,7 @@ export default function TimelineClient({
                   {action.suggested_link && (
                     <Link
                       href={action.suggested_link}
-                      className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                      className="text-xs text-violet-600 hover:text-violet-700 whitespace-nowrap"
                     >
                       Open →
                     </Link>
@@ -440,7 +440,7 @@ export default function TimelineClient({
                 {row.link && (
                   <Link
                     href={row.link}
-                    className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                    className="text-xs text-violet-600 hover:text-violet-700 whitespace-nowrap"
                   >
                     Open →
                   </Link>

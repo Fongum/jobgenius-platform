@@ -72,7 +72,7 @@ export default function AdapterHealthClient() {
           <p className="text-sm text-gray-500 mt-1">Monitor success rates and reliability per platform</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/admin/application-analytics" className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg">
+          <Link href="/dashboard/admin/application-analytics" className="px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 rounded-lg">
             ← Application Analytics
           </Link>
           <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="px-3 py-1.5 border rounded-lg text-sm">
@@ -94,7 +94,7 @@ export default function AdapterHealthClient() {
               key={a.ats_type}
               onClick={() => setSelectedAts(isSelected ? null : a.ats_type)}
               className={`text-left rounded-xl border p-5 transition-all ${
-                isSelected ? "ring-2 ring-blue-500 border-blue-300" : "hover:border-gray-300"
+                isSelected ? "ring-2 ring-violet-500 border-violet-300" : "hover:border-gray-300"
               } bg-white`}
             >
               <div className="flex items-center justify-between mb-3">

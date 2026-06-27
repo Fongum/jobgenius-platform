@@ -10,7 +10,7 @@ on:
     - cron: "0 3 * * *"
     # Daily intelligence feedback loop (05:00 UTC)
     - cron: "0 5 * * *"
-    # Daily stale match archival (04:00 UTC)
+    # Daily client match cleaner — removes matches older than 1 week (04:00 UTC)
     - cron: "0 4 * * *"
   # Manual trigger for testing
   workflow_dispatch:
@@ -101,14 +101,14 @@ jobs:
         run: |
           curl -fsSL -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/intelligence/run"
 
-  archive-stale-matches:
-    name: Archive Stale Matches
+  clean-client-matches:
+    name: Clean Client Matches
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * *'
     runs-on: ubuntu-latest
     steps:
-      - name: Archive matches older than 30 days
+      - name: Remove matches older than 1 week (applied jobs are saved for their assets first)
         env:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
-          curl -fsSL -X POST -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/archive-stale-matches?max_age_days=30"
+          curl -fsSL -X POST -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/clean-matches?max_age_days=7"

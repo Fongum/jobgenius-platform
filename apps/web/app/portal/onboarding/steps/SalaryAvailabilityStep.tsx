@@ -71,8 +71,8 @@ export default function SalaryAvailabilityStep({
       <h2 className="text-xl font-semibold text-gray-900 mb-1">Salary & Availability</h2>
       <p className="text-sm text-gray-600 mb-6">Let us know your compensation expectations and availability.</p>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-        <p className="text-sm text-blue-800">
+      <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 mb-6">
+        <p className="text-sm text-violet-800">
           Candidates with a $20k+ salary range receive more matches &mdash; it gives employers flexibility to find the right fit.
         </p>
       </div>
@@ -87,7 +87,7 @@ export default function SalaryAvailabilityStep({
               value={profile.salary_min ?? ""}
               onChange={(e) => update("salary_min", e.target.value ? parseInt(e.target.value) : undefined)}
               placeholder="e.g. 80000"
-              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
             />
           </div>
           <div>
@@ -97,7 +97,7 @@ export default function SalaryAvailabilityStep({
               value={profile.salary_max ?? ""}
               onChange={(e) => update("salary_max", e.target.value ? parseInt(e.target.value) : undefined)}
               placeholder="e.g. 120000"
-              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
             />
           </div>
         </div>
@@ -109,7 +109,7 @@ export default function SalaryAvailabilityStep({
             <select
               value={profile.start_date || ""}
               onChange={(e) => update("start_date", e.target.value)}
-              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
             >
               <option value="">Select...</option>
               {START_DATE_OPTIONS.map((opt) => (
@@ -122,7 +122,7 @@ export default function SalaryAvailabilityStep({
             <select
               value={profile.notice_period || ""}
               onChange={(e) => update("notice_period", e.target.value)}
-              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
             >
               <option value="">Select...</option>
               {NOTICE_PERIOD_OPTIONS.map((opt) => (
@@ -153,7 +153,7 @@ export default function SalaryAvailabilityStep({
               <select
                 value={profile.citizenship_status || ""}
                 onChange={(e) => update("citizenship_status", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
               >
                 <option value="">Select...</option>
                 {CITIZENSHIP_OPTIONS.map((opt) => (
@@ -176,7 +176,7 @@ export default function SalaryAvailabilityStep({
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200">
           Back
         </button>
-        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
           {saving ? "Saving..." : "Continue"}
         </button>
       </div>

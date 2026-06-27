@@ -101,7 +101,7 @@ function PriorityColumn({
                 {item.href && (
                   <Link
                     href={item.href}
-                    className="inline-block mt-1.5 text-xs font-medium text-blue-600 hover:text-blue-800"
+                    className="inline-block mt-1.5 text-xs font-medium text-violet-600 hover:text-violet-800"
                   >
                     Open →
                   </Link>
@@ -172,7 +172,7 @@ export default function CopilotClient({
         </div>
         <Link
           href="/dashboard/today"
-          className="text-sm text-blue-600 hover:text-blue-800 whitespace-nowrap"
+          className="text-sm text-violet-600 hover:text-violet-800 whitespace-nowrap"
         >
           Full task list →
         </Link>
@@ -181,10 +181,10 @@ export default function CopilotClient({
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
         <ScoreCard label="Escalations" value={scorecard.escalations} tone="text-red-600" />
         <ScoreCard label="Asks" value={scorecard.asks} tone="text-amber-600" />
-        <ScoreCard label="Pauses" value={scorecard.pauses} tone="text-blue-600" />
+        <ScoreCard label="Pauses" value={scorecard.pauses} tone="text-violet-600" />
         <ScoreCard label="Attention" value={scorecard.attention} tone="text-amber-600" />
         <ScoreCard label="Interviews" value={scorecard.interviews} tone="text-purple-600" />
-        <ScoreCard label="Replies" value={scorecard.replies} tone="text-blue-600" />
+        <ScoreCard label="Replies" value={scorecard.replies} tone="text-violet-600" />
       </div>
 
       <div>

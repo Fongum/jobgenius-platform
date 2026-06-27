@@ -18,8 +18,8 @@ export interface NotificationRow {
 }
 
 const CATEGORY_STYLES: Record<string, string> = {
-  payslip_issued: "bg-blue-100 text-blue-700",
-  payslip_awaiting_sign: "bg-blue-100 text-blue-700",
+  payslip_issued: "bg-violet-100 text-violet-700",
+  payslip_awaiting_sign: "bg-violet-100 text-violet-700",
   payslip_paid: "bg-green-100 text-green-700",
   application_paused: "bg-amber-100 text-amber-700",
   interview_confirmed: "bg-purple-100 text-purple-700",
@@ -105,7 +105,7 @@ export default function NotificationsClient({
             onClick={() => setFilter("unread")}
             className={`px-3 py-1.5 rounded-full text-xs font-medium ${
               filter === "unread"
-                ? "bg-blue-600 text-white"
+                ? "bg-violet-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -115,7 +115,7 @@ export default function NotificationsClient({
             onClick={() => setFilter("all")}
             className={`px-3 py-1.5 rounded-full text-xs font-medium ${
               filter === "all"
-                ? "bg-blue-600 text-white"
+                ? "bg-violet-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -126,7 +126,7 @@ export default function NotificationsClient({
           <button
             onClick={markAllRead}
             disabled={busy}
-            className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+            className="text-xs text-violet-600 hover:text-violet-700 disabled:opacity-50"
           >
             Mark all read
           </button>
@@ -145,7 +145,7 @@ export default function NotificationsClient({
               <div
                 key={row.id}
                 className={`rounded-xl border p-4 flex items-start gap-3 ${
-                  isUnread ? "bg-white border-blue-200" : "bg-gray-50 border-gray-200"
+                  isUnread ? "bg-white border-violet-200" : "bg-gray-50 border-gray-200"
                 }`}
               >
                 <div className="flex-1 min-w-0">
@@ -159,7 +159,7 @@ export default function NotificationsClient({
                     </span>
                     <span className="text-[11px] text-gray-400">{fmtAgo(row.created_at)}</span>
                     {isUnread && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600" aria-hidden />
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-600" aria-hidden />
                     )}
                   </div>
                   <p className="text-sm font-medium text-gray-900">{row.subject ?? "—"}</p>
@@ -172,7 +172,7 @@ export default function NotificationsClient({
                     <Link
                       href={row.link_url}
                       onClick={() => markRead(row)}
-                      className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+                      className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
                     >
                       Open
                     </Link>

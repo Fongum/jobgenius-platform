@@ -114,7 +114,7 @@ function getStatusTone(status: string): string {
     case "acknowledged":
       return "bg-emerald-100 text-emerald-700";
     case "finalized":
-      return "bg-blue-100 text-blue-700";
+      return "bg-violet-100 text-violet-700";
     case "submitted":
       return "bg-amber-100 text-amber-700";
     default:
@@ -335,7 +335,7 @@ export default function ScorecardsClient({
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Finalized
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">{finalizedCount}</p>
+          <p className="text-3xl font-bold text-violet-700 mt-2">{finalizedCount}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -363,9 +363,9 @@ export default function ScorecardsClient({
                 automatically when the pattern is strong enough.
               </p>
             </div>
-            <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-right">
-              <p className="text-xs uppercase tracking-wide text-blue-600">Draft total</p>
-              <p className="text-2xl font-bold text-blue-900 mt-1">{draftTotal}%</p>
+            <div className="rounded-lg bg-violet-50 border border-violet-100 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-wide text-violet-600">Draft total</p>
+              <p className="text-2xl font-bold text-violet-900 mt-1">{draftTotal}%</p>
             </div>
           </div>
 
@@ -694,7 +694,7 @@ export default function ScorecardsClient({
                                 href={item.attachment_url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                                className="text-xs font-medium text-violet-600 hover:text-violet-700"
                               >
                                 Reference
                               </a>

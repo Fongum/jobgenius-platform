@@ -420,7 +420,7 @@ export default function DiscoveryRulesClient({
         <button
           onClick={runSync}
           disabled={syncing}
-          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
         >
           {syncing ? "Syncing..." : "Sync Now"}
         </button>
@@ -515,7 +515,7 @@ export default function DiscoveryRulesClient({
                         <div className="font-medium">
                           <Link
                             href={sourceDetailHref(source.sourceName)}
-                            className="text-blue-600 hover:text-blue-800"
+                            className="text-violet-600 hover:text-violet-800"
                           >
                             {source.sourceName}
                           </Link>
@@ -644,7 +644,7 @@ export default function DiscoveryRulesClient({
                         <p className="text-sm font-medium text-gray-900">
                           <Link
                             href={sourceDetailHref(failure.sourceName)}
-                            className="text-blue-600 hover:text-blue-800"
+                            className="text-violet-600 hover:text-violet-800"
                           >
                             {failure.searchName ?? "Unnamed search"}
                           </Link>
@@ -704,7 +704,7 @@ export default function DiscoveryRulesClient({
                   <button
                     type="button"
                     onClick={selectAllCreateSources}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-violet-600 hover:text-violet-800"
                   >
                     Select all
                   </button>
@@ -805,7 +805,7 @@ export default function DiscoveryRulesClient({
           </div>
         </div>
       ) : (
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
+        <div className="bg-violet-50 border border-violet-100 rounded-lg p-4 text-sm text-violet-800">
           Admin view is read-only. Super admin can create or edit policy rules.
         </div>
       )}
@@ -973,7 +973,7 @@ export default function DiscoveryRulesClient({
                           <button
                             onClick={() => savePolicy(policy.id)}
                             disabled={busy}
-                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                            className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded hover:bg-violet-700 disabled:opacity-50"
                           >
                             {savingPolicyId === policy.id ? "Saving..." : "Save"}
                           </button>

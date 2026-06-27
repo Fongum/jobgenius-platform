@@ -306,7 +306,7 @@ export default async function AdminNotificationsPage({ searchParams }: PageProps
         <div className="flex items-end gap-2">
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
           >
             Filter
           </button>
@@ -325,7 +325,7 @@ export default async function AdminNotificationsPage({ searchParams }: PageProps
           { label: "Pending", value: pendingRes.count ?? 0, tone: "text-amber-700" },
           { label: "Sent", value: sentRes.count ?? 0, tone: "text-emerald-700" },
           { label: "Failed", value: failedRes.count ?? 0, tone: "text-red-700" },
-          { label: "Last 24h", value: lastDayRes.count ?? 0, tone: "text-blue-700" },
+          { label: "Last 24h", value: lastDayRes.count ?? 0, tone: "text-violet-700" },
         ].map((item) => (
           <div key={item.label} className="bg-white rounded-xl border border-gray-200 p-5">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -467,7 +467,7 @@ export default async function AdminNotificationsPage({ searchParams }: PageProps
                           {row.link_url && (
                             <a
                               href={row.link_url}
-                              className="mt-1 inline-block text-blue-600 hover:text-blue-700"
+                              className="mt-1 inline-block text-violet-600 hover:text-violet-700"
                             >
                               Open target →
                             </a>

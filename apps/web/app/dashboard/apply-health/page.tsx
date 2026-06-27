@@ -138,7 +138,7 @@ export default async function ApplyHealthPage() {
     { label: "Success rate", value: `${successRate}%`, tone: "text-violet-600" },
     { label: "Need you", value: needsAttention, tone: needsAttention > 0 ? "text-orange-600" : "text-gray-900" },
     { label: "Failed", value: failed, tone: failed > 0 ? "text-red-600" : "text-gray-900" },
-    { label: "Running", value: running, tone: "text-blue-600" },
+    { label: "Running", value: running, tone: "text-violet-600" },
   ];
 
   return (

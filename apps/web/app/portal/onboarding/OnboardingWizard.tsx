@@ -144,7 +144,7 @@ function ProgressBar({
                   index < currentVisibleStepIndex
                     ? "bg-green-500 text-white"
                     : index === currentVisibleStepIndex
-                    ? "bg-blue-600 text-white"
+                    ? "bg-violet-600 text-white"
                     : "bg-gray-200 text-gray-500"
                 }`}
               >
@@ -163,7 +163,7 @@ function ProgressBar({
               <span
                 className={`text-xs mt-1 ${
                   index === currentVisibleStepIndex
-                    ? "text-blue-600 font-medium"
+                    ? "text-violet-600 font-medium"
                     : "text-gray-500"
                 }`}
               >
@@ -190,7 +190,7 @@ function ProgressBar({
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
-            className="bg-blue-600 h-2 rounded-full transition-all"
+            className="bg-violet-600 h-2 rounded-full transition-all"
             style={{
               width: `${((currentVisibleStepIndex + 1) / visibleSteps.length) * 100}%`,
             }}

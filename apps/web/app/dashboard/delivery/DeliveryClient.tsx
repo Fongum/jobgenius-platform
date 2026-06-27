@@ -30,7 +30,7 @@ function stageBadgeClasses(stage: ClientDeliveryStage) {
     case "ready_to_launch":
       return "bg-sky-100 text-sky-800";
     case "active_search":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     case "interviewing":
       return "bg-amber-100 text-amber-800";
     case "offer":
@@ -51,7 +51,7 @@ function riskBadgeClasses(risk: ClientDeliveryRiskLevel) {
     case "high":
       return "bg-amber-100 text-amber-800";
     case "medium":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -64,7 +64,7 @@ function healthBadgeClasses(healthBand: ClientDeliveryHealthBand) {
     case "at_risk":
       return "bg-amber-100 text-amber-800";
     case "watch":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     default:
       return "bg-emerald-100 text-emerald-800";
   }
@@ -146,8 +146,8 @@ function SummaryCards({ summary }: { summary: ClientDeliveryBoardSummary }) {
     { label: "Critical health", value: summary.criticalHealthCount, tone: "text-red-700" },
     { label: "Stale", value: summary.staleCount, tone: "text-amber-700" },
     { label: "Escalated", value: summary.escalatedCount, tone: "text-rose-700" },
-    { label: "Mgr review", value: summary.managerReviewCount, tone: "text-blue-700" },
-    { label: "Active blockers", value: summary.activeBlockerCount, tone: "text-blue-700" },
+    { label: "Mgr review", value: summary.managerReviewCount, tone: "text-violet-700" },
+    { label: "Active blockers", value: summary.activeBlockerCount, tone: "text-violet-700" },
     { label: "Payment holds", value: summary.paymentHoldCount, tone: "text-rose-700" },
   ];
 
@@ -284,7 +284,7 @@ export default function DeliveryClient({
             onClick={() => setManagerReviewOnly((current) => !current)}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               managerReviewOnly
-                ? "bg-blue-600 text-white"
+                ? "bg-violet-600 text-white"
                 : "border border-gray-300 text-gray-700 hover:bg-gray-50"
             }`}
           >

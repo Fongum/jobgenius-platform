@@ -44,7 +44,7 @@ export default async function ClientTimelinePage({ params }: PageProps) {
       <div className="mb-6">
         <a
           href={`/dashboard/seekers/${params.id}`}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-sm text-violet-600 hover:text-violet-700 font-medium"
         >
           ← {seeker.full_name ?? seeker.email}
         </a>

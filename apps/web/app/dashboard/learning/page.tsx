@@ -56,7 +56,7 @@ export default async function LearningTracksPage() {
         </div>
         <Link
           href="/dashboard/learning/create"
-          className="px-4 py-2.5 sm:py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors text-center"
+          className="px-4 py-2.5 sm:py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors text-center"
         >
           Create Track
         </Link>
@@ -113,7 +113,7 @@ export default async function LearningTracksPage() {
                               </span>
                             )}
                             {track.target_skill && (
-                              <span className="text-xs text-blue-600">
+                              <span className="text-xs text-violet-600">
                                 Focus: {track.target_skill}
                               </span>
                             )}

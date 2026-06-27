@@ -631,6 +631,19 @@
             </div>
           </div>
 
+          <!-- Scrape review: jobs are shown here before anything is saved -->
+          <div id="scrapePreview" class="hidden" style="margin-top:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span id="scrapePreviewTitle" style="font-size:11px;font-weight:600;color:var(--gray-700)"></span>
+              <div style="display:flex;gap:6px">
+                <button id="scrapeToggleAll" class="btn btn-secondary btn-sm" style="width:auto;padding:3px 8px;font-size:10px">Toggle all</button>
+                <button id="scrapeClear" class="btn btn-secondary btn-sm" style="width:auto;padding:3px 8px;font-size:10px">Discard</button>
+              </div>
+            </div>
+            <div id="scrapeList" class="job-list" style="max-height:260px;overflow-y:auto"></div>
+            <button id="scrapeSaveSelected" class="btn btn-primary btn-sm" style="margin-top:8px">Save selected</button>
+          </div>
+
           <div id="saveStatus" class="status"></div>
         </div>
 

@@ -198,10 +198,10 @@ function toneClasses(tone: IntakeViewModel["tone"]) {
       };
     case "blue":
       return {
-        shell: "border-blue-200 bg-blue-50",
-        eyebrow: "text-blue-700",
-        body: "text-blue-900/85",
-        button: "bg-blue-600 hover:bg-blue-700",
+        shell: "border-violet-200 bg-violet-50",
+        eyebrow: "text-violet-700",
+        body: "text-violet-900/85",
+        button: "bg-violet-600 hover:bg-violet-700",
       };
     case "red":
       return {
@@ -444,22 +444,22 @@ export default async function PortalPage() {
           </div>
           <Link
             href="/portal/progress"
-            className="flex items-center gap-3 px-4 py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            className="flex items-center gap-3 px-4 py-2 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors"
           >
             <div className="relative w-12 h-12">
               <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#e5e7eb" strokeWidth="3" />
                 <circle
-                  cx="18" cy="18" r="15.915" fill="none" stroke="#3b82f6" strokeWidth="3"
+                  cx="18" cy="18" r="15.915" fill="none" stroke="#8b5cf6" strokeWidth="3"
                   strokeDasharray={`${profileCompletion} ${100 - profileCompletion}`}
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-blue-700">
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-violet-700">
                 {profileCompletion}%
               </span>
             </div>
-            <span className="text-sm font-medium text-blue-700">Profile</span>
+            <span className="text-sm font-medium text-violet-700">Profile</span>
           </Link>
         </div>
       </div>
@@ -475,22 +475,22 @@ export default async function PortalPage() {
               <div key={stage.key} className="flex-1 flex items-center">
                 <div className="flex flex-col items-center w-full">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
-                    isCompleted ? "bg-blue-600 border-blue-600 text-white" :
-                    isActive ? "bg-white border-blue-600 text-blue-600" :
+                    isCompleted ? "bg-violet-600 border-violet-600 text-white" :
+                    isActive ? "bg-white border-violet-600 text-violet-600" :
                     "bg-white border-gray-200 text-gray-400"
                   }`}>
                     {isCompleted ? "✓" : idx + 1}
                   </div>
                   <span className={`mt-1 text-xs text-center leading-tight ${
-                    isActive ? "text-blue-700 font-semibold" :
-                    isCompleted ? "text-blue-600" :
+                    isActive ? "text-violet-700 font-semibold" :
+                    isCompleted ? "text-violet-600" :
                     "text-gray-400"
                   }`}>
                     {stage.label}
                   </span>
                 </div>
                 {idx < PIPELINE_STAGES.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-1 mb-4 ${idx < stageIndex ? "bg-blue-600" : "bg-gray-200"}`} />
+                  <div className={`flex-1 h-0.5 mx-1 mb-4 ${idx < stageIndex ? "bg-violet-600" : "bg-gray-200"}`} />
                 )}
               </div>
             );
@@ -506,7 +506,7 @@ export default async function PortalPage() {
         </div>
         <div className="bg-white rounded-lg shadow p-5">
           <div className="text-sm font-medium text-gray-500">In Queue</div>
-          <div className="mt-1 text-3xl font-bold text-blue-600">{pendingApplications ?? 0}</div>
+          <div className="mt-1 text-3xl font-bold text-violet-600">{pendingApplications ?? 0}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-5">
           <div className="text-sm font-medium text-gray-500">Upcoming Interviews</div>
@@ -551,9 +551,9 @@ export default async function PortalPage() {
                 <li key={action.label}>
                   <Link
                     href={action.href}
-                    className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
+                    className="flex items-center gap-2 text-sm text-violet-600 hover:text-violet-800"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-500 flex-shrink-0" />
                     {action.label}
                   </Link>
                 </li>
@@ -572,7 +572,7 @@ export default async function PortalPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Upcoming Interviews</h3>
-            <Link href="/portal/interviews" className="text-sm text-blue-600 hover:text-blue-800">
+            <Link href="/portal/interviews" className="text-sm text-violet-600 hover:text-violet-800">
               View all
             </Link>
           </div>
@@ -605,7 +605,7 @@ export default async function PortalPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Your Skills</h3>
-            <Link href="/portal/profile" className="text-sm text-blue-600 hover:text-blue-800">
+            <Link href="/portal/profile" className="text-sm text-violet-600 hover:text-violet-800">
               Edit
             </Link>
           </div>
@@ -613,7 +613,7 @@ export default async function PortalPage() {
             {jobSeeker.skills.map((skill: string) => (
               <span
                 key={skill}
-                className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                className="px-3 py-1 bg-violet-100 text-violet-800 rounded-full text-sm"
               >
                 {skill}
               </span>

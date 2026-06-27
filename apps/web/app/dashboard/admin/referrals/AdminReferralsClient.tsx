@@ -34,7 +34,7 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<ReferralStatus, string> = {
-  signed_up: "bg-blue-100 text-blue-700",
+  signed_up: "bg-violet-100 text-violet-700",
   placed: "bg-green-100 text-green-700",
   rewarded: "bg-purple-100 text-purple-700",
 };
@@ -143,7 +143,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { label: "Total", value: stats.total, color: "text-gray-900" },
-          { label: "Signed Up", value: stats.signed_up, color: "text-blue-600" },
+          { label: "Signed Up", value: stats.signed_up, color: "text-violet-600" },
           { label: "Placed", value: stats.placed, color: "text-green-600" },
           { label: "Credited", value: stats.rewarded, color: "text-purple-600" },
           { label: "Credits Issued", value: `$${stats.total_paid.toFixed(2)}`, color: "text-purple-600" },
@@ -214,7 +214,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                     <td className="px-4 py-3">
                       <button
                         onClick={() => openEdit(r)}
-                        className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                        className="text-xs font-medium text-violet-600 hover:text-violet-700"
                       >
                         Edit
                       </button>
@@ -255,7 +255,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                   step="0.01"
                   value={editReward}
                   onChange={(e) => setEditReward(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                   placeholder="e.g. 250.00"
                 />
               </div>
@@ -266,7 +266,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
                   placeholder="Optional notes about this reward..."
                 />
               </div>
@@ -277,7 +277,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                     type="checkbox"
                     checked={editMarkPaid}
                     onChange={(e) => setEditMarkPaid(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                   />
                   <span className="text-sm font-medium text-gray-700">Mark as credited</span>
                 </label>
@@ -297,7 +297,7 @@ export default function AdminReferralsClient({ stats, referrals: initialReferral
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
                 >
                   {saving ? "Saving..." : "Save"}
                 </button>

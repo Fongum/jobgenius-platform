@@ -59,7 +59,7 @@ export default async function EmployeeWorkHubPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard/me/onboarding"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Complete onboarding
           </Link>
@@ -83,7 +83,7 @@ export default async function EmployeeWorkHubPage() {
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Onboarding
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">{onboardingCompletion}%</p>
+          <p className="text-3xl font-bold text-violet-700 mt-2">{onboardingCompletion}%</p>
           <p className="text-xs text-gray-400 mt-1">
             {labelizePeopleValue(employee.onboarding_status)}
           </p>
@@ -133,12 +133,12 @@ export default async function EmployeeWorkHubPage() {
                 {employee.current_level?.summary || "No level summary available yet."}
               </p>
             </div>
-            <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
-              <p className="text-xs uppercase tracking-wide text-blue-600">Next possible level</p>
-              <p className="font-semibold text-blue-900 mt-1">
+            <div className="rounded-lg bg-violet-50 border border-violet-100 p-4">
+              <p className="text-xs uppercase tracking-wide text-violet-600">Next possible level</p>
+              <p className="font-semibold text-violet-900 mt-1">
                 {nextLevel?.title || "You are at the highest configured level."}
               </p>
-              <p className="text-sm text-blue-800 mt-1">
+              <p className="text-sm text-violet-800 mt-1">
                 {nextLevel?.summary ||
                   "Leadership and progression decisions continue through your review cycle."}
               </p>

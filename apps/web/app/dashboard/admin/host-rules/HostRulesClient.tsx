@@ -21,7 +21,7 @@ export interface HostRuleRow {
 }
 
 const INPUT =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-violet-600 focus:ring-1 focus:ring-violet-600";
 
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-green-100 text-green-700",
@@ -270,7 +270,7 @@ export default function HostRulesClient({
       <div className="flex justify-end mb-4">
         <button
           onClick={() => setCreating((c) => !c)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+          className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
         >
           {creating ? "Cancel" : "+ New rule"}
         </button>
@@ -284,7 +284,7 @@ export default function HostRulesClient({
             <button
               type="submit"
               disabled={busy}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {busy ? "Saving…" : "Create rule"}
             </button>
@@ -329,7 +329,7 @@ export default function HostRulesClient({
                       <>
                         <button
                           onClick={() => startEdit(row)}
-                          className="text-xs text-blue-600 hover:text-blue-700"
+                          className="text-xs text-violet-600 hover:text-violet-700"
                         >
                           Edit
                         </button>
@@ -385,7 +385,7 @@ export default function HostRulesClient({
                       <button
                         onClick={saveEdit}
                         disabled={busy}
-                        className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
                       >
                         {busy ? "Saving…" : "Save"}
                       </button>

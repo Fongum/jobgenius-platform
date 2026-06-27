@@ -33,7 +33,7 @@ export interface DiagnosisWithRun extends FailureDiagnosisRow {
 
 const CAUSE_STYLES: Record<string, string> = {
   captcha: "bg-amber-100 text-amber-700",
-  required_field_missing: "bg-blue-100 text-blue-700",
+  required_field_missing: "bg-violet-100 text-violet-700",
   overlay: "bg-purple-100 text-purple-700",
   selector_changed: "bg-red-100 text-red-700",
   auth_expired: "bg-orange-100 text-orange-700",
@@ -46,8 +46,8 @@ const CAUSE_STYLES: Record<string, string> = {
 const ACTION_STYLES: Record<string, string> = {
   retry_same: "bg-gray-100 text-gray-700",
   rotate_session: "bg-amber-100 text-amber-700",
-  skip_optional: "bg-blue-100 text-blue-700",
-  simplified_fields: "bg-blue-100 text-blue-700",
+  skip_optional: "bg-violet-100 text-violet-700",
+  simplified_fields: "bg-violet-100 text-violet-700",
   alt_resume: "bg-cyan-100 text-cyan-700",
   add_host_rule: "bg-emerald-100 text-emerald-700",
   human_review: "bg-purple-100 text-purple-700",
@@ -55,7 +55,7 @@ const ACTION_STYLES: Record<string, string> = {
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
-  reviewed: "bg-blue-100 text-blue-700",
+  reviewed: "bg-violet-100 text-violet-700",
   applied: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
   expired: "bg-gray-100 text-gray-500",
@@ -224,7 +224,7 @@ export default function DiagnosesClient({
                       run:{" "}
                       <Link
                         href={`/dashboard/attention?run=${row.run_id}`}
-                        className="text-blue-600 hover:text-blue-700"
+                        className="text-violet-600 hover:text-violet-700"
                       >
                         {row.run_id.slice(0, 8)}
                       </Link>
@@ -296,7 +296,7 @@ export default function DiagnosesClient({
                         Apply by adding/editing the matching row at{" "}
                         <Link
                           href="/dashboard/admin/host-rules"
-                          className="text-blue-600 hover:text-blue-700"
+                          className="text-violet-600 hover:text-violet-700"
                         >
                           Host Rules
                         </Link>

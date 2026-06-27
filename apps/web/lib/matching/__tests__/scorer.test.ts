@@ -1051,3 +1051,51 @@ describe("computeMatchScore", () => {
     });
   });
 });
+
+describe("hard disqualifiers", () => {
+  it("does not disqualify a clean strong match", () => {
+    const result = computeMatchScore(buildSeeker(), buildJob());
+    expect(result.reasons.disqualifiers).toEqual([]);
+    expect(result.recommendation).toBe("strong_match");
+  });
+
+  it("rejects a job containing an excluded keyword", () => {
+    const seeker = buildSeeker({ exclude_keywords: ["crypto"] });
+    const job = buildJob({ title: "Crypto Engineer", description_text: "Build crypto trading systems." });
+    const result = computeMatchScore(seeker, job);
+    expect(result.recommendation).toBe("poor_fit");
+    expect(result.score).toBeLessThanOrEqual(15);
+    expect(result.reasons.disqualifiers.join(" ")).toContain("exclude_keyword");
+  });
+
+  it("rejects an on-site job in a location the client cannot reach", () => {
+    const seeker = buildSeeker({ open_to_relocation: false, preferred_locations: ["New York, NY"] });
+    const job = buildJob({ work_type: "onsite", location: "San Francisco, CA" });
+    const result = computeMatchScore(seeker, job);
+    expect(result.recommendation).toBe("poor_fit");
+    expect(result.reasons.disqualifiers).toContain("disqualified_location_unreachable");
+  });
+
+  it("does NOT reject a remote job even with a far-away location string", () => {
+    const seeker = buildSeeker({ open_to_relocation: false });
+    const job = buildJob({ work_type: "remote", location: "Remote (US)" });
+    const result = computeMatchScore(seeker, job);
+    expect(result.reasons.disqualifiers).toEqual([]);
+  });
+
+  it("rejects a job paying well below the client's floor", () => {
+    const seeker = buildSeeker({ salary_min: 100_000 });
+    const job = buildJob({ salary_min: 50_000, salary_max: 60_000 });
+    const result = computeMatchScore(seeker, job);
+    expect(result.recommendation).toBe("poor_fit");
+    expect(result.reasons.disqualifiers).toContain("disqualified_salary_below_floor");
+  });
+
+  it("rejects a job that explicitly offers no sponsorship when the client needs it", () => {
+    const seeker = buildSeeker({ requires_visa_sponsorship: true });
+    const job = buildJob({ offers_visa_sponsorship: false });
+    const result = computeMatchScore(seeker, job);
+    expect(result.recommendation).toBe("poor_fit");
+    expect(result.reasons.disqualifiers).toContain("disqualified_no_visa_sponsorship");
+  });
+});

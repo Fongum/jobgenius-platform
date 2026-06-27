@@ -179,7 +179,7 @@ export default function PromoCodesClient({ promoCodes }: PromoCodesClientProps) 
             <button
               onClick={() => savePromoCode()}
               disabled={savingKey === "create"}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {savingKey === "create" ? "Saving..." : "Create Promo Code"}
             </button>
@@ -217,7 +217,7 @@ export default function PromoCodesClient({ promoCodes }: PromoCodesClientProps) 
                         setError(null);
                         setSuccess(null);
                       }}
-                      className="text-sm text-blue-600 hover:underline"
+                      className="text-sm text-violet-600 hover:underline"
                     >
                       Edit
                     </button>
@@ -242,7 +242,7 @@ export default function PromoCodesClient({ promoCodes }: PromoCodesClientProps) 
                     <button
                       onClick={() => savePromoCode(promoCode.id)}
                       disabled={savingKey === promoCode.id}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50"
                     >
                       {savingKey === promoCode.id ? "Saving..." : "Save Changes"}
                     </button>
@@ -393,7 +393,7 @@ function PromoCodeFormFields({
           onChange={(event) =>
             onChange({ singleUsePerEmail: event.target.checked })
           }
-          className="rounded border-gray-300 text-blue-600"
+          className="rounded border-gray-300 text-violet-600"
         />
         Limit each email to a single use of this code
       </label>

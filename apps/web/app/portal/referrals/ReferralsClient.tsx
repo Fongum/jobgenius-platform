@@ -39,7 +39,7 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<ReferralStatus, string> = {
-  signed_up: "bg-blue-100 text-blue-700",
+  signed_up: "bg-violet-100 text-violet-700",
   placed: "bg-amber-100 text-amber-700",
   rewarded: "bg-emerald-100 text-emerald-700",
 };
@@ -118,9 +118,9 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
         </p>
       </div>
 
-      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-2xl p-6 text-white">
         <h2 className="text-lg font-semibold mb-1">Your Referral Link</h2>
-        <p className="text-blue-100 text-sm mb-4">
+        <p className="text-violet-100 text-sm mb-4">
           Every successful referral can reduce your own registration balance.
         </p>
 
@@ -130,7 +130,7 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
               <span className="flex-1 text-sm font-mono truncate">{referralLink}</span>
               <button
                 onClick={handleCopy}
-                className="flex-shrink-0 px-3 py-1.5 bg-white text-blue-700 text-xs font-semibold rounded-md hover:bg-blue-50 transition-colors"
+                className="flex-shrink-0 px-3 py-1.5 bg-white text-violet-700 text-xs font-semibold rounded-md hover:bg-violet-50 transition-colors"
               >
                 {copied ? "Copied!" : "Copy"}
               </button>
@@ -170,7 +170,7 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
             </div>
           </>
         ) : (
-          <p className="text-blue-100 text-sm">
+          <p className="text-violet-100 text-sm">
             Your referral code is being generated. Please refresh the page.
           </p>
         )}
@@ -184,7 +184,7 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
           {
             label: "Wallet Balance",
             value: formatCurrency(stats.availableCredits),
-            color: "text-blue-600",
+            color: "text-violet-600",
           },
         ].map((stat) => (
           <div
@@ -210,16 +210,16 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
           </p>
         </div>
 
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <p className="text-sm font-semibold text-blue-900">
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-sm font-semibold text-violet-900">
             Registration balance remaining
           </p>
-          <p className="mt-1 text-2xl font-bold text-blue-700">
+          <p className="mt-1 text-2xl font-bold text-violet-700">
             {stats.registrationBalanceRemaining == null
               ? "No contract yet"
               : formatCurrency(stats.registrationBalanceRemaining)}
           </p>
-          <p className="mt-1 text-sm text-blue-800">
+          <p className="mt-1 text-sm text-violet-800">
             Available credits apply to this balance automatically when eligible.
           </p>
         </div>
@@ -262,7 +262,7 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
                   <tr key={referral.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold">
+                        <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-semibold">
                           {referral.referred_initial}
                         </div>
                         <span className="text-sm text-gray-500">Friend</span>

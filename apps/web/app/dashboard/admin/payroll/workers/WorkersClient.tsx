@@ -112,7 +112,7 @@ export default function WorkersClient({
         </div>
         <button
           onClick={() => setShowForm((s) => !s)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
         >
           {showForm ? "Cancel" : "Add worker"}
         </button>
@@ -267,7 +267,7 @@ export default function WorkersClient({
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
             >
               {saving ? "Saving…" : "Create worker"}
             </button>
@@ -298,7 +298,7 @@ export default function WorkersClient({
                   <td className="px-4 py-3">
                     <Link
                       href={`/dashboard/admin/payroll/workers/${w.id}`}
-                      className="font-medium text-blue-600 hover:text-blue-700"
+                      className="font-medium text-violet-600 hover:text-violet-700"
                     >
                       {w.full_name}
                     </Link>
@@ -328,7 +328,7 @@ export default function WorkersClient({
                   <td className="px-4 py-3 text-right">
                     <Link
                       href={`/dashboard/admin/payroll/workers/${w.id}`}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                      className="text-xs font-medium text-violet-600 hover:text-violet-700 whitespace-nowrap"
                     >
                       Manage →
                     </Link>
@@ -351,8 +351,8 @@ export default function WorkersClient({
         }
         :global(.input:focus) {
           outline: none;
-          border-color: #2563eb;
-          box-shadow: 0 0 0 1px #2563eb;
+          border-color: #7c3aed;
+          box-shadow: 0 0 0 1px #7c3aed;
         }
       `}</style>
     </div>

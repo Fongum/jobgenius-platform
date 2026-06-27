@@ -17,7 +17,7 @@ export interface PayslipRow extends Payslip {
 
 const PAYSLIP_STATUS_STYLES: Record<PayslipStatus, string> = {
   draft: "bg-gray-100 text-gray-600",
-  issued: "bg-blue-100 text-blue-700",
+  issued: "bg-violet-100 text-violet-700",
   paid: "bg-green-100 text-green-700",
 };
 
@@ -110,7 +110,7 @@ export default function PeriodDetailClient({
     <div className="max-w-5xl mx-auto">
       <Link
         href="/dashboard/admin/payroll/periods"
-        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+        className="text-sm text-violet-600 hover:text-violet-700 font-medium"
       >
         ← Pay periods
       </Link>
@@ -136,7 +136,7 @@ export default function PeriodDetailClient({
               <button
                 onClick={() => setPeriodStatus("finalized")}
                 disabled={busy || payslips.length === 0}
-                className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
               >
                 Finalize
               </button>
@@ -168,7 +168,7 @@ export default function PeriodDetailClient({
       <div className="grid grid-cols-3 gap-4 mb-6">
         <Stat label="Payslips" value={String(payslips.length)} tone="text-gray-900" />
         <Stat label="Total gross" value={formatCurrency(totalGross)} tone="text-green-700" />
-        <Stat label="Total net" value={formatCurrency(totalNet)} tone="text-blue-700" />
+        <Stat label="Total net" value={formatCurrency(totalNet)} tone="text-violet-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -217,7 +217,7 @@ export default function PeriodDetailClient({
                   <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
                     <Link
                       href={`/dashboard/admin/payroll/payslips/${p.id}`}
-                      className="text-xs text-blue-600 hover:text-blue-700"
+                      className="text-xs text-violet-600 hover:text-violet-700"
                     >
                       {p.status === "draft" ? "Edit" : "View"}
                     </Link>

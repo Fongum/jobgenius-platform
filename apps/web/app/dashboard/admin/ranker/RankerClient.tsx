@@ -158,7 +158,7 @@ export default function RankerClient({
         <button
           onClick={train}
           disabled={busy || !readyToTrain}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
         >
           {busy ? "Training…" : `Train v${(models[0]?.version ?? 0) + 1}`}
         </button>

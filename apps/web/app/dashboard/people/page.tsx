@@ -34,7 +34,7 @@ export default async function PeopleOverviewPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard/people/employees"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Manage employees
           </Link>
@@ -70,7 +70,7 @@ export default async function PeopleOverviewPage() {
           {
             label: "On probation",
             value: stats.probationCount,
-            tone: "text-blue-700",
+            tone: "text-violet-700",
           },
           {
             label: "Permanent",
@@ -85,7 +85,7 @@ export default async function PeopleOverviewPage() {
           {
             label: "Scorecards due",
             value: stats.dueScorecardCount,
-            tone: "text-blue-700",
+            tone: "text-violet-700",
           },
           {
             label: "Probation due",
@@ -119,7 +119,7 @@ export default async function PeopleOverviewPage() {
                 Monthly scorecards, probation checkpoints, and elections closing soon.
               </p>
             </div>
-            <Link href="/dashboard/people/scorecards" className="text-sm text-blue-600 hover:text-blue-700">
+            <Link href="/dashboard/people/scorecards" className="text-sm text-violet-600 hover:text-violet-700">
               Open reviews
             </Link>
           </div>
@@ -159,7 +159,7 @@ export default async function PeopleOverviewPage() {
                 New or recently updated internal staff profiles.
               </p>
             </div>
-            <Link href="/dashboard/people/employees" className="text-sm text-blue-600 hover:text-blue-700">
+            <Link href="/dashboard/people/employees" className="text-sm text-violet-600 hover:text-violet-700">
               View all
             </Link>
           </div>
@@ -203,7 +203,7 @@ export default async function PeopleOverviewPage() {
                 Submitted and in-progress onboarding records that need follow-up.
               </p>
             </div>
-            <Link href="/dashboard/people/onboarding" className="text-sm text-blue-600 hover:text-blue-700">
+            <Link href="/dashboard/people/onboarding" className="text-sm text-violet-600 hover:text-violet-700">
               Open queue
             </Link>
           </div>
@@ -228,7 +228,7 @@ export default async function PeopleOverviewPage() {
                   <span
                     className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
                       form.status === "submitted"
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-violet-100 text-violet-700"
                         : form.status === "needs_changes"
                         ? "bg-amber-100 text-amber-700"
                         : "bg-gray-100 text-gray-700"

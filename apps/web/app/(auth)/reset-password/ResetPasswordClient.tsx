@@ -108,7 +108,7 @@ export default function ResetPasswordClient() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div>
-            <Link href="/" className="block text-center text-3xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
+            <Link href="/" className="block text-center text-3xl font-bold text-gray-900 hover:text-violet-600 transition-colors">
               JobGenius
             </Link>
             <h2 className="mt-6 text-center text-2xl font-semibold text-gray-900">
@@ -142,7 +142,7 @@ export default function ResetPasswordClient() {
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-violet-500 focus:border-violet-500"
                   placeholder="********"
                 />
                 <p className="mt-1 text-xs text-gray-500">
@@ -162,7 +162,7 @@ export default function ResetPasswordClient() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-violet-500 focus:border-violet-500"
                   placeholder="********"
                 />
               </div>
@@ -172,14 +172,14 @@ export default function ResetPasswordClient() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Updating..." : "Update password"}
               </button>
             </div>
 
             <div className="text-center text-sm text-gray-600">
-              <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+              <Link href="/login" className="font-medium text-violet-600 hover:text-violet-500">
                 Back to login
               </Link>
             </div>
@@ -193,7 +193,7 @@ export default function ResetPasswordClient() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <Link href="/" className="block text-center text-3xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
+          <Link href="/" className="block text-center text-3xl font-bold text-gray-900 hover:text-violet-600 transition-colors">
             JobGenius
           </Link>
           <h2 className="mt-6 text-center text-2xl font-semibold text-gray-900">
@@ -235,7 +235,7 @@ export default function ResetPasswordClient() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-violet-500 focus:border-violet-500"
               placeholder="you@example.com"
             />
           </div>
@@ -244,14 +244,14 @@ export default function ResetPasswordClient() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Sending..." : "Send reset link"}
             </button>
           </div>
 
           <div className="text-center text-sm text-gray-600">
-            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link href="/login" className="font-medium text-violet-600 hover:text-violet-500">
               Back to login
             </Link>
           </div>

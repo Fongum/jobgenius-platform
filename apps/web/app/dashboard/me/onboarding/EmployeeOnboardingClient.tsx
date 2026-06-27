@@ -173,7 +173,7 @@ export default function EmployeeOnboardingClient({
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Completion
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">{onboardingCompletion}%</p>
+          <p className="text-3xl font-bold text-violet-700 mt-2">{onboardingCompletion}%</p>
           <p className="text-xs text-gray-400 mt-1">
             {labelizePeopleValue(employee.onboarding_status)}
           </p>
@@ -361,7 +361,7 @@ export default function EmployeeOnboardingClient({
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, [key]: e.target.checked }))
                 }
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
               />
               <span className="text-sm text-gray-700">{ACK_LABELS[key]}</span>
             </label>
@@ -389,7 +389,7 @@ export default function EmployeeOnboardingClient({
                   type="checkbox"
                   checked={acknowledgedPolicyIds.includes(policy.id)}
                   onChange={() => togglePolicy(policy.id)}
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                 />
                 <div>
                   <p className="font-medium text-gray-900">{policy.title}</p>
@@ -435,7 +435,7 @@ export default function EmployeeOnboardingClient({
             <button
               onClick={() => save("submit")}
               disabled={savingMode !== null}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {savingMode === "submit" ? "Submitting..." : "Submit onboarding"}
             </button>

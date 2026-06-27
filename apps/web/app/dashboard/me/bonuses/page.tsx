@@ -70,7 +70,7 @@ export default async function EmployeeBonusesPage() {
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Paid bonuses
           </p>
-          <p className="text-2xl font-bold text-blue-700 mt-2">
+          <p className="text-2xl font-bold text-violet-700 mt-2">
             {bonuses.filter((bonus) => bonus.payment_status === "paid").length}
           </p>
         </div>

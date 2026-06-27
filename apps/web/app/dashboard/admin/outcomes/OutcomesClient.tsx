@@ -166,7 +166,7 @@ function statusBadgeClasses(status: ConsultationFormState["status"]): string {
     case "completed":
       return "bg-emerald-100 text-emerald-800";
     case "booked":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     case "no_show":
       return "bg-amber-100 text-amber-800";
     case "cancelled":
@@ -318,10 +318,10 @@ export default function OutcomesClient({
       </div>
 
       {selectedLead ? (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
                 Selected lead
               </p>
               <p className="mt-1 text-lg font-semibold text-gray-900">{selectedLead.label}</p>
@@ -335,7 +335,7 @@ export default function OutcomesClient({
             <button
               type="button"
               onClick={() => router.push("/dashboard/admin/outcomes")}
-              className="inline-flex items-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
+              className="inline-flex items-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-violet-700 ring-1 ring-inset ring-violet-200 hover:bg-violet-100"
             >
               Clear lead focus
             </button>
@@ -567,7 +567,7 @@ export default function OutcomesClient({
               <button
                 type="submit"
                 disabled={busy || !form.lead_submission_id}
-                className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {busy
                   ? "Saving..."
@@ -654,7 +654,7 @@ export default function OutcomesClient({
                     <button
                       type="button"
                       onClick={() => startEditing(consultation)}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                      className="text-sm font-medium text-violet-600 hover:text-violet-700"
                     >
                       Edit consultation
                     </button>

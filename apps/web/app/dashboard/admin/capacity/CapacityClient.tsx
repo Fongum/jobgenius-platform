@@ -218,7 +218,7 @@ export default function CapacityClient({
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-gray-500">Reserved Spots</p>
-          <p className="mt-2 text-3xl font-bold text-blue-600">
+          <p className="mt-2 text-3xl font-bold text-violet-600">
             {snapshot.reservedCount}
           </p>
         </div>
@@ -268,7 +268,7 @@ export default function CapacityClient({
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Reserved
                     </p>
-                    <p className="mt-1 text-2xl font-bold text-blue-600">
+                    <p className="mt-1 text-2xl font-bold text-violet-600">
                       {row.approvedCount}
                     </p>
                   </div>

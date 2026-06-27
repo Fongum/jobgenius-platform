@@ -14,14 +14,17 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const { company, role, baseSalary, offerAcceptedAt, startDate, notes } = body as {
+  const { company, role, baseSalary, guaranteedCompensation, offerAcceptedAt, startDate, notes } = body as {
     company: string;
     role: string;
     baseSalary: number;
+    guaranteedCompensation?: number;
     offerAcceptedAt: string;
     startDate?: string;
     notes?: string;
   };
+
+  const guaranteed = Number.isFinite(Number(guaranteedCompensation)) ? Number(guaranteedCompensation) : 0;
 
   if (!company || !role || !baseSalary || !offerAcceptedAt) {
     return NextResponse.json(
@@ -41,6 +44,7 @@ export async function POST(request: Request) {
       company,
       role,
       base_salary: baseSalary,
+      guaranteed_compensation: guaranteed,
       reported_by: "job_seeker",
       reported_by_user_id: auth.user.id,
       offer_accepted_at: offerAcceptedAt,

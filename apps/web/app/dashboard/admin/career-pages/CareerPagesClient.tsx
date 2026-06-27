@@ -92,7 +92,7 @@ export default function CareerPagesClient() {
         <div className="flex gap-2">
           <button
             onClick={() => setShowAdd(!showAdd)}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-md hover:bg-violet-700"
           >
             + Add Company
           </button>
@@ -150,7 +150,7 @@ export default function CareerPagesClient() {
             <button
               onClick={handleAdd}
               disabled={adding || !companyName || !careerUrl}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50"
             >
               {adding ? "Adding..." : "Add"}
             </button>
@@ -184,7 +184,7 @@ export default function CareerPagesClient() {
                       href={page.career_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline font-medium"
+                      className="text-violet-600 hover:underline font-medium"
                     >
                       {page.company_name}
                     </a>

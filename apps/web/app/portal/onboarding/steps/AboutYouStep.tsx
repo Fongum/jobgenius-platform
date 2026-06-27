@@ -35,8 +35,8 @@ export default function AboutYouStep({
       <h2 className="text-xl font-semibold text-gray-900 mb-1">About You</h2>
       <p className="text-sm text-gray-600 mb-6">Tell us a bit about yourself so employers can find you.</p>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-        <p className="text-sm text-blue-800">
+      <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 mb-6">
+        <p className="text-sm text-violet-800">
           Candidates with a LinkedIn URL receive 40% more recruiter responses.
         </p>
       </div>
@@ -53,7 +53,7 @@ export default function AboutYouStep({
             value={profile.years_experience ?? ""}
             onChange={(e) => update("years_experience", e.target.value ? parseInt(e.target.value) : undefined)}
             placeholder="e.g. 5"
-            className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
           />
         </div>
       </div>
@@ -65,7 +65,7 @@ export default function AboutYouStep({
           onChange={(e) => update("bio", e.target.value)}
           placeholder="A short summary about yourself, your experience, and what you're looking for..."
           rows={3}
-          className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
         />
       </div>
 
@@ -73,7 +73,7 @@ export default function AboutYouStep({
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200">
           Back
         </button>
-        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+        <button onClick={handleContinue} disabled={saving} className="px-6 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
           {saving ? "Saving..." : "Continue"}
         </button>
       </div>

@@ -12,7 +12,12 @@ import { smartRecruitersAdapter } from "./adapters/smartrecruiters.js";
 import { hostedAtsAdapters } from "./adapters/hosted-ats.js";
 import { start as startDiscoveryAgent } from "./discovery/agent.js";
 import { logLine } from "./logger.js";
-import { getStateKey, readStorageState, writeStorageState } from "./storage.js";
+import {
+  getStateKey,
+  readStorageState,
+  writeStorageState,
+  parseStorageStateText,
+} from "./storage.js";
 import { getJson } from "./api.js";
 
 const API_BASE_URL = process.env.JOBGENIUS_API_BASE_URL;
@@ -141,8 +146,9 @@ async function fetchStorageState(storageStateUrl) {
     if (!response.ok) {
       throw new Error(`Storage state fetch failed (${response.status}).`);
     }
-    const json = await response.json();
-    return json ?? null;
+    // The bucket file may be plaintext or an encrypted envelope — decrypt if so.
+    const text = await response.text();
+    return parseStorageStateText(text);
   } catch (error) {
     logLine({
       level: "WARN",

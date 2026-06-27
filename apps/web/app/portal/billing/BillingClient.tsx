@@ -120,13 +120,13 @@ interface BillingClientProps {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
-  partial: "bg-blue-100 text-blue-800",
+  partial: "bg-violet-100 text-violet-800",
   complete: "bg-green-100 text-green-800",
   paid: "bg-green-100 text-green-800",
   overdue: "bg-red-100 text-red-800",
   legal: "bg-red-200 text-red-900",
   reported: "bg-gray-100 text-gray-700",
-  confirmed: "bg-blue-100 text-blue-700",
+  confirmed: "bg-violet-100 text-violet-700",
   accepted: "bg-green-100 text-green-800",
   details_sent: "bg-purple-100 text-purple-800",
   screenshot_uploaded: "bg-indigo-100 text-indigo-800",
@@ -326,7 +326,7 @@ export default function BillingClient({
             </p>
             <a
               href="/portal/onboarding"
-              className="inline-block px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-block px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
             >
               Go to Onboarding
             </a>
@@ -422,7 +422,7 @@ export default function BillingClient({
           <h2 className="text-lg font-semibold text-gray-900">Your Plan</h2>
           <button
             onClick={() => setShowContract(true)}
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-violet-600 hover:underline"
           >
             View Contract
           </button>
@@ -538,7 +538,7 @@ export default function BillingClient({
                           installmentId: inst.id,
                           label: `Installment ${inst.installment_number} ($${Number(inst.amount).toLocaleString()})`,
                         })}
-                        className="text-xs px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        className="text-xs px-2 py-1 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors"
                       >
                         Request Details
                       </button>
@@ -616,7 +616,7 @@ export default function BillingClient({
                             offerId: offer.id,
                             label: `Commission for ${offer.company}`,
                           })}
-                          className="text-xs px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                          className="text-xs px-2 py-1 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors"
                         >
                           Request Payment Details
                         </button>
@@ -695,7 +695,7 @@ export default function BillingClient({
                     const w = window.open("", "_blank");
                     if (w) { w.document.write(contract.contract_html!); w.document.close(); w.print(); }
                   }}
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-sm text-violet-600 hover:underline"
                 >
                   Print / Save PDF
                 </button>
@@ -738,7 +738,7 @@ function getIntakeBanner(intakeState: IntakeState | null): {
       return {
         title: "Waitlisted for the next onboarding window",
         body: "This month's account manager capacity is currently full. No spot is reserved until a team member moves you out of the waitlist.",
-        className: "border-blue-200 bg-blue-50 text-blue-900",
+        className: "border-violet-200 bg-violet-50 text-violet-900",
       };
     case "approved_payment_pending":
       return {

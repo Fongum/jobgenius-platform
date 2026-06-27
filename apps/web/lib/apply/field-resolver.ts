@@ -40,7 +40,13 @@ export interface ResolveFieldsInput {
   amId?: string | null;
 }
 
-export type ResolvedFieldSource = "learned" | "screening" | "llm";
+export type ResolvedFieldSource = "learned" | "screening" | "default" | "llm";
+
+export interface ScreeningMatch {
+  value: string;
+  /** "screening" = the seeker's configured answer; "default" = a deterministic fallback. */
+  source: "screening" | "default";
+}
 
 export interface ResolvedField {
   label: string;
@@ -127,40 +133,40 @@ function coerceToField(
 export function matchScreeningAnswer(
   field: FieldDescriptor,
   screeningAnswers: ScreeningAnswer[]
-): string | null {
+): ScreeningMatch | null {
   const label = (field.label ?? "").toLowerCase();
   if (!label) return null;
 
+  // The seeker's own configured answer always wins → source "screening".
   for (const answer of screeningAnswers) {
     if (!answer?.question_key || !answer?.answer_value) continue;
     const mapping = QUESTION_KEY_PATTERNS.find((m) => m.key === answer.question_key);
     if (!mapping) continue;
     if (mapping.patterns.some((p) => label.includes(p))) {
       const coerced = coerceToField(answer.answer_value, field);
-      if (coerced) return coerced;
+      if (coerced) return { value: coerced, source: "screening" };
     }
   }
 
-  // Deterministic safe defaults for gating questions when the seeker has not
-  // configured an explicit answer. Seeker screening answers above always win,
-  // and this keeps the no-LLM path correct.
+  // Deterministic safe defaults when the seeker has not configured an answer →
+  // source "default" (so callers/UIs don't mislabel these as the seeker's choice).
   if (WORK_AUTH_PATTERNS.some((p) => label.includes(p))) {
-    return coerceAffirmative(field, true);
+    return { value: coerceAffirmative(field, true), source: "default" };
   }
   if (SPONSORSHIP_PATTERNS.some((p) => label.includes(p))) {
-    return coerceAffirmative(field, false);
+    return { value: coerceAffirmative(field, false), source: "default" };
   }
 
   // EEO / demographic fields with no seeker-provided answer → decline.
   if (EEO_KEYWORDS.some((kw) => label.includes(kw))) {
     if (Array.isArray(field.options) && field.options.length > 0) {
-      return (
+      const declined =
         findBestOptionMatch(field.options, "prefer not") ??
         findBestOptionMatch(field.options, "decline") ??
-        findBestOptionMatch(field.options, "choose not")
-      );
+        findBestOptionMatch(field.options, "choose not");
+      return declined ? { value: declined, source: "default" } : null;
     }
-    return "Prefer not to answer";
+    return { value: "Prefer not to answer", source: "default" };
   }
 
   return null;
@@ -296,8 +302,13 @@ export async function resolveFields(input: ResolveFieldsInput): Promise<ResolveF
 
     const screening = matchScreeningAnswer(field, screeningAnswers);
     if (screening) {
-      resolved.push({ label: field.label, value: screening, source: "screening", confidence: 0.85 });
-      map[field.label] = screening;
+      resolved.push({
+        label: field.label,
+        value: screening.value,
+        source: screening.source,
+        confidence: screening.source === "screening" ? 0.85 : 0.6,
+      });
+      map[field.label] = screening.value;
       continue;
     }
 

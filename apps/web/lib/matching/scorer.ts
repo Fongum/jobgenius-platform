@@ -1075,6 +1075,95 @@ function determineRecommendation(
 }
 
 // ============================================================================
+// HARD DISQUALIFIERS
+//
+// Unlike the soft component penalties, these reject a job outright when a
+// confident, data-present conflict makes it unsuitable for the client —
+// regardless of how strong the skill/title overlap is. Only fires when the
+// relevant data exists on BOTH sides, to avoid false negatives on sparse posts.
+// ============================================================================
+
+const SALARY_FLOOR_RATIO = 0.8;
+const DISQUALIFIED_SCORE_CAP = 15;
+
+function seekerCanWorkAtLocation(
+  seeker: JobSeekerProfile,
+  jobLocationLower: string
+): boolean {
+  if (seeker.open_to_relocation) return true;
+
+  for (const pref of seeker.location_preferences) {
+    if (pref.work_type === "remote") continue;
+    if (
+      normalizeArray(pref.locations).some((loc) =>
+        locationsRoughlyMatch(jobLocationLower, loc)
+      )
+    ) {
+      return true;
+    }
+  }
+
+  if (
+    seeker.location &&
+    locationsRoughlyMatch(jobLocationLower, normalizeString(seeker.location))
+  ) {
+    return true;
+  }
+
+  return normalizeArray(seeker.preferred_locations).some((loc) =>
+    locationsRoughlyMatch(jobLocationLower, loc)
+  );
+}
+
+export interface HardDisqualifierResult {
+  disqualified: boolean;
+  reasons: string[];
+}
+
+export function checkHardDisqualifiers(
+  seeker: JobSeekerProfile,
+  job: JobPost
+): HardDisqualifierResult {
+  const reasons: string[] = [];
+
+  // 1. Excluded keyword — the client explicitly opted out of these.
+  const combinedText = `${job.title} ${job.description_text ?? ""}`.toLowerCase();
+  for (const keyword of normalizeArray(seeker.exclude_keywords)) {
+    if (keyword && combinedText.includes(keyword)) {
+      reasons.push(`disqualified_exclude_keyword: ${keyword}`);
+    }
+  }
+
+  // 2. Location / work-type the client cannot do. Remote jobs never trip this;
+  //    only on-site/hybrid roles with a concrete location the client can't reach.
+  const jobLocationLower = normalizeString(job.location ?? "");
+  const isJobRemote =
+    job.work_type === "remote" || jobLocationLower.includes("remote");
+  if (!isJobRemote && job.location && job.location.trim()) {
+    if (!seekerCanWorkAtLocation(seeker, jobLocationLower)) {
+      reasons.push("disqualified_location_unreachable");
+    }
+  }
+
+  // 3a. Pay clearly below the client's floor — compare the job's upper bound.
+  const jobUpper = job.salary_max ?? job.salary_min;
+  if (
+    jobUpper !== null &&
+    seeker.salary_min !== null &&
+    jobUpper < seeker.salary_min * SALARY_FLOOR_RATIO
+  ) {
+    reasons.push("disqualified_salary_below_floor");
+  }
+
+  // 3b. Sponsorship needed but the job explicitly offers none.
+  if (seeker.requires_visa_sponsorship && job.offers_visa_sponsorship === false) {
+    reasons.push("disqualified_no_visa_sponsorship");
+  }
+
+  return { disqualified: reasons.length > 0, reasons };
+}
+
+// ============================================================================
 // MAIN SCORING FUNCTION
 // ============================================================================
 
@@ -1132,10 +1221,22 @@ export function computeMatchScore(
     rawScore = Math.min(rawScore, mismatchCap);
   }
 
-  const score = Math.max(0, Math.min(100, rawScore));
+  let score = Math.max(0, Math.min(100, rawScore));
 
   const confidence = determineConfidence(seeker, job);
-  const recommendation = determineRecommendation(score, confidence);
+
+  // Hard disqualifiers override everything: an unsuitable job is forced to
+  // poor_fit with a capped score so it neither displays nor auto-queues,
+  // no matter how strong the skill overlap is.
+  const disqualifiers = checkHardDisqualifiers(seeker, job);
+  let recommendation: MatchRecommendation;
+  if (disqualifiers.disqualified) {
+    score = Math.min(score, DISQUALIFIED_SCORE_CAP);
+    recommendation = "poor_fit";
+    penaltiesResult.details.reasons.push(...disqualifiers.reasons);
+  } else {
+    recommendation = determineRecommendation(score, confidence);
+  }
 
   const componentScores: MatchScoreBreakdown = {
     skills: skillsResult,
@@ -1155,6 +1256,7 @@ export function computeMatchScore(
     ],
     missing_skills: skillsResult.details.missing_required,
     title_hits: titleResult.details.matched_titles,
+    disqualifiers: disqualifiers.reasons,
   };
 
   return {

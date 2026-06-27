@@ -468,7 +468,7 @@ export default function SeekerDetailClient({
           <div className="flex-1">
             <Link
               href={backHref}
-              className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block"
+              className="text-sm text-violet-600 hover:text-violet-800 mb-2 inline-block"
             >
               {"<-"} Back to Job Seekers
             </Link>
@@ -483,7 +483,7 @@ export default function SeekerDetailClient({
                 </span>
               )}
               {seeker.seniority && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded capitalize">
+                <span className="px-2 py-1 bg-violet-100 text-violet-700 text-sm rounded capitalize">
                   {seeker.seniority}
                 </span>
               )}
@@ -549,7 +549,7 @@ export default function SeekerDetailClient({
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                   activeTab === tab.id
-                    ? "border-blue-600 text-blue-600"
+                    ? "border-violet-600 text-violet-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
@@ -560,7 +560,7 @@ export default function SeekerDetailClient({
                   </span>
                 )}
                 {tab.id === "inbox" && inboundEmails.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                  <span className="ml-2 px-2 py-0.5 bg-violet-100 text-violet-800 text-xs rounded-full">
                     {inboundEmails.length}
                   </span>
                 )}
@@ -640,7 +640,7 @@ function StatBox({
   color?: "blue" | "green" | "orange" | "purple";
 }) {
   const colorClasses: Record<string, string> = {
-    blue: "text-blue-600",
+    blue: "text-violet-600",
     green: "text-green-600",
     orange: "text-orange-600",
     purple: "text-purple-600",
@@ -669,7 +669,7 @@ function EditableChips({
   const [input, setInput] = useState("");
 
   const colorStyles = {
-    blue: "bg-blue-100 text-blue-800",
+    blue: "bg-violet-100 text-violet-800",
     green: "bg-green-100 text-green-800",
   };
 
@@ -716,7 +716,7 @@ function EditableChips({
             }
           }}
           placeholder={placeholder}
-          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
         />
         <button
           type="button"
@@ -1012,7 +1012,7 @@ function OverviewTab({
                     href={doc.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800"
+                    className="text-sm text-violet-600 hover:text-violet-800"
                   >
                     View
                   </a>
@@ -1468,7 +1468,7 @@ function ProfileTab({
       <div className="bg-gray-50 rounded-lg p-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-gray-900">Profile Completion</h3>
-          <span className="text-lg font-bold text-blue-600">{completion}%</span>
+          <span className="text-lg font-bold text-violet-600">{completion}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div
@@ -1486,7 +1486,7 @@ function ProfileTab({
             <button
               onClick={sendAnalysisToSeeker}
               disabled={analysisSending || !analysis}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {analysisSending ? "Sending..." : "Send To Seeker"}
             </button>
@@ -1547,7 +1547,7 @@ function ProfileTab({
             <button
               onClick={sendJobGeniusReportToSeeker}
               disabled={reportSending || !jobGeniusReport}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {reportSending ? "Sending..." : "Send To Seeker"}
             </button>
@@ -1753,7 +1753,7 @@ function ProfileTab({
           <button
             onClick={saveProfileChanges}
             disabled={editorSaving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
           >
             {editorSaving ? "Saving..." : "Save Changes"}
           </button>
@@ -1976,7 +1976,7 @@ function ProfileTab({
               <p className="text-xs font-medium text-gray-500 mb-1">Target Titles</p>
               <div className="flex flex-wrap gap-1.5">
                 {seeker.target_titles.map((t) => (
-                  <span key={t} className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">{t}</span>
+                  <span key={t} className="px-2 py-0.5 bg-violet-100 text-violet-800 text-xs rounded-full">{t}</span>
                 ))}
               </div>
             </div>
@@ -2272,7 +2272,7 @@ function FinancialTab({ financial }: { financial: FinancialData }) {
                     href={screenshot.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800"
+                    className="text-sm text-violet-600 hover:text-violet-800"
                   >
                     View
                   </a>
@@ -2537,7 +2537,7 @@ function JobsTab({
           <button
             onClick={runMatchNow}
             disabled={runningMatch}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
           >
             {runningMatch ? "Running..." : "Run Match Now"}
           </button>
@@ -2567,7 +2567,7 @@ function JobsTab({
               <button
                 onClick={saveWeights}
                 disabled={savingWeights}
-                className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-1 text-xs bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
               >
                 {savingWeights ? "Saving..." : "Save Weights"}
               </button>
@@ -2610,7 +2610,7 @@ function JobsTab({
             <div className="flex h-4 rounded-full overflow-hidden bg-gray-100">
               {totalWeight > 0 && (
                 <>
-                  <div style={{ width: `${(weights.skills / totalWeight) * 100}%` }} className="bg-blue-500" title={`Skills: ${weights.skills}`} />
+                  <div style={{ width: `${(weights.skills / totalWeight) * 100}%` }} className="bg-violet-500" title={`Skills: ${weights.skills}`} />
                   <div style={{ width: `${(weights.title / totalWeight) * 100}%` }} className="bg-indigo-500" title={`Title: ${weights.title}`} />
                   <div style={{ width: `${(weights.experience / totalWeight) * 100}%` }} className="bg-green-500" title={`Experience: ${weights.experience}`} />
                   <div style={{ width: `${(weights.salary / totalWeight) * 100}%` }} className="bg-emerald-500" title={`Salary: ${weights.salary}`} />
@@ -2620,7 +2620,7 @@ function JobsTab({
               )}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Skills</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />Skills</span>
               <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />Title</span>
               <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Experience</span>
               <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Salary</span>
@@ -2643,7 +2643,7 @@ function JobsTab({
           <button
             onClick={() => setFilter("above")}
             className={`px-3 py-1 text-sm rounded-lg ${
-              filter === "above" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+              filter === "above" ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-700"
             }`}
           >
             Above Threshold ({matchedJobs.filter((m) => m.score >= currentThreshold).length})
@@ -2651,7 +2651,7 @@ function JobsTab({
           <button
             onClick={() => setFilter("below")}
             className={`px-3 py-1 text-sm rounded-lg ${
-              filter === "below" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+              filter === "below" ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-700"
             }`}
           >
             Below Threshold
@@ -2659,7 +2659,7 @@ function JobsTab({
           <button
             onClick={() => setFilter("all")}
             className={`px-3 py-1 text-sm rounded-lg ${
-              filter === "all" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+              filter === "all" ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-700"
             }`}
           >
             All ({matchedJobs.length})
@@ -2688,7 +2688,7 @@ function JobsTab({
                       href={m.job.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                      className="text-sm text-violet-600 hover:text-violet-800 mt-1 inline-block"
                     >
                       View Posting →
                     </a>
@@ -3093,7 +3093,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                 resetTaskFields();
                 setFeedback(null);
               }}
-              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-2 py-1 text-xs bg-violet-600 text-white rounded hover:bg-violet-700"
             >
               New
             </button>
@@ -3116,7 +3116,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                   }}
                   className={`w-full text-left p-3 transition-colors ${
                     selectedConversationId === conversation.id
-                      ? "bg-blue-50"
+                      ? "bg-violet-50"
                       : "hover:bg-gray-50"
                   }`}
                 >
@@ -3137,7 +3137,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                           ? "bg-purple-100 text-purple-700"
                           : conversation.conversation_type === "task"
                           ? "bg-amber-100 text-amber-700"
-                          : "bg-blue-100 text-blue-700"
+                          : "bg-violet-100 text-violet-700"
                       }`}
                     >
                       {conversation.conversation_type === "application_question"
@@ -3191,7 +3191,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                   resetTaskFields();
                   setFeedback(null);
                 }}
-                className="text-xs text-blue-600 hover:text-blue-800"
+                className="text-xs text-violet-600 hover:text-violet-800"
               >
                 Start new thread
               </button>
@@ -3222,7 +3222,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                       className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
                         isSeeker
                           ? "bg-white border border-gray-200 text-gray-900"
-                          : "bg-blue-600 text-white"
+                          : "bg-violet-600 text-white"
                       }`}
                     >
                       <div className="flex items-center gap-2 text-xs mb-1 opacity-80">
@@ -3240,7 +3240,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                           className={`mt-2 rounded border p-2 text-xs ${
                             isSeeker
                               ? "border-amber-200 bg-amber-50 text-amber-900"
-                              : "border-blue-300 bg-blue-500 text-blue-50"
+                              : "border-violet-300 bg-violet-500 text-violet-50"
                           }`}
                         >
                           <p className="font-semibold">{task.title}</p>
@@ -3273,7 +3273,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
                   value={subject}
                   onChange={(event) => setSubject(event.target.value)}
                   placeholder="e.g. Week 1 goals and updates"
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
                 />
               </div>
             )}
@@ -3379,7 +3379,7 @@ function MessagesTab({ seekerId }: { seekerId: string }) {
               <button
                 type="submit"
                 disabled={sending}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded hover:bg-violet-700 disabled:opacity-50"
               >
                 {sending
                   ? "Sending..."
@@ -3414,7 +3414,7 @@ function OutreachTab({
         <button
           onClick={() => setView("drafts")}
           className={`px-4 py-2 text-sm rounded-lg ${
-            view === "drafts" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+            view === "drafts" ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-700"
           }`}
         >
           Drafts ({drafts.length})
@@ -3422,7 +3422,7 @@ function OutreachTab({
         <button
           onClick={() => setView("threads")}
           className={`px-4 py-2 text-sm rounded-lg ${
-            view === "threads" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+            view === "threads" ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-700"
           }`}
         >
           Recruiter Threads ({threads.length})
@@ -3639,7 +3639,7 @@ function InterviewCard({
           </p>
           <span className={`inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${
             interview.status === "confirmed" ? "bg-green-100 text-green-800" :
-            interview.status === "completed" ? "bg-blue-100 text-blue-800" :
+            interview.status === "completed" ? "bg-violet-100 text-violet-800" :
             interview.status === "cancelled" ? "bg-red-100 text-red-800" :
             "bg-gray-100 text-gray-600"
           }`}>
@@ -3654,7 +3654,7 @@ function InterviewCard({
             href={interview.meeting_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-violet-600 hover:text-violet-800"
           >
             Join Meeting →
           </a>
@@ -3685,7 +3685,7 @@ function InterviewCard({
               <select
                 value={outcomeForm.outcome}
                 onChange={(e) => setOutcomeForm((f) => ({ ...f, outcome: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
               >
                 {Object.entries(OUTCOME_LABELS).map(([val, { label }]) => (
                   <option key={val} value={val}>{label}</option>
@@ -3701,7 +3701,7 @@ function InterviewCard({
                   value={outcomeForm.offer_amount}
                   onChange={(e) => setOutcomeForm((f) => ({ ...f, offer_amount: e.target.value }))}
                   placeholder="e.g. 55000"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
             )}
@@ -3713,7 +3713,7 @@ function InterviewCard({
                   type="date"
                   value={outcomeForm.hire_date}
                   onChange={(e) => setOutcomeForm((f) => ({ ...f, hire_date: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
             )}
@@ -3726,7 +3726,7 @@ function InterviewCard({
                   value={outcomeForm.rejection_reason}
                   onChange={(e) => setOutcomeForm((f) => ({ ...f, rejection_reason: e.target.value }))}
                   placeholder="e.g. Overqualified, salary mismatch..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
             )}
@@ -3738,7 +3738,7 @@ function InterviewCard({
                 onChange={(e) => setOutcomeForm((f) => ({ ...f, outcome_notes: e.target.value }))}
                 rows={3}
                 placeholder="Internal notes about this outcome..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
               />
             </div>
 
@@ -3752,7 +3752,7 @@ function InterviewCard({
               <button
                 onClick={submitOutcome}
                 disabled={savingOutcome}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg"
+                className="flex-1 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg"
               >
                 {savingOutcome ? "Saving…" : "Save Outcome"}
               </button>
@@ -3777,7 +3777,7 @@ function PrepTab({
         <h3 className="font-semibold text-gray-900">Interview Prep Materials</h3>
         <Link
           href={`/dashboard/interview-prep?seeker=${seekerId}`}
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-sm text-violet-600 hover:text-violet-800"
         >
           Generate New →
         </Link>
@@ -3814,7 +3814,7 @@ const CLASSIFICATION_LABELS: Record<string, { label: string; color: string }> = 
   rejection: { label: "Rejection", color: "bg-red-100 text-red-800" },
   interview_invite: { label: "Interview Invite", color: "bg-green-100 text-green-800" },
   offer: { label: "Offer", color: "bg-emerald-100 text-emerald-800" },
-  follow_up: { label: "Follow-up", color: "bg-blue-100 text-blue-800" },
+  follow_up: { label: "Follow-up", color: "bg-violet-100 text-violet-800" },
   verification: { label: "Verification", color: "bg-yellow-100 text-yellow-800" },
   application_confirmation: { label: "Confirmation", color: "bg-indigo-100 text-indigo-800" },
   other: { label: "Other", color: "bg-gray-100 text-gray-700" },
@@ -3920,7 +3920,7 @@ function InboxTab({
               onClick={() => setFilter(opt.value)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 filter === opt.value
-                  ? "bg-blue-600 text-white"
+                  ? "bg-violet-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -3951,7 +3951,7 @@ function InboxTab({
                   }}
                   className={`w-full text-left p-4 rounded-lg border transition-colors ${
                     isSelected
-                      ? "border-blue-500 bg-blue-50"
+                      ? "border-violet-500 bg-violet-50"
                       : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
                 >
@@ -4036,12 +4036,12 @@ function InboxTab({
                     onChange={(e) => setReplyBody(e.target.value)}
                     placeholder="Type a reply on behalf of the seeker..."
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 resize-none"
                   />
                   <button
                     onClick={handleReply}
                     disabled={replying || !replyBody.trim()}
-                    className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="mt-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {replying ? "Sending..." : "Send Reply"}
                   </button>
@@ -4078,7 +4078,7 @@ function ActivityFeedTab({ seekerId }: { seekerId: string }) {
     application_failed: { color: "bg-red-400", label: "Failed" },
     application_retry: { color: "bg-orange-400", label: "Retry" },
     feedback_recorded: { color: "bg-purple-400", label: "Feedback" },
-    interview_scheduled: { color: "bg-blue-400", label: "Interview" },
+    interview_scheduled: { color: "bg-violet-400", label: "Interview" },
     outreach_sent: { color: "bg-indigo-400", label: "Outreach" },
     match_created: { color: "bg-cyan-400", label: "Match" },
     profile_updated: { color: "bg-gray-400", label: "Profile" },
@@ -4256,7 +4256,7 @@ function FeedbackTab({ seekerId }: { seekerId: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Rejection Feedback</h3>
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700">
           + Record Feedback
         </button>
       </div>
@@ -4304,7 +4304,7 @@ function FeedbackTab({ seekerId }: { seekerId: string }) {
 
       {/* Add form */}
       {showForm && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+        <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium text-gray-900">Record Feedback</h4>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
@@ -4342,7 +4342,7 @@ function FeedbackTab({ seekerId }: { seekerId: string }) {
             <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} placeholder="Additional context..." />
           </div>
 
-          <button onClick={submitFeedback} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          <button onClick={submitFeedback} disabled={saving} className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
             {saving ? "Saving..." : "Save Feedback"}
           </button>
         </div>
@@ -4506,7 +4506,7 @@ function ClientFactsTab({ seekerId }: { seekerId: string }) {
                             <button
                               onClick={() => save(f.fact_key)}
                               disabled={saving}
-                              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                              className="px-3 py-1.5 bg-violet-600 text-white text-sm rounded hover:bg-violet-700 disabled:opacity-50"
                             >
                               {saving ? "Saving…" : "Save"}
                             </button>
@@ -4537,7 +4537,7 @@ function ClientFactsTab({ seekerId }: { seekerId: string }) {
                             setEditingKey(f.fact_key);
                             setEditValue(f.value ?? "");
                           }}
-                          className="text-sm text-blue-600 hover:text-blue-800 flex-shrink-0"
+                          className="text-sm text-violet-600 hover:text-violet-800 flex-shrink-0"
                         >
                           {f.value ? "Update" : "Confirm"}
                         </button>
@@ -4654,7 +4654,7 @@ function ScreeningAnswersTab({
         <h3 className="text-lg font-semibold text-gray-900">Screening Answers</h3>
         <button
           onClick={() => setShowAdd(true)}
-          className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+          className="px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
         >
           + Add Answer
         </button>
@@ -4666,7 +4666,7 @@ function ScreeningAnswersTab({
 
       {/* Add form */}
       {showAdd && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+        <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium text-gray-900">Add Screening Answer</h4>
             <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
@@ -4747,7 +4747,7 @@ function ScreeningAnswersTab({
               setShowAdd(false);
             }}
             disabled={saving || !newKey.trim() || !newValue.trim()}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save Answer"}
           </button>
@@ -4790,7 +4790,7 @@ function ScreeningAnswersTab({
                     <button
                       onClick={() => saveAnswer(a.question_key, editText, editValue, editType)}
                       disabled={saving}
-                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                      className="px-3 py-1 bg-violet-600 text-white text-xs rounded hover:bg-violet-700 disabled:opacity-50"
                     >
                       {saving ? "Saving..." : "Save"}
                     </button>
@@ -4812,7 +4812,7 @@ function ScreeningAnswersTab({
                     <p className="text-sm font-medium text-gray-900 mt-1">{a.answer_value}</p>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => startEdit(a)} className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                    <button onClick={() => startEdit(a)} className="px-2 py-1 text-xs text-violet-600 hover:bg-violet-50 rounded">
                       Edit
                     </button>
                     <button onClick={() => deleteAnswer(a.id)} className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded">
@@ -4921,7 +4921,7 @@ function DebugScreenshotsTab({
                     {s.url && (
                       <div className="col-span-2">
                         <span className="text-gray-500">URL:</span>{" "}
-                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 text-xs break-all">
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:text-violet-800 text-xs break-all">
                           {s.url}
                         </a>
                       </div>
@@ -4976,7 +4976,7 @@ function InfoRow({ label, value, link }: { label: string; value: string | null; 
       <dt className="text-gray-500 text-sm">{label}</dt>
       <dd className="text-gray-900 text-sm">
         {link && value ? (
-          <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+          <a href={value} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:text-violet-800">
             {value.replace(/^https?:\/\//, "").slice(0, 30)}...
           </a>
         ) : (
@@ -5005,7 +5005,7 @@ function FilterButton({
         active
           ? highlight
             ? "bg-orange-600 text-white"
-            : "bg-blue-600 text-white"
+            : "bg-violet-600 text-white"
           : highlight
           ? "bg-orange-100 text-orange-800"
           : "bg-gray-100 text-gray-700"
@@ -5019,10 +5019,10 @@ function FilterButton({
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     QUEUED: "bg-yellow-100 text-yellow-800",
-    RUNNING: "bg-blue-100 text-blue-800",
+    RUNNING: "bg-violet-100 text-violet-800",
     PAUSED: "bg-gray-100 text-gray-800",
-    READY: "bg-blue-100 text-blue-800",
-    RETRYING: "bg-blue-100 text-blue-800",
+    READY: "bg-violet-100 text-violet-800",
+    RETRYING: "bg-violet-100 text-violet-800",
     APPLIED: "bg-green-100 text-green-800",
     COMPLETED: "bg-green-100 text-green-800",
     NEEDS_ATTENTION: "bg-orange-100 text-orange-800",

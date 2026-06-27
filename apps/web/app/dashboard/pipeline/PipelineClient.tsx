@@ -306,7 +306,15 @@ export default function PipelineClient({
       {/* Header */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">Job Hub</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">Job Hub</h1>
+            <a
+              href="/dashboard/pipeline/archived"
+              className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            >
+              View archived
+            </a>
+          </div>
           <select
             value={selectedSeeker}
             onChange={(e) => {
@@ -364,7 +372,7 @@ export default function PipelineClient({
                 onClick={() => switchTab(tab.id)}
                 className={`px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                   activeTab === tab.id
-                    ? "border-blue-600 text-blue-600"
+                    ? "border-violet-600 text-violet-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
@@ -675,7 +683,7 @@ function DiscoverTab({
         {selected.size > 0 && (
           <button
             onClick={queueAllSelected}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
           >
             Queue Selected ({selected.size})
           </button>
@@ -802,7 +810,7 @@ function DiscoverTab({
                       <button
                         onClick={() => queueJob(m.job_seeker_id, job.id, m.id)}
                         disabled={loading.has(m.id)}
-                        className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
                       >
                         {loading.has(m.id) ? "..." : "Queue"}
                       </button>
@@ -818,7 +826,7 @@ function DiscoverTab({
                     href={job.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 text-center text-blue-600 text-xs font-medium hover:text-blue-800"
+                    className="px-3 py-1.5 text-center text-violet-600 text-xs font-medium hover:text-violet-800"
                   >
                     View Posting
                   </a>
@@ -937,7 +945,7 @@ function QueueTab({
               subFilter === f.id
                 ? f.id === "attention"
                   ? "bg-orange-100 text-orange-800 font-medium"
-                  : "bg-blue-100 text-blue-800 font-medium"
+                  : "bg-violet-100 text-violet-800 font-medium"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
@@ -1010,7 +1018,7 @@ function QueueTab({
                       </button>
                       <button
                         onClick={() => switchTab("resumes")}
-                        className="px-3 py-1.5 text-blue-600 text-xs font-medium hover:text-blue-800"
+                        className="px-3 py-1.5 text-violet-600 text-xs font-medium hover:text-violet-800"
                       >
                         Tailor Resume
                       </button>
@@ -1032,14 +1040,14 @@ function QueueTab({
                           <button
                             onClick={() => callApi("/api/apply/resume", "POST", { run_id: run.id }, q.id)}
                             disabled={isLoading}
-                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                            className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
                           >
                             Resume
                           </button>
                           <button
                             onClick={() => callApi("/api/apply/retry", "POST", { run_id: run.id }, q.id)}
                             disabled={isLoading}
-                            className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                            className="px-3 py-1.5 bg-violet-50 text-violet-700 text-xs font-medium rounded-lg hover:bg-violet-100 disabled:opacity-50"
                           >
                             Retry
                           </button>
@@ -1866,7 +1874,7 @@ function ResumesTab({
                   onClick={() => setSelectedBankVersionId(version.id)}
                   className={`w-full text-left p-3 rounded-lg border transition-colors ${
                     selectedBankVersionId === version.id
-                      ? "border-blue-500 bg-blue-50"
+                      ? "border-violet-500 bg-violet-50"
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
@@ -1933,7 +1941,7 @@ function ResumesTab({
                   </button>
                   <button
                     onClick={() => setBankEditMode((prev) => !prev)}
-                    className="px-3 py-2 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100"
+                    className="px-3 py-2 bg-violet-50 text-violet-700 text-xs font-medium rounded hover:bg-violet-100"
                   >
                     {bankEditMode ? "Stop Editing" : "Edit Version"}
                   </button>
@@ -1942,7 +1950,7 @@ function ResumesTab({
                       <button
                         onClick={saveBankVersionEdits}
                         disabled={savingBankEdits}
-                        className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                        className="px-3 py-2 bg-violet-600 text-white text-xs font-medium rounded hover:bg-violet-700 disabled:opacity-50"
                       >
                         {savingBankEdits ? "Saving..." : "Save Changes"}
                       </button>
@@ -2028,7 +2036,7 @@ function ResumesTab({
                 onClick={() => selectItem(q.id)}
                 className={`w-full text-left p-3 rounded-lg border transition-colors ${
                   selectedId === q.id
-                    ? "border-blue-500 bg-blue-50"
+                    ? "border-violet-500 bg-violet-50"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
@@ -2103,7 +2111,7 @@ function ResumesTab({
                     onClick={() => updateTemplate(t.id)}
                     className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
                       selectedTemplate === t.id
-                        ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
+                        ? "border-violet-500 bg-violet-50 text-violet-700 font-medium"
                         : "border-gray-200 text-gray-600 hover:border-gray-300"
                     }`}
                   >
@@ -2135,7 +2143,7 @@ function ResumesTab({
                 <button
                   onClick={compareSavedVersions}
                   disabled={scoringVersions}
-                  className="px-4 py-2 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                  className="px-4 py-2 bg-violet-50 text-violet-700 text-sm font-medium rounded-lg hover:bg-violet-100 disabled:opacity-50"
                 >
                   {scoringVersions ? "Scoring..." : "Compare Saved Versions"}
                 </button>
@@ -2173,7 +2181,7 @@ function ResumesTab({
                   <button
                     onClick={saveEdits}
                     disabled={saving}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
                   >
                     {saving ? "Saving..." : "Save"}
                   </button>
@@ -2190,13 +2198,13 @@ function ResumesTab({
             </div>
 
             {versionMatches.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                <h4 className="text-sm font-semibold text-blue-900">
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-violet-900">
                   Resume Match Scores (for this job description)
                 </h4>
                 <div className="space-y-2">
                   {versionMatches.map((version) => (
-                    <div key={version.id} className="bg-white border border-blue-100 rounded p-3 flex items-center justify-between gap-3">
+                    <div key={version.id} className="bg-white border border-violet-100 rounded p-3 flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900">
                           {version.name}
@@ -2211,14 +2219,14 @@ function ResumesTab({
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-violet-100 text-violet-800">
                           {version.match_percent}%
                         </span>
                         {version.id !== "__base__" && (
                           <button
                             onClick={() => useSavedVersionForJob(version.id)}
                             disabled={applyingVersionId === version.id}
-                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                            className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded hover:bg-violet-700 disabled:opacity-50"
                           >
                             {applyingVersionId === version.id ? "Applying..." : "Use This Version"}
                           </button>
@@ -2290,7 +2298,7 @@ function ResumesTab({
                     <span className="text-xs font-medium text-gray-500">Preferred:</span>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {selectedItem.job_posts.preferred_skills.map((s) => (
-                        <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">{s}</span>
+                        <span key={s} className="px-2 py-0.5 bg-violet-50 text-violet-700 text-xs rounded-full">{s}</span>
                       ))}
                     </div>
                   </div>
@@ -2444,7 +2452,7 @@ function AppliedTab({
                     <button
                       onClick={() => findContacts(r)}
                       disabled={loading.has(r.id)}
-                      className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                      className="px-3 py-1.5 bg-violet-50 text-violet-700 text-xs font-medium rounded-lg hover:bg-violet-100 disabled:opacity-50"
                     >
                       {loading.has(r.id) ? "..." : "Find Contacts"}
                     </button>
@@ -2636,7 +2644,7 @@ function FollowUpTab({
             const statusColors: Record<string, string> = {
               sent: "bg-green-100 text-green-800",
               drafts: "bg-yellow-100 text-yellow-800",
-              contacts: "bg-blue-100 text-blue-800",
+              contacts: "bg-violet-100 text-violet-800",
               none: "bg-gray-100 text-gray-600",
             };
             return (
@@ -2645,7 +2653,7 @@ function FollowUpTab({
                 onClick={() => setSelectedCompany(name)}
                 className={`w-full text-left p-3 rounded-lg border transition-colors ${
                   selectedCompany === name
-                    ? "border-blue-500 bg-blue-50"
+                    ? "border-violet-500 bg-violet-50"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
@@ -2676,7 +2684,7 @@ function FollowUpTab({
               <button
                 onClick={generateContacts}
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
               >
                 {loading ? "Generating..." : "Generate Contacts"}
               </button>
@@ -2739,7 +2747,7 @@ function FollowUpTab({
                             <>
                               <button
                                 onClick={() => startEditDraft(d)}
-                                className="text-xs text-blue-600 hover:text-blue-800"
+                                className="text-xs text-violet-600 hover:text-violet-800"
                               >
                                 Edit
                               </button>
@@ -2814,7 +2822,7 @@ function StatBox({
   color?: "blue" | "green" | "orange" | "purple";
 }) {
   const colorClasses: Record<string, string> = {
-    blue: "text-blue-600",
+    blue: "text-violet-600",
     green: "text-green-600",
     orange: "text-orange-600",
     purple: "text-purple-600",
@@ -2832,10 +2840,10 @@ function StatBox({
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     QUEUED: "bg-yellow-100 text-yellow-800",
-    RUNNING: "bg-blue-100 text-blue-800",
+    RUNNING: "bg-violet-100 text-violet-800",
     PAUSED: "bg-gray-100 text-gray-800",
-    READY: "bg-blue-100 text-blue-800",
-    RETRYING: "bg-blue-100 text-blue-800",
+    READY: "bg-violet-100 text-violet-800",
+    RETRYING: "bg-violet-100 text-violet-800",
     APPLIED: "bg-green-100 text-green-800",
     COMPLETED: "bg-green-100 text-green-800",
     NEEDS_ATTENTION: "bg-orange-100 text-orange-800",
@@ -2931,7 +2939,7 @@ function ExactPdfPreview({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-xs font-medium text-blue-600 hover:text-blue-800"
+        className="text-xs font-medium text-violet-600 hover:text-violet-800"
       >
         {open ? "Hide exact PDF" : "View exact PDF"}
       </button>

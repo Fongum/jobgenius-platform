@@ -142,7 +142,7 @@ export default async function EmployeeCareerPage() {
                   isCurrent
                     ? "bg-violet-50 border-violet-200"
                     : isNext
-                    ? "bg-blue-50 border-blue-200"
+                    ? "bg-violet-50 border-violet-200"
                     : "bg-white border-gray-200"
                 }`}
               >
@@ -160,7 +160,7 @@ export default async function EmployeeCareerPage() {
                       </span>
                     )}
                     {isNext && !isCurrent && (
-                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
                         Next
                       </span>
                     )}

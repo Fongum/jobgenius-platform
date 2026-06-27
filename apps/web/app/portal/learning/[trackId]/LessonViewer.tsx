@@ -209,7 +209,7 @@ export default function LessonViewer({
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={onBack}
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-sm text-violet-600 hover:text-violet-800"
         >
           &larr; Back to track
         </button>
@@ -276,8 +276,8 @@ export default function LessonViewer({
               <p className="text-gray-400">No content available.</p>
             )}
             {content.summary && (
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-700">
+              <div className="mt-4 p-3 bg-violet-50 rounded-lg">
+                <p className="text-sm text-violet-700">
                   <strong>Summary:</strong> {content.summary}
                 </p>
               </div>
@@ -293,7 +293,7 @@ export default function LessonViewer({
                   href={content.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-violet-50 text-violet-700 rounded-lg hover:bg-violet-100 transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -337,7 +337,7 @@ export default function LessonViewer({
             href={content.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800"
+            className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-800"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -349,8 +349,8 @@ export default function LessonViewer({
         {lesson.content_type === "quiz" && (
           <div>
             {lesson.progress?.quiz_score !== undefined && lesson.progress?.quiz_score !== null && (
-              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-700">
+              <div className="mb-4 p-3 bg-violet-50 rounded-lg">
+                <p className="text-sm text-violet-700">
                   <strong>Latest Score:</strong> {lesson.progress.quiz_score}%
                 </p>
               </div>
@@ -403,7 +403,7 @@ export default function LessonViewer({
           {currentIndex < totalLessons - 1 && (
             <button
               onClick={() => onNavigate(currentIndex + 1)}
-              className="px-3 py-2.5 sm:py-2 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 flex-1 sm:flex-initial"
+              className="px-3 py-2.5 sm:py-2 text-sm text-violet-600 bg-violet-50 rounded-lg hover:bg-violet-100 flex-1 sm:flex-initial"
             >
               Next
             </button>
@@ -422,13 +422,13 @@ export default function LessonViewer({
               onChange={(e) => setNewNote(e.target.value)}
               rows={3}
               placeholder="Add a note..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             />
             <div className="flex justify-end mt-2">
               <button
                 onClick={saveNote}
                 disabled={saving || !newNote.trim()}
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-1.5 bg-violet-600 text-white text-sm rounded-md hover:bg-violet-700 disabled:opacity-50"
               >
                 Save Note
               </button>
@@ -438,7 +438,7 @@ export default function LessonViewer({
           {notes.length > 0 && (
             <div className="space-y-3">
               {notes.map((note) => (
-                <div key={note.id} className="border-l-2 border-blue-300 pl-3 py-1">
+                <div key={note.id} className="border-l-2 border-violet-300 pl-3 py-1">
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">
                     {note.content}
                   </p>

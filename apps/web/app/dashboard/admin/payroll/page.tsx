@@ -42,7 +42,7 @@ export default async function PayrollOverviewPage() {
     {
       label: "Active base / pay period",
       value: formatCurrency(activeBaseTotal, currency),
-      tone: "text-blue-700",
+      tone: "text-violet-700",
     },
   ];
 
@@ -64,7 +64,7 @@ export default async function PayrollOverviewPage() {
           </Link>
           <Link
             href="/dashboard/admin/payroll/workers"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Manage workers
           </Link>

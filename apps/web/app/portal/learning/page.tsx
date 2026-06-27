@@ -78,13 +78,13 @@ export default async function LearningDashboardPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/portal/learning/review"
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-violet-600 hover:text-violet-800"
           >
             Review Queue
           </Link>
           <Link
             href="/portal/learning/bookmarks"
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="text-sm text-violet-600 hover:text-violet-800 flex items-center gap-1"
           >
             <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -175,7 +175,7 @@ export default async function LearningDashboardPage() {
                         {track.category}
                       </span>
                       {track.target_skill && (
-                        <span className="text-xs text-blue-600 px-2 py-0.5 bg-blue-50 rounded">
+                        <span className="text-xs text-violet-600 px-2 py-0.5 bg-violet-50 rounded">
                           {track.target_skill}
                         </span>
                       )}
@@ -213,7 +213,7 @@ export default async function LearningDashboardPage() {
                 {/* Progress bar */}
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-violet-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${summary.percentage}%` }}
                   />
                 </div>
@@ -242,7 +242,7 @@ function StatCard({
     <div className="bg-white rounded-lg shadow p-3 sm:p-4">
       <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
       <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{value}</p>
-      {sub && <p className="text-xs text-blue-600 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-violet-600 mt-0.5">{sub}</p>}
     </div>
   );
 }

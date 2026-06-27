@@ -71,7 +71,7 @@ export default function ApplicationAnalyticsClient() {
           <p className="text-sm text-gray-500 mt-1">Success rates, failure analysis, and conversion funnel</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/admin/adapter-health" className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg">
+          <Link href="/dashboard/admin/adapter-health" className="px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 rounded-lg">
             Adapter Health →
           </Link>
           <select
@@ -104,7 +104,7 @@ export default function ApplicationAnalyticsClient() {
         <h2 className="font-semibold text-gray-900 mb-4">Conversion Funnel</h2>
         <div className="flex items-end gap-1">
           {[
-            { label: "Queued", value: data.funnel.queued, color: "bg-blue-500" },
+            { label: "Queued", value: data.funnel.queued, color: "bg-violet-500" },
             { label: "Applied", value: data.funnel.applied, color: "bg-indigo-500" },
             { label: "Interviewed", value: data.funnel.interviewed, color: "bg-purple-500" },
             { label: "Placed", value: data.funnel.placed, color: "bg-green-500" },
@@ -241,7 +241,7 @@ export default function ApplicationAnalyticsClient() {
 
 function StatCard({ label, value, color }: { label: string; value: number | string; color: string }) {
   const colorMap: Record<string, string> = {
-    blue: "text-blue-600",
+    blue: "text-violet-600",
     green: "text-green-600",
     red: "text-red-600",
     yellow: "text-yellow-600",

@@ -90,7 +90,7 @@ export default function InterviewsClient({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-violet-600 hover:text-violet-800"
               >
                 Join Meeting
               </a>

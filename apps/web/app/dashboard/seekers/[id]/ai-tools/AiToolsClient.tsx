@@ -34,7 +34,7 @@ interface NextActionPanelResult {
 }
 
 const INPUT =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-violet-600 focus:ring-1 focus:ring-violet-600";
 
 const PRIORITY_STYLES = {
   high: "bg-red-100 text-red-700",
@@ -242,7 +242,7 @@ export default function AiToolsClient({
             <button
               onClick={generateCoverLetter}
               disabled={clBusy}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {clBusy ? "Generating…" : "Generate cover letter"}
             </button>
@@ -269,13 +269,13 @@ export default function AiToolsClient({
                 <div className="flex gap-2">
                   <button
                     onClick={() => copy(`${clDraft.subject}\n\n${clDraft.body ?? ""}`)}
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-xs text-violet-600 hover:text-violet-700"
                   >
                     Copy
                   </button>
                   <a
                     href="/dashboard/admin/ai-outputs?status=pending&kind=cover_letter"
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-xs text-violet-600 hover:text-violet-700"
                   >
                     Review queue →
                   </a>
@@ -328,7 +328,7 @@ export default function AiToolsClient({
             <button
               onClick={generateFollowup}
               disabled={ifBusy}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
             >
               {ifBusy ? "Generating…" : "Generate follow-up"}
             </button>
@@ -353,13 +353,13 @@ export default function AiToolsClient({
                 <div className="flex gap-2">
                   <button
                     onClick={() => copy(`${ifDraft.subject}\n\n${ifDraft.body ?? ""}`)}
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-xs text-violet-600 hover:text-violet-700"
                   >
                     Copy
                   </button>
                   <a
                     href="/dashboard/admin/ai-outputs?status=pending&kind=interview_followup"
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-xs text-violet-600 hover:text-violet-700"
                   >
                     Review queue →
                   </a>
@@ -404,7 +404,7 @@ export default function AiToolsClient({
                   {a.suggested_link && (
                     <a
                       href={a.suggested_link}
-                      className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                      className="text-xs text-violet-600 hover:text-violet-700 whitespace-nowrap"
                     >
                       Open →
                     </a>

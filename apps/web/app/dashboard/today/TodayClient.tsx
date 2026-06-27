@@ -38,7 +38,7 @@ const KIND_STYLES: Record<string, string> = {
   delivery_risk_review: "bg-red-100 text-red-700",
   billing_overdue: "bg-red-100 text-red-700",
   payslip_sign: "bg-emerald-100 text-emerald-700",
-  outreach_reply: "bg-blue-100 text-blue-700",
+  outreach_reply: "bg-violet-100 text-violet-700",
   interview_upcoming: "bg-purple-100 text-purple-700",
 };
 
@@ -131,7 +131,7 @@ export default function TodayClient({
             onClick={() => setFilter(f.key)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               filter === f.key
-                ? "bg-blue-600 text-white"
+                ? "bg-violet-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -174,7 +174,7 @@ export default function TodayClient({
                 {task.link_url && (
                   <Link
                     href={task.link_url}
-                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+                    className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
                   >
                     Open
                   </Link>

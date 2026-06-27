@@ -77,7 +77,7 @@ export default async function SeekerAiToolsPage({ params }: PageProps) {
       <div className="mb-6">
         <a
           href={`/dashboard/seekers/${params.id}`}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-sm text-violet-600 hover:text-violet-700 font-medium"
         >
           ← {seeker.full_name ?? seeker.email}
         </a>
@@ -85,7 +85,7 @@ export default async function SeekerAiToolsPage({ params }: PageProps) {
         <p className="text-sm text-gray-500 mt-1">
           Generators that go through the HITL queue. Drafts persist as{" "}
           <code>ai_outputs</code> (pending) and surface for review at{" "}
-          <a href="/dashboard/admin/ai-outputs" className="text-blue-600 hover:text-blue-700">
+          <a href="/dashboard/admin/ai-outputs" className="text-violet-600 hover:text-violet-700">
             /dashboard/admin/ai-outputs
           </a>
           .

@@ -211,7 +211,7 @@ export default function EmployeesClient({
         </div>
         <button
           onClick={() => setShowCreate((value) => !value)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
         >
           {showCreate ? "Cancel" : "Create employee"}
         </button>
@@ -426,7 +426,7 @@ export default function EmployeesClient({
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
                         {labelizePeopleValue(employee.onboarding_status)}
                       </span>
                       <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700">

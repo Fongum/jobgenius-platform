@@ -96,7 +96,7 @@ export default function AssessmentRunner({
         {onBack && (
           <button
             onClick={onBack}
-            className="mt-4 text-sm text-blue-600 hover:text-blue-800"
+            className="mt-4 text-sm text-violet-600 hover:text-violet-800"
           >
             Go Back
           </button>
@@ -111,7 +111,7 @@ export default function AssessmentRunner({
         {onBack ? (
           <button
             onClick={onBack}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-violet-600 hover:text-violet-800"
           >
             &larr; Back
           </button>
@@ -125,7 +125,7 @@ export default function AssessmentRunner({
 
       <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
         <div
-          className="bg-blue-600 h-2 rounded-full transition-all"
+          className="bg-violet-600 h-2 rounded-full transition-all"
           style={{ width: `${(answeredCount / items.length) * 100}%` }}
         />
       </div>
@@ -152,7 +152,7 @@ export default function AssessmentRunner({
 
           <div className="space-y-2">
             {currentQuestion.options.map((option, index) => {
-              let optionStyle = "border-gray-200 hover:border-blue-300";
+              let optionStyle = "border-gray-200 hover:border-violet-300";
               if (isAnswered) {
                 if (index === currentQuestion.correct_index) {
                   optionStyle = "border-green-500 bg-green-50";
@@ -160,7 +160,7 @@ export default function AssessmentRunner({
                   optionStyle = "border-red-500 bg-red-50";
                 }
               } else if (selectedAnswer === index) {
-                optionStyle = "border-blue-500 bg-blue-50";
+                optionStyle = "border-violet-500 bg-violet-50";
               }
 
               return (
@@ -181,8 +181,8 @@ export default function AssessmentRunner({
           </div>
 
           {isAnswered && currentQuestion.explanation && (
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-700">
+            <div className="mt-4 p-3 bg-violet-50 rounded-lg">
+              <p className="text-sm text-violet-700">
                 <strong>Explanation:</strong> {currentQuestion.explanation}
               </p>
             </div>
@@ -194,7 +194,7 @@ export default function AssessmentRunner({
                 type="button"
                 onClick={submitAnswer}
                 disabled={selectedAnswer === null}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50"
               >
                 Submit Answer
               </button>
@@ -212,7 +212,7 @@ export default function AssessmentRunner({
               onClick={() => setCurrentQ(index)}
               className={`w-9 h-9 rounded-full text-xs font-medium ${
                 index === currentQ
-                  ? "bg-blue-600 text-white"
+                  ? "bg-violet-600 text-white"
                   : question.is_correct === true
                   ? "bg-green-100 text-green-700"
                   : question.is_correct === false

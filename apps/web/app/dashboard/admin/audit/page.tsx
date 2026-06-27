@@ -119,7 +119,7 @@ export default async function AdminAuditPage({ searchParams }: PageProps) {
         <div className="flex items-end gap-2">
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
           >
             Filter
           </button>
@@ -161,7 +161,7 @@ export default async function AdminAuditPage({ searchParams }: PageProps) {
                       <span className="block text-[10px] text-gray-400">{row.actor_role}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-blue-700">{row.action}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-violet-700">{row.action}</td>
                   <td className="px-3 py-2 text-gray-600">
                     {row.target_type ?? "—"}
                     {row.target_id && (

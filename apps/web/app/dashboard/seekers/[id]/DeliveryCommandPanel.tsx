@@ -56,7 +56,7 @@ function stageBadgeClasses(stage: ClientDeliveryStage) {
     case "ready_to_launch":
       return "bg-sky-100 text-sky-800";
     case "active_search":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     case "interviewing":
       return "bg-amber-100 text-amber-800";
     case "offer":
@@ -77,7 +77,7 @@ function riskBadgeClasses(risk: ClientDeliveryRiskLevel) {
     case "high":
       return "bg-amber-100 text-amber-800";
     case "medium":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -90,7 +90,7 @@ function healthBadgeClasses(healthBand: ClientDeliveryHealthBand) {
     case "at_risk":
       return "bg-amber-100 text-amber-800";
     case "watch":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     default:
       return "bg-emerald-100 text-emerald-800";
   }
@@ -645,7 +645,7 @@ export default function DeliveryCommandPanel({
               : snapshot?.healthBand === "at_risk"
                 ? "text-amber-700"
                 : snapshot?.healthBand === "watch"
-                  ? "text-blue-700"
+                  ? "text-violet-700"
                   : "text-emerald-700"
           }
         />
@@ -657,7 +657,7 @@ export default function DeliveryCommandPanel({
         <StatCard
           label="Applications (7d)"
           value={snapshot?.applications7d ?? 0}
-          tone="text-blue-700"
+          tone="text-violet-700"
         />
         <StatCard
           label="Stale state"

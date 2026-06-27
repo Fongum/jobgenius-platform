@@ -314,7 +314,7 @@ export default function SocialFundClient({
               <button
                 type="button"
                 onClick={resetExpenseForm}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="text-sm font-medium text-violet-600 hover:text-violet-700"
               >
                 Clear
               </button>
@@ -459,7 +459,7 @@ export default function SocialFundClient({
           <button
             type="submit"
             disabled={savingExpense}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
           >
             {savingExpense ? "Saving..." : expenseForm.id ? "Update expense" : "Save expense"}
           </button>
@@ -482,7 +482,7 @@ export default function SocialFundClient({
               <button
                 type="button"
                 onClick={resetEventForm}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="text-sm font-medium text-violet-600 hover:text-violet-700"
               >
                 Clear
               </button>
@@ -657,7 +657,7 @@ export default function SocialFundClient({
                       expense.status === "paid"
                         ? "bg-emerald-100 text-emerald-700"
                         : expense.status === "approved"
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-violet-100 text-violet-700"
                         : "bg-amber-100 text-amber-700"
                     }`}
                   >
@@ -666,7 +666,7 @@ export default function SocialFundClient({
                   <button
                     type="button"
                     onClick={() => startEditExpense(expense)}
-                    className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    className="text-sm font-medium text-violet-600 hover:text-violet-700"
                   >
                     Edit
                   </button>
@@ -692,7 +692,7 @@ export default function SocialFundClient({
                   <button
                     type="button"
                     onClick={() => startEditEvent(event)}
-                    className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    className="text-sm font-medium text-violet-600 hover:text-violet-700"
                   >
                     Edit
                   </button>

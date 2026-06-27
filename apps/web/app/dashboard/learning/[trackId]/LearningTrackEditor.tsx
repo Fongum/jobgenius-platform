@@ -158,7 +158,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
       <div className="mb-6">
         <Link
           href="/dashboard/learning"
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-sm text-violet-600 hover:text-violet-800"
         >
           &larr; Back to Learning Tracks
         </Link>
@@ -175,7 +175,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
             <div className="flex items-center gap-2 sm:gap-3 mt-2 text-sm text-gray-500 flex-wrap">
               <span className="truncate max-w-[200px]">Seeker: {seeker?.full_name || seeker?.email}</span>
               <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{track.category}</span>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+              <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded text-xs">
                 {track.creation_mode.replace(/_/g, " ")}
               </span>
               {track.target_skill && (
@@ -255,7 +255,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
             </button>
             <button
               onClick={() => setShowAddLesson(true)}
-              className="px-3 py-2 sm:py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex-1 sm:flex-initial whitespace-nowrap"
+              className="px-3 py-2 sm:py-1.5 bg-violet-600 text-white text-sm rounded-md hover:bg-violet-700 flex-1 sm:flex-initial whitespace-nowrap"
             >
               Add Lesson
             </button>
@@ -292,7 +292,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
                           </span>
                         )}
                         {lesson.skill_slug && (
-                          <span className="text-xs text-blue-600 px-1.5 py-0.5 bg-blue-50 rounded">
+                          <span className="text-xs text-violet-600 px-1.5 py-0.5 bg-violet-50 rounded">
                             {lesson.skill_slug.replace(/-/g, " ")}
                           </span>
                         )}
@@ -312,7 +312,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
                           editingLesson === lesson.id ? null : lesson.id
                         )
                       }
-                      className="px-2 py-1.5 sm:py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                      className="px-2 py-1.5 sm:py-1 text-xs text-violet-600 hover:bg-violet-50 rounded"
                     >
                       {editingLesson === lesson.id ? "Close" : "Edit"}
                     </button>
@@ -344,7 +344,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
                           dangerouslySetInnerHTML={{ __html: simpleMarkdown(lesson.content.body as string) }}
                         />
                         {typeof lesson.content.summary === "string" && lesson.content.summary && (
-                          <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-700">
+                          <div className="mt-3 p-2 bg-violet-50 rounded text-sm text-violet-700">
                             <strong>Summary:</strong> {lesson.content.summary}
                           </div>
                         )}
@@ -363,7 +363,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
 
         {/* Add Lesson Form */}
         {showAddLesson && (
-          <div className="mt-4 border border-blue-200 rounded-lg p-4 bg-blue-50">
+          <div className="mt-4 border border-violet-200 rounded-lg p-4 bg-violet-50">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Add New Lesson</h3>
             <div className="space-y-3">
               <input
@@ -447,7 +447,7 @@ export default function LearningTrackEditor({ track: initialTrack }: { track: Tr
                 <button
                   onClick={addLesson}
                   disabled={saving || !newTitle.trim()}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  className="px-3 py-1.5 bg-violet-600 text-white text-sm rounded-md hover:bg-violet-700 disabled:opacity-50"
                 >
                   {saving ? "Adding..." : "Add Lesson"}
                 </button>

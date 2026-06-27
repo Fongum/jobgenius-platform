@@ -55,7 +55,7 @@ export default async function DriftPage({ searchParams }: PageProps) {
             href={`/dashboard/admin/drift?status=${s}`}
             className={`px-3 py-1.5 rounded-full text-xs font-medium ${
               statusFilter === s
-                ? "bg-blue-600 text-white"
+                ? "bg-violet-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}
           >

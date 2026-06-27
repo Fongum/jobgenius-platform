@@ -22,7 +22,7 @@ export interface AiOutputRow {
 }
 
 const KIND_STYLES: Record<string, string> = {
-  qa_card: "bg-blue-100 text-blue-700",
+  qa_card: "bg-violet-100 text-violet-700",
   quiz_card: "bg-indigo-100 text-indigo-700",
   lesson: "bg-purple-100 text-purple-700",
   outreach_draft: "bg-emerald-100 text-emerald-700",

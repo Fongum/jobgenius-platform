@@ -30,7 +30,7 @@ export default async function WorkerDetailPage({ params }: PageProps) {
         <p className="text-gray-500">Worker not found.</p>
         <Link
           href="/dashboard/admin/payroll/workers"
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-2 inline-block"
+          className="text-violet-600 hover:text-violet-700 text-sm font-medium mt-2 inline-block"
         >
           ← Back to workers
         </Link>

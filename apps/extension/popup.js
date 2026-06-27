@@ -41,6 +41,12 @@ const els = {
   saveJobBtn: document.getElementById("saveJob"),
   scrapeVisibleBtn: document.getElementById("scrapeVisible"),
   scrapeAllBtn: document.getElementById("scrapeAll"),
+  scrapePreview: document.getElementById("scrapePreview"),
+  scrapePreviewTitle: document.getElementById("scrapePreviewTitle"),
+  scrapeList: document.getElementById("scrapeList"),
+  scrapeSaveSelectedBtn: document.getElementById("scrapeSaveSelected"),
+  scrapeToggleAllBtn: document.getElementById("scrapeToggleAll"),
+  scrapeClearBtn: document.getElementById("scrapeClear"),
   saveStatus: document.getElementById("saveStatus"),
   refreshMatchedBtn: document.getElementById("refreshMatched"),
   matchedJobsList: document.getElementById("matchedJobsList"),
@@ -1441,7 +1447,19 @@ async function saveCurrentJob() {
   }
 }
 
-async function scrapeAndSaveJobs(scrapeFunc) {
+// Scraped jobs are held here for review; nothing is saved until the AM confirms.
+let scrapedJobs = [];
+let scrapedSelected = [];
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function scrapeJobs(scrapeFunc) {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !isValidUrl(apiBaseUrl)) {
     setStatus(els.saveStatus, "Set API Base URL in Settings.", "error");
@@ -1464,41 +1482,151 @@ async function scrapeAndSaveJobs(scrapeFunc) {
 
     const jobs = results[0]?.result || [];
     if (jobs.length === 0) {
+      clearScrapePreview();
       setStatus(els.saveStatus, "No job listings found.", "info");
       return;
     }
 
-    let saved = 0;
-    let duplicates = 0;
-
-    for (const job of jobs) {
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/jobs/save`, {
-          method: "POST",
-          headers: getHeaders(),
-          body: JSON.stringify({
-            url: job.url,
-            title: job.title,
-            company: job.company,
-            location: job.location,
-            source: job.source || "extension_scrape",
-            raw_text: job.description || null,
-          }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.duplicate) duplicates++;
-          else saved++;
-        }
-      } catch (e) { console.error("Error saving job:", e); }
-    }
-
-    setStatus(els.saveStatus, `Scraped ${jobs.length}: ${saved} saved, ${duplicates} duplicates. Jobs auto-matched!`, "success");
-    // Refresh matched jobs after scraping since auto-match runs server-side
-    setTimeout(() => loadMatchedJobs(), 2000);
+    // Show the jobs for review instead of saving them.
+    scrapedJobs = jobs;
+    scrapedSelected = jobs.map(() => true);
+    renderScrapePreview();
+    setStatus(els.saveStatus, `Found ${jobs.length} jobs. Review, then save.`, "info");
   } catch (error) {
     setStatus(els.saveStatus, "Error: " + error.message, "error");
   }
+}
+
+function selectedScrapeCount() {
+  return scrapedSelected.filter(Boolean).length;
+}
+
+function renderScrapePreview() {
+  if (!els.scrapePreview || !els.scrapeList) return;
+  if (scrapedJobs.length === 0) {
+    els.scrapePreview.classList.add("hidden");
+    return;
+  }
+  els.scrapePreview.classList.remove("hidden");
+  els.scrapePreviewTitle.textContent = `${selectedScrapeCount()} of ${scrapedJobs.length} selected`;
+
+  els.scrapeList.innerHTML = scrapedJobs
+    .map((job, i) => {
+      const meta = [job.company, job.location].filter(Boolean).join(" · ") || job.url || "";
+      const openBtn = job.url
+        ? `<button data-open="${i}" title="Open in new tab" style="background:none;border:none;cursor:pointer;color:var(--gray-400);font-size:13px;padding:2px 4px;line-height:1">↗</button>`
+        : "";
+      return `
+        <div class="job-card" style="display:flex;gap:6px;align-items:flex-start">
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;flex:1;min-width:0">
+            <input type="checkbox" data-idx="${i}" ${scrapedSelected[i] ? "checked" : ""} style="margin-top:3px;width:14px;height:14px" />
+            <span style="min-width:0;flex:1">
+              <span class="title" style="display:block">${escapeHtml(job.title || "Untitled")}</span>
+              <span class="meta" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(meta)}</span>
+            </span>
+          </label>
+          <div style="display:flex;gap:2px;flex-shrink:0">
+            ${openBtn}
+            <button data-remove="${i}" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--gray-400);font-size:15px;font-weight:bold;padding:2px 4px;line-height:1">&times;</button>
+          </div>
+        </div>`;
+    })
+    .join("");
+
+  els.scrapeList.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const idx = Number(e.target.dataset.idx);
+      scrapedSelected[idx] = e.target.checked;
+      els.scrapePreviewTitle.textContent = `${selectedScrapeCount()} of ${scrapedJobs.length} selected`;
+    });
+  });
+
+  els.scrapeList.querySelectorAll("[data-open]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const job = scrapedJobs[Number(e.currentTarget.dataset.open)];
+      if (job?.url) chrome.tabs.create({ url: job.url, active: false }).catch(() => {});
+    });
+  });
+
+  els.scrapeList.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      removeScrapedJob(Number(e.currentTarget.dataset.remove));
+    });
+  });
+}
+
+function removeScrapedJob(idx) {
+  if (idx < 0 || idx >= scrapedJobs.length) return;
+  scrapedJobs.splice(idx, 1);
+  scrapedSelected.splice(idx, 1);
+  if (scrapedJobs.length === 0) {
+    clearScrapePreview();
+    setStatus(els.saveStatus, "All scraped jobs removed.", "info");
+  } else {
+    renderScrapePreview();
+  }
+}
+
+function toggleAllScraped() {
+  const allSelected = selectedScrapeCount() === scrapedJobs.length;
+  scrapedSelected = scrapedJobs.map(() => !allSelected);
+  renderScrapePreview();
+}
+
+function clearScrapePreview() {
+  scrapedJobs = [];
+  scrapedSelected = [];
+  if (els.scrapePreview) els.scrapePreview.classList.add("hidden");
+  if (els.scrapeList) els.scrapeList.innerHTML = "";
+}
+
+async function saveScrapedJobs() {
+  const apiBaseUrl = getApiBaseUrl();
+  const toSave = scrapedJobs.filter((_, i) => scrapedSelected[i]);
+  if (toSave.length === 0) {
+    setStatus(els.saveStatus, "No jobs selected.", "info");
+    return;
+  }
+
+  els.scrapeSaveSelectedBtn.disabled = true;
+  setStatus(els.saveStatus, `Saving ${toSave.length}...`, "info");
+
+  let saved = 0;
+  let duplicates = 0;
+  for (const job of toSave) {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/jobs/save`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          url: job.url,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          source: job.source || "extension_scrape",
+          raw_text: job.description || null,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.duplicate) duplicates++;
+        else saved++;
+      }
+    } catch (e) {
+      console.error("Error saving job:", e);
+    }
+  }
+
+  els.scrapeSaveSelectedBtn.disabled = false;
+  clearScrapePreview();
+  setStatus(
+    els.saveStatus,
+    `${saved} saved, ${duplicates} duplicates. Jobs auto-matched!`,
+    "success"
+  );
+  setTimeout(() => loadMatchedJobs(), 2000);
 }
 
 // Injected scrape functions
@@ -1836,8 +1964,14 @@ els.tabs.forEach((tab) => {
 els.connectBtn.addEventListener("click", connect);
 els.disconnectBtn.addEventListener("click", disconnect);
 els.saveJobBtn.addEventListener("click", saveCurrentJob);
-els.scrapeVisibleBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeVisibleJobs));
-els.scrapeAllBtn.addEventListener("click", () => scrapeAndSaveJobs(scrapeAllJobsWithScroll));
+els.scrapeVisibleBtn.addEventListener("click", () => scrapeJobs(scrapeVisibleJobs));
+els.scrapeAllBtn.addEventListener("click", () => scrapeJobs(scrapeAllJobsWithScroll));
+if (els.scrapeSaveSelectedBtn) els.scrapeSaveSelectedBtn.addEventListener("click", saveScrapedJobs);
+if (els.scrapeToggleAllBtn) els.scrapeToggleAllBtn.addEventListener("click", toggleAllScraped);
+if (els.scrapeClearBtn) els.scrapeClearBtn.addEventListener("click", () => {
+  clearScrapePreview();
+  setStatus(els.saveStatus, "Scraped jobs discarded.", "info");
+});
 els.refreshMatchedBtn.addEventListener("click", loadMatchedJobs);
 if (els.openJobManagerBtn) {
   els.openJobManagerBtn.addEventListener("click", () => {

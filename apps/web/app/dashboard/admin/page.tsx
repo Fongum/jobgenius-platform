@@ -114,7 +114,7 @@ export default async function AdminPage() {
           className="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
         >
           <div className="text-sm font-medium text-gray-500">Job Seekers</div>
-          <div className="mt-1 text-3xl font-bold text-blue-600">{seekerCount ?? 0}</div>
+          <div className="mt-1 text-3xl font-bold text-violet-600">{seekerCount ?? 0}</div>
         </Link>
 
         <Link
@@ -203,7 +203,7 @@ export default async function AdminPage() {
           </Link>
           <Link
             href="/dashboard/admin/assignments"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Manage Assignments
           </Link>
@@ -245,7 +245,7 @@ export default async function AdminPage() {
         <div className="bg-white rounded-lg shadow">
           <div className="px-5 py-4 border-b flex items-center justify-between">
             <h2 className="font-semibold text-gray-900">Recent Account Managers</h2>
-            <Link href="/dashboard/admin/accounts" className="text-sm text-blue-600 hover:text-blue-800">
+            <Link href="/dashboard/admin/accounts" className="text-sm text-violet-600 hover:text-violet-800">
               View all
             </Link>
           </div>
@@ -264,7 +264,7 @@ export default async function AdminPage() {
                       am.role === "superadmin"
                         ? "bg-purple-100 text-purple-800"
                         : am.role === "admin"
-                        ? "bg-blue-100 text-blue-800"
+                        ? "bg-violet-100 text-violet-800"
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
@@ -280,7 +280,7 @@ export default async function AdminPage() {
         <div className="bg-white rounded-lg shadow">
           <div className="px-5 py-4 border-b flex items-center justify-between">
             <h2 className="font-semibold text-gray-900">Recent Job Seekers</h2>
-            <Link href="/dashboard/admin/job-seekers" className="text-sm text-blue-600 hover:text-blue-800">
+            <Link href="/dashboard/admin/job-seekers" className="text-sm text-violet-600 hover:text-violet-800">
               View all
             </Link>
           </div>

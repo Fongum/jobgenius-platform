@@ -305,6 +305,18 @@ function resolveFieldValue(hint, type, profile, defaultEmail) {
   return type === "email" ? email : "";
 }
 
+// Jittered pause + scroll-into-view make the runner less bot-like and more
+// reliable on lazy-rendered forms (mirrors the extension's pacing).
+function humanPause(page) {
+  return page.waitForTimeout(120 + Math.floor(Math.random() * 280));
+}
+
+async function fillField(input, value, page) {
+  await input.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+  await input.fill(value);
+  await humanPause(page);
+}
+
 export async function fillKnownFields(page, ctx) {
   const profile = ctx?.profile ?? {};
   const defaultEmail = ctx?.defaultEmail ?? "";
@@ -325,14 +337,14 @@ export async function fillKnownFields(page, ctx) {
     if (tagName === "textarea") {
       const coverLetterValue = resolveCoverLetterValue(hint, profile, job);
       if (coverLetterValue) {
-        await input.fill(coverLetterValue);
+        await fillField(input, coverLetterValue, page);
         continue;
       }
     }
 
     const fillValue = resolveFieldValue(hint, type, profile, defaultEmail);
     if (!fillValue) continue;
-    await input.fill(fillValue);
+    await fillField(input, fillValue, page);
   }
 
   // Handle select fields (work authorization, sponsorship, etc.)

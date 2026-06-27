@@ -44,7 +44,7 @@ function getStatusTone(status: string): string {
     case "acknowledged":
       return "bg-emerald-100 text-emerald-700";
     case "finalized":
-      return "bg-blue-100 text-blue-700";
+      return "bg-violet-100 text-violet-700";
     case "submitted":
       return "bg-amber-100 text-amber-700";
     default:
@@ -148,7 +148,7 @@ export default function PerformanceReviewsClient({
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Latest total
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">
+          <p className="text-3xl font-bold text-violet-700 mt-2">
             {latestScorecard ? `${latestScorecard.final_total}%` : "n/a"}
           </p>
         </div>
@@ -231,7 +231,7 @@ export default function PerformanceReviewsClient({
                             href={item.attachment_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                            className="text-xs font-medium text-violet-600 hover:text-violet-700"
                           >
                             Reference
                           </a>
@@ -261,7 +261,7 @@ export default function PerformanceReviewsClient({
                     <button
                       onClick={() => acknowledgeScorecard(scorecard.id)}
                       disabled={busyId === scorecard.id}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
                     >
                       {busyId === scorecard.id ? "Acknowledging..." : "Acknowledge review"}
                     </button>

@@ -96,7 +96,7 @@ export default function MyPayslipsClient({
                     className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                       p.status === "paid"
                         ? "bg-green-100 text-green-700"
-                        : "bg-blue-100 text-blue-700"
+                        : "bg-violet-100 text-violet-700"
                     }`}
                   >
                     {p.status}
@@ -115,7 +115,7 @@ export default function MyPayslipsClient({
                     href={`/api/me/payslips/${p.id}/pdf`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                    className="text-xs font-medium text-violet-600 hover:text-violet-700"
                   >
                     Download
                   </a>

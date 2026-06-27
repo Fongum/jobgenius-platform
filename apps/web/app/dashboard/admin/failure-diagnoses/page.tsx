@@ -104,7 +104,7 @@ export default async function AdminFailureDiagnosesPage({ searchParams }: PagePr
               href={`/dashboard/admin/failure-diagnoses?${url.toString()}`}
               className={`px-3 py-1.5 rounded-full text-xs font-medium ${
                 statusFilter === s
-                  ? "bg-blue-600 text-white"
+                  ? "bg-violet-600 text-white"
                   : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
               }`}
             >

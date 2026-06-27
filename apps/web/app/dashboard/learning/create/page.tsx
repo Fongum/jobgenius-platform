@@ -113,7 +113,7 @@ export default function CreateLearningTrackPage() {
       <div className="mb-6">
         <Link
           href="/dashboard/learning"
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-sm text-violet-600 hover:text-violet-800"
         >
           &larr; Back to Learning Tracks
         </Link>
@@ -134,7 +134,7 @@ export default function CreateLearningTrackPage() {
               value={seekerId}
               onChange={(e) => setSeekerId(e.target.value)}
               required
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             >
               <option value="">Select a job seeker</option>
               {seekers.map((s) => (
@@ -153,7 +153,7 @@ export default function CreateLearningTrackPage() {
           <select
             value={creationMode}
             onChange={(e) => setCreationMode(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
           >
             {CREATION_MODES.map((mode) => (
               <option key={mode.value} value={mode.value}>
@@ -176,7 +176,7 @@ export default function CreateLearningTrackPage() {
             onChange={(e) => setTitle(e.target.value)}
             required
             placeholder="e.g., React Fundamentals for Frontend Roles"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
           />
         </div>
 
@@ -189,7 +189,7 @@ export default function CreateLearningTrackPage() {
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             placeholder="Brief description of what this track covers..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
           />
         </div>
 
@@ -203,7 +203,7 @@ export default function CreateLearningTrackPage() {
               value={targetSkill}
               onChange={(e) => setTargetSkill(e.target.value)}
               placeholder="e.g., React, SQL, Project Management"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             />
             <p className="mt-1 text-xs text-gray-500">
               Use the main skill the learner needs to refresh first.
@@ -221,7 +221,7 @@ export default function CreateLearningTrackPage() {
               value={jobPostId}
               onChange={(e) => setJobPostId(e.target.value)}
               placeholder="Optional job_post_id for role-specific refresh context"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             />
             <p className="mt-1 text-xs text-gray-500">
               Optional. Attach a job post when you want the refresh track tied to a specific role.
@@ -236,7 +236,7 @@ export default function CreateLearningTrackPage() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
           >
             {CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>
@@ -260,7 +260,7 @@ export default function CreateLearningTrackPage() {
               (creationMode === "manual_skill_refresh" && !targetSkill.trim()) ||
               (creationMode === "job_gap_refresh" && !targetSkill.trim() && !jobPostId.trim())
             }
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
           >
             {submitting ? "Creating..." : "Create Track"}
           </button>

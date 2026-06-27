@@ -339,11 +339,11 @@ export default async function DashboardPage() {
     CRITICAL: "bg-red-100 text-red-800",
     HIGH: "bg-orange-100 text-orange-800",
     MEDIUM: "bg-purple-100 text-purple-800",
-    NORMAL: "bg-blue-100 text-blue-800",
+    NORMAL: "bg-violet-100 text-violet-800",
   };
 
   const actionCardBorders: Record<string, string> = {
-    blue: "border-l-blue-500",
+    blue: "border-l-violet-500",
     orange: "border-l-orange-500",
     purple: "border-l-purple-500",
     green: "border-l-green-500",
@@ -407,7 +407,7 @@ export default async function DashboardPage() {
           className={`bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow border-l-4 ${actionCardBorders.blue}`}
         >
           <div className="text-sm font-medium text-gray-500">Applications Ready</div>
-          <div className="mt-1 text-3xl font-bold text-blue-600">{queuedCount}</div>
+          <div className="mt-1 text-3xl font-bold text-violet-600">{queuedCount}</div>
           <div className="mt-1 text-xs text-gray-400">Click to action &rarr;</div>
         </Link>
         <Link
@@ -486,7 +486,7 @@ export default async function DashboardPage() {
         </div>
         <div className="bg-white rounded-lg shadow p-5">
           <div className="text-sm font-medium text-gray-500">Response Rate</div>
-          <div className="mt-1 text-3xl font-bold text-blue-600">{responseRate}%</div>
+          <div className="mt-1 text-3xl font-bold text-violet-600">{responseRate}%</div>
         </div>
       </div>
 

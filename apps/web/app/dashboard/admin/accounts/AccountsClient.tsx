@@ -634,7 +634,7 @@ export default function AccountsClient({
                                   normalizedRole === "superadmin"
                                     ? "bg-purple-100 text-purple-800"
                                     : normalizedRole === "admin"
-                                    ? "bg-blue-100 text-blue-800"
+                                    ? "bg-violet-100 text-violet-800"
                                     : normalizedRole === "ops_manager"
                                     ? "bg-emerald-100 text-emerald-800"
                                     : normalizedRole === "accountant"
@@ -742,7 +742,7 @@ export default function AccountsClient({
                                     )
                                   }
                                   disabled={convertActionDisabled}
-                                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                  className="px-3 py-1.5 text-xs bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
                                 >
                                   {processing === `convert:${account.id}`
                                     ? "Converting..."

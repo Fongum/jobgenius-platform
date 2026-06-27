@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
+import { computePlacementFee } from "@/lib/billing/commission";
 
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -54,19 +55,18 @@ export async function POST(request: Request) {
   const amConfirmed = offer.am_confirmed_at || updateFields.am_confirmed_at;
 
   if (seekerConfirmed && amConfirmed) {
-    const acceptedAt = new Date(offer.offer_accepted_at);
-    const dueDate = new Date(acceptedAt);
-    dueDate.setDate(dueDate.getDate() + 90);
-    const extendedDueDate = new Date(acceptedAt);
-    extendedDueDate.setDate(extendedDueDate.getDate() + 120);
-
-    const commissionAmount = Number(offer.base_salary) * 0.05;
+    const fee = computePlacementFee({
+      baseSalary: Number(offer.base_salary),
+      guaranteedCompensation: offer.guaranteed_compensation,
+      startDate: offer.start_date,
+      offerAcceptedAt: offer.offer_accepted_at,
+    });
 
     Object.assign(updateFields, {
       status: "accepted",
-      commission_amount: commissionAmount,
-      commission_due_date: dueDate.toISOString().split("T")[0],
-      commission_extended_due_date: extendedDueDate.toISOString().split("T")[0],
+      commission_amount: fee.commissionAmount,
+      commission_due_date: fee.dueDate,
+      commission_extended_due_date: fee.extendedDueDate,
       commission_status: "pending",
     });
   } else {

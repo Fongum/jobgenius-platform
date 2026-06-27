@@ -270,7 +270,7 @@ export default function ProbationClient({
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Tentative or probation
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">{probationCount}</p>
+          <p className="text-3xl font-bold text-violet-700 mt-2">{probationCount}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -317,7 +317,7 @@ export default function ProbationClient({
                     key={summary.employee.id}
                     onClick={() => setSelectedEmployeeId(summary.employee.id)}
                     className={`w-full px-5 py-4 text-left transition-colors ${
-                      active ? "bg-blue-50" : "hover:bg-gray-50"
+                      active ? "bg-violet-50" : "hover:bg-gray-50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -376,7 +376,7 @@ export default function ProbationClient({
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+                    <span className="inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">
                       {labelizePeopleValue(selectedSummary.employee.employment_status)}
                     </span>
                     <span className="inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">

@@ -28,7 +28,7 @@ export default async function PayslipDetailPage({ params }: PageProps) {
         <p className="text-gray-500">Payslip not found.</p>
         <Link
           href="/dashboard/admin/payroll/periods"
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-2 inline-block"
+          className="text-violet-600 hover:text-violet-700 text-sm font-medium mt-2 inline-block"
         >
           ← Back to pay periods
         </Link>

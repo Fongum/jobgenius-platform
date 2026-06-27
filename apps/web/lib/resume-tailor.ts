@@ -1,6 +1,7 @@
 import { getOpenAIClient, OPENAI_MODEL } from "./openai";
 import type { StructuredResume } from "./resume-templates/types";
 import { scoreResumeSkillCoverage, type SkillCoverage } from "./resume-score";
+import { lintTailoredResume, type ResumeSafetyResult } from "./resume-safety";
 
 // Resume tailoring benefits from a stronger model than the default mini.
 // Override with RESUME_TAILOR_MODEL (e.g. gpt-4o) without touching matching.
@@ -41,6 +42,8 @@ export interface TailorResumeStructuredResult {
   changesSummary: string;
   /** Before/after skill coverage. Present for job-targeted tailoring. */
   coverage?: TailorCoverage;
+  /** Deterministic safety check (fabrication, identity, stuffing, length). */
+  safety?: ResumeSafetyResult;
 }
 
 export interface OptimizeBaseResumeStructuredInput {
@@ -382,6 +385,7 @@ Respond with valid JSON containing two fields:
     tailoredText,
     changesSummary: parsed.changes_summary,
     coverage: { before, after },
+    safety: lintTailoredResume(input.baseResume, tailoredData),
   };
 }
 
@@ -460,6 +464,7 @@ Respond with valid JSON containing:
     tailoredData,
     tailoredText: structuredResumeToText(tailoredData),
     changesSummary: parsed.changes_summary,
+    safety: lintTailoredResume(input.baseResume, tailoredData),
   };
 }
 
@@ -521,6 +526,7 @@ Respond with valid JSON containing:
     tailoredData,
     tailoredText: structuredResumeToText(tailoredData),
     changesSummary: parsed.changes_summary,
+    safety: lintTailoredResume(input.baseResume, tailoredData),
   };
 }
 

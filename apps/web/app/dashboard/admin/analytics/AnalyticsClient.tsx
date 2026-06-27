@@ -104,7 +104,7 @@ export default function AnalyticsClient({
   const appTrend = trendLabel(metrics.applications_this_month, metrics.applications_prev_month);
 
   const funnelSteps = [
-    { label: "Total Seekers", value: funnel.total_seekers, color: "bg-blue-500" },
+    { label: "Total Seekers", value: funnel.total_seekers, color: "bg-violet-500" },
     { label: "Assigned to AM", value: funnel.assigned, color: "bg-indigo-500" },
     { label: "Applied", value: funnel.applied, color: "bg-violet-500" },
     { label: "Interviewed", value: funnel.interviewed, color: "bg-purple-500" },
@@ -132,7 +132,7 @@ export default function AnalyticsClient({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-sm font-medium text-gray-500">Interviews This Month</p>
-          <p className="text-4xl font-bold text-blue-600 mt-1">{metrics.interviews_this_month}</p>
+          <p className="text-4xl font-bold text-violet-600 mt-1">{metrics.interviews_this_month}</p>
           <p className={`text-xs mt-1 ${ivTrend.up ? "text-green-600" : "text-red-500"}`}>{ivTrend.text}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -221,12 +221,12 @@ export default function AnalyticsClient({
               {adjacentOperator.adjacent.queued.toLocaleString()} manually queued
             </p>
           </div>
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-            <p className="text-sm font-medium text-blue-700">Adjacent queue rate</p>
-            <p className="mt-1 text-3xl font-bold text-blue-900">
+          <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+            <p className="text-sm font-medium text-violet-700">Adjacent queue rate</p>
+            <p className="mt-1 text-3xl font-bold text-violet-900">
               {formatRate(adjacentOperator.adjacent.queue_rate)}
             </p>
-            <p className="mt-1 text-xs text-blue-700">
+            <p className="mt-1 text-xs text-violet-700">
               {adjacentOperator.adjacent.explicitly_tagged_queued.toLocaleString()} tagged,
               {" "}
               {adjacentOperator.adjacent.inferred_legacy_queued.toLocaleString()} legacy
@@ -268,7 +268,7 @@ export default function AnalyticsClient({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {[
-                { label: "Primary lane", summary: adjacentOperator.primary, tone: "text-blue-700" },
+                { label: "Primary lane", summary: adjacentOperator.primary, tone: "text-violet-700" },
                 { label: "Adjacent lane", summary: adjacentOperator.adjacent, tone: "text-amber-700" },
               ].map((row) => (
                 <tr key={row.label}>

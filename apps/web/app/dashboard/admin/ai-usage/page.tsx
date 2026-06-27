@@ -114,7 +114,7 @@ export default async function AiUsagePage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <Stat label="Calls (24h)" value={String(totalCalls24h)} tone="text-gray-900" />
-        <Stat label="Cost (24h)" value={fmtCurrency(totalCost24h)} tone="text-blue-700" />
+        <Stat label="Cost (24h)" value={fmtCurrency(totalCost24h)} tone="text-violet-700" />
         <Stat
           label="Errors (24h)"
           value={String(errorCalls24h)}
@@ -138,7 +138,7 @@ export default async function AiUsagePage() {
                 <span className="w-20 text-gray-500 font-mono">{day}</span>
                 <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
                   <div
-                    className="bg-blue-500 h-full"
+                    className="bg-violet-500 h-full"
                     style={{ width: `${(v.cost / maxDailyCost) * 100}%` }}
                   />
                 </div>

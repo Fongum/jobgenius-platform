@@ -248,7 +248,7 @@ export default function PermissionsClient({
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Active policies", value: activePolicyCount, tone: "text-blue-700" },
+          { label: "Active policies", value: activePolicyCount, tone: "text-violet-700" },
           { label: "Pending requests", value: pendingRequestCount, tone: "text-amber-700" },
           { label: "Employees over limit", value: overLimitCount, tone: "text-red-700" },
           { label: "Days available", value: totalAvailableDays, tone: "text-emerald-700" },
@@ -368,7 +368,7 @@ export default function PermissionsClient({
           <button
             type="submit"
             disabled={busyAction === "save-policy"}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
           >
             {busyAction === "save-policy"
               ? "Saving..."
@@ -568,7 +568,7 @@ export default function PermissionsClient({
                       type="button"
                       onClick={() => reviewRequest(request.id)}
                       disabled={busyAction === `review:${request.id}`}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                      className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
                     >
                       {busyAction === `review:${request.id}` ? "Saving..." : "Save review"}
                     </button>

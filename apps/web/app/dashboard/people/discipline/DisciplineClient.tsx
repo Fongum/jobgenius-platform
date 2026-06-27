@@ -214,7 +214,7 @@ export default function DisciplineClient({
               <button
                 type="button"
                 onClick={resetForm}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="text-sm font-medium text-violet-600 hover:text-violet-700"
               >
                 Clear
               </button>
@@ -333,7 +333,7 @@ export default function DisciplineClient({
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
           >
             {saving ? "Saving..." : form.id ? "Update record" : "Save record"}
           </button>
@@ -378,7 +378,7 @@ export default function DisciplineClient({
                             ? "bg-red-100 text-red-700"
                             : record.severity === "warning"
                             ? "bg-amber-100 text-amber-700"
-                            : "bg-blue-100 text-blue-700"
+                            : "bg-violet-100 text-violet-700"
                         }`}
                       >
                         {labelizePeopleValue(record.severity)}
@@ -389,7 +389,7 @@ export default function DisciplineClient({
                       <button
                         type="button"
                         onClick={() => startEdit(record)}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                        className="text-sm font-medium text-violet-600 hover:text-violet-700"
                       >
                         Edit
                       </button>

@@ -196,7 +196,7 @@ export default function MyWorkReportClient({
           bundle.metrics.followUps.total,
           bundle.metrics.followUps.system,
           bundle.metrics.followUps.manual,
-          "text-blue-700"
+          "text-violet-700"
         )}
         {metricCard(
           "Interviews",
@@ -364,7 +364,7 @@ export default function MyWorkReportClient({
                 type="button"
                 disabled={locked || saving}
                 onClick={() => void addManualActivity()}
-                className="w-full px-4 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full px-4 py-2 rounded-lg bg-violet-600 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add manual activity
               </button>
@@ -460,7 +460,7 @@ export default function MyWorkReportClient({
                   </div>
                   <div className="flex items-center gap-2">
                     {item.manualTotal > 0 && (
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">
                         {item.manualTotal} manual
                       </span>
                     )}

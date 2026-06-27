@@ -46,7 +46,7 @@ type LeadResumeMetadata = {
 function badgeClasses(status: string) {
   switch (status) {
     case "new":
-      return "bg-blue-50 text-blue-700 border-blue-200";
+      return "bg-violet-50 text-violet-700 border-violet-200";
     case "qualified":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
     case "nurture":
@@ -273,7 +273,7 @@ export default async function AdminLeadsPage({
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <div className="text-sm font-medium text-gray-500">New</div>
-          <div className="mt-1 text-3xl font-bold text-blue-600">{counts.new}</div>
+          <div className="mt-1 text-3xl font-bold text-violet-600">{counts.new}</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <div className="text-sm font-medium text-gray-500">Qualified</div>
@@ -420,7 +420,7 @@ export default async function AdminLeadsPage({
                                 </a>
                                 <Link
                                   href={`/dashboard/admin/outcomes?lead=${lead.id}`}
-                                  className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                                  className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
                                 >
                                   Open consultation desk
                                 </Link>
@@ -431,7 +431,7 @@ export default async function AdminLeadsPage({
                               <p className="text-xs text-gray-400">No resume uploaded</p>
                               <Link
                                 href={`/dashboard/admin/outcomes?lead=${lead.id}`}
-                                className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                                className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
                               >
                                 Open consultation desk
                               </Link>

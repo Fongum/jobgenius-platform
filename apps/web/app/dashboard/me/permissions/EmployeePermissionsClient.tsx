@@ -163,7 +163,7 @@ export default function EmployeePermissionsClient({
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Approved used
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">
+          <p className="text-3xl font-bold text-violet-700 mt-2">
             {summary?.approvedDaysUsed ?? 0}
           </p>
         </div>
@@ -287,7 +287,7 @@ export default function EmployeePermissionsClient({
             <button
               type="submit"
               disabled={!activePolicy || busyAction === "submit"}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
             >
               {busyAction === "submit" ? "Submitting..." : "Submit request"}
             </button>
@@ -304,7 +304,7 @@ export default function EmployeePermissionsClient({
           </ul>
 
           {activePolicy?.notes && (
-            <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <div className="mt-5 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
               <span className="font-medium">Manager note:</span> {activePolicy.notes}
             </div>
           )}

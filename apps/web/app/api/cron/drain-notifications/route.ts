@@ -34,7 +34,7 @@ function isAuthorized(request: Request): boolean {
 function htmlBodyFor(subject: string, body: string | null, linkUrl: string | null): string {
   const safeBody = (body ?? "").replace(/\n/g, "<br/>");
   const cta = linkUrl
-    ? `<p style="margin-top:24px;"><a href="${linkUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Open</a></p>`
+    ? `<p style="margin-top:24px;"><a href="${linkUrl}" style="display:inline-block;padding:10px 18px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Open</a></p>`
     : "";
   return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;margin:0 auto;padding:24px;">
     <h2 style="font-size:18px;margin-bottom:12px;">${subject}</h2>

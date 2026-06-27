@@ -122,7 +122,7 @@ function getStatusTone(status: string): string {
     case "active":
     case "in_trial":
     case "enrolled_in_course":
-      return "bg-blue-100 text-blue-700";
+      return "bg-violet-100 text-violet-700";
     case "under_observation":
     case "planned":
     case "ready_for_trial":
@@ -447,7 +447,7 @@ export default function LeadershipClient({
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             In course
           </p>
-          <p className="text-3xl font-bold text-blue-700 mt-2">{enrolledCount}</p>
+          <p className="text-3xl font-bold text-violet-700 mt-2">{enrolledCount}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -484,7 +484,7 @@ export default function LeadershipClient({
                     onClick={() => setSelectedEmployeeId(record.employee_id)}
                     className={`w-full px-5 py-4 text-left transition-colors ${
                       selectedEmployeeId === record.employee_id
-                        ? "bg-blue-50"
+                        ? "bg-violet-50"
                         : "hover:bg-gray-50"
                     }`}
                   >

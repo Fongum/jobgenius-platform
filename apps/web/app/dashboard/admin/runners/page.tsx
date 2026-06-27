@@ -17,7 +17,7 @@ interface RunRow {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  RUNNING: "bg-blue-100 text-blue-700",
+  RUNNING: "bg-violet-100 text-violet-700",
   RETRYING: "bg-amber-100 text-amber-700",
   READY: "bg-gray-100 text-gray-600",
   NEEDS_ATTENTION: "bg-red-100 text-red-700",
@@ -26,7 +26,7 @@ const STATUS_STYLES: Record<string, string> = {
 const PRIORITY_STYLES: Record<string, string> = {
   high: "bg-red-100 text-red-700",
   normal: "bg-gray-100 text-gray-600",
-  low: "bg-blue-100 text-blue-700",
+  low: "bg-violet-100 text-violet-700",
 };
 
 function bucketPriority(priority: number | null): "high" | "normal" | "low" {

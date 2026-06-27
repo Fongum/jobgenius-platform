@@ -103,7 +103,7 @@ function statusClasses(status: string): string {
     case "active_client":
       return "bg-emerald-100 text-emerald-800";
     case "waitlisted":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800";
     case "rejected":
       return "bg-red-100 text-red-800";
     default:
@@ -583,7 +583,7 @@ export default function IntakeQueueClient({
                           <button
                             onClick={() => runAction(state.id, "waitlist")}
                             disabled={processingId === state.id}
-                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
                           >
                             Waitlist
                           </button>
@@ -637,7 +637,7 @@ export default function IntakeQueueClient({
                       {state.jobSeeker?.id && (
                         <Link
                           href={`/dashboard/admin/job-seekers/${state.jobSeeker.id}`}
-                          className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-800"
+                          className="mt-4 inline-flex text-sm font-medium text-violet-600 hover:text-violet-800"
                         >
                           {"Open seeker record ->"}
                         </Link>
@@ -667,7 +667,7 @@ function SummaryCard({
 }) {
   const toneMap: Record<"amber" | "blue" | "cyan" | "green" | "emerald" | "purple", string> = {
     amber: "text-amber-600",
-    blue: "text-blue-600",
+    blue: "text-violet-600",
     cyan: "text-cyan-600",
     green: "text-green-600",
     emerald: "text-emerald-600",

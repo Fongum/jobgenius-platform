@@ -140,7 +140,7 @@ export default function DriftClient({
                     <span key={id}>
                       <Link
                         href={`/dashboard/attention?run=${id}`}
-                        className="text-blue-600 hover:text-blue-700"
+                        className="text-violet-600 hover:text-violet-700"
                       >
                         {id.slice(0, 8)}
                       </Link>
@@ -162,7 +162,7 @@ export default function DriftClient({
                   </button>
                   <Link
                     href="/dashboard/admin/host-rules"
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-xs text-violet-600 hover:text-violet-700"
                   >
                     Open Host Rules →
                   </Link>

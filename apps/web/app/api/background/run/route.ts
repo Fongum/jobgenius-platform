@@ -826,6 +826,20 @@ async function runTailorResume(payload: Record<string, unknown>) {
     tailoredData = structuredResult.tailoredData;
     usedTemplateId = templateId;
 
+    // Safety gate: if the tailored resume failed a blocking check (invented
+    // skill, altered identity), route it to a human instead of auto-applying.
+    if (structuredResult.safety && !structuredResult.safety.ok && queueId) {
+      const blockers = structuredResult.safety.issues
+        .filter((i) => i.severity === "block")
+        .map((i) => i.message)
+        .join("; ");
+      await flagQueueAttention(
+        queueId,
+        "RESUME_SAFETY",
+        `Tailored resume failed safety check: ${blockers}`.slice(0, 300)
+      );
+    }
+
     // Generate formatted PDF from structured data
     try {
       const pdfBuffer = renderResumePdf(structuredResult.tailoredData, templateId);

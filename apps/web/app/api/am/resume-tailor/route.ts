@@ -227,6 +227,7 @@ export async function POST(request: Request) {
       tailored_resume: upserted,
       changes_summary: structuredResult.changesSummary,
       coverage: structuredResult.coverage ?? null,
+      safety: structuredResult.safety ?? null,
     });
   } catch (structuredErr) {
     // Fall back to plain-text tailoring

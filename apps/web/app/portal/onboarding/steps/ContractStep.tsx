@@ -113,7 +113,7 @@ export default function ContractStep({
           type="checkbox"
           checked={agreed}
           onChange={(event) => setAgreed(event.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
         />
         <span className="text-sm text-gray-700">
           I have read and agree to the registration fee, discount terms, commission
@@ -140,7 +140,7 @@ export default function ContractStep({
           type="button"
           onClick={handleContinue}
           disabled={!agreed || saving}
-          className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? "Saving..." : "I Agree - Continue"}
         </button>

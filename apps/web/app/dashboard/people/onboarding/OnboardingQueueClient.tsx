@@ -160,7 +160,7 @@ export default function OnboardingQueueClient({
                         item.status === "approved"
                           ? "bg-green-100 text-green-700"
                           : item.status === "submitted"
-                          ? "bg-blue-100 text-blue-700"
+                          ? "bg-violet-100 text-violet-700"
                           : item.status === "needs_changes"
                           ? "bg-amber-100 text-amber-700"
                           : "bg-gray-100 text-gray-700"

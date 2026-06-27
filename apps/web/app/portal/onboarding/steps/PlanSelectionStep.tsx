@@ -59,7 +59,7 @@ const PLAN_PRICING: Record<
   essentials: {
     baseFee: 500,
     discountedFee: 400,
-    badgeClass: "bg-blue-600 text-white",
+    badgeClass: "bg-violet-600 text-white",
   },
   premium: {
     baseFee: 1000,
@@ -114,9 +114,9 @@ export default function PlanSelectionStep({
                 ? "border-violet-600 bg-violet-50 shadow-md"
                 : "border-gray-200 hover:border-violet-300 hover:bg-gray-50"
               : isSelected
-              ? "border-blue-600 bg-blue-50 shadow-md"
-              : "border-gray-200 hover:border-blue-300 hover:bg-gray-50";
-          const titleClass = plan === "premium" ? "text-violet-600" : "text-blue-600";
+              ? "border-violet-600 bg-violet-50 shadow-md"
+              : "border-gray-200 hover:border-violet-300 hover:bg-gray-50";
+          const titleClass = plan === "premium" ? "text-violet-600" : "text-violet-600";
 
           return (
             <button
@@ -334,7 +334,7 @@ export default function PlanSelectionStep({
           type="button"
           onClick={onContinue}
           disabled={!selectedPlan}
-          className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {offerPath === "strategy_preview"
             ? "Continue to Preview Terms"

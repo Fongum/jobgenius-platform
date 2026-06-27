@@ -332,7 +332,7 @@ export default function SocialLeadsClient({
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Voting open</p>
-          <p className="text-2xl font-bold text-blue-700 mt-2">
+          <p className="text-2xl font-bold text-violet-700 mt-2">
             {elections.filter((election) => election.status === "voting_open").length}
           </p>
         </div>
@@ -359,7 +359,7 @@ export default function SocialLeadsClient({
               <button
                 type="button"
                 onClick={() => setElectionForm(EMPTY_ELECTION_FORM)}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="text-sm font-medium text-violet-600 hover:text-violet-700"
               >
                 Clear
               </button>
@@ -477,7 +477,7 @@ export default function SocialLeadsClient({
           <button
             type="submit"
             disabled={busyAction === "save-election"}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60"
           >
             {busyAction === "save-election" ? "Saving..." : "Save election"}
           </button>
@@ -512,7 +512,7 @@ export default function SocialLeadsClient({
                       <button
                         type="button"
                         onClick={() => startEditElection(election)}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                        className="text-sm font-medium text-violet-600 hover:text-violet-700"
                       >
                         Edit
                       </button>
