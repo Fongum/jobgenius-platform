@@ -523,6 +523,15 @@
     if (ctx.resumeUrl && hasFileInput) {
       rows.push({ sig: "__resume__", label: "Resume / CV" });
     }
+
+    // This frame has no application fields (e.g. a tracking/ads iframe, or the
+    // top frame when the form is embedded). Stay silent so only the frame that
+    // actually holds the form shows the panel and fills.
+    if (rows.length === 0) {
+      console.log("[JobGenius] no fillable fields in this frame — skipping.");
+      return;
+    }
+
     mode3Sidebar.renderFields(rows);
     mode3Sidebar.setHeader("Autofilling…");
 
@@ -631,8 +640,11 @@
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type !== "AUTOFILL_PAGE") return;
-    // Same per-frame self-election as START_RUN so exactly one frame fills.
-    if (!shouldRunInThisFrame()) return;
+    // Unlike START_RUN we do NOT gate on shouldRunInThisFrame: fill-only is
+    // harmless to run in multiple frames, and the form fields may live in the
+    // top frame even when an ATS iframe is present (which would make the top
+    // frame defer and nothing would fill). runAutofill self-skips any frame
+    // that has no fillable fields.
     runAutofill(message).catch((error) => {
       console.error("[JobGenius] Autofill error:", error);
       try {
