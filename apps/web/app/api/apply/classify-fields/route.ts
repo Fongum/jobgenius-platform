@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     ats_type?: unknown;
     url_host?: unknown;
     fields?: unknown;
-    job?: { title?: unknown; company?: unknown };
+    job?: { title?: unknown; company?: unknown; job_post_id?: unknown };
   };
   try {
     body = (await request.json()) as typeof body;
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     supabaseAdmin
       .from("job_seekers")
       .select(
-        "full_name, email, phone, location, linkedin_url, portfolio_url, work_history, education, skills, years_experience"
+        "full_name, email, phone, location, linkedin_url, portfolio_url, work_history, education, skills, years_experience, resume_text, bio, seniority, target_titles, preferred_industries"
       )
       .eq("id", jobSeekerId)
       .maybeSingle(),
@@ -96,13 +96,35 @@ export async function POST(request: Request) {
     ? (screeningRows as ScreeningAnswer[])
     : [];
 
-  const job =
+  let job =
     body.job && typeof body.job === "object"
       ? {
           title: typeof body.job.title === "string" ? body.job.title : null,
           company: typeof body.job.company === "string" ? body.job.company : null,
+          description: null as string | null,
         }
       : null;
+
+  // Pull the job description so open-ended / case-based answers can be tailored
+  // to the role. The extension sends job_post_id when the job was captured.
+  const jobPostId =
+    body.job && typeof body.job === "object" && typeof body.job.job_post_id === "string"
+      ? body.job.job_post_id
+      : null;
+  if (jobPostId) {
+    const { data: jobPost } = await supabaseAdmin
+      .from("job_posts")
+      .select("title, company, description_text")
+      .eq("id", jobPostId)
+      .maybeSingle();
+    if (jobPost) {
+      job = {
+        title: job?.title ?? jobPost.title ?? null,
+        company: job?.company ?? jobPost.company ?? null,
+        description: jobPost.description_text ?? null,
+      };
+    }
+  }
 
   const result = await resolveFields({
     atsType,

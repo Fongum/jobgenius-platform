@@ -1137,7 +1137,13 @@
           ats_type: ctx.atsType ?? null,
           url_host: window.location.hostname,
           fields: fields.map((f) => ({ label: f.label, type: f.type, options: f.options })),
-          job: ctx.job ? { title: ctx.job.title ?? null, company: ctx.job.company ?? null } : null,
+          job: ctx.job
+            ? {
+                title: ctx.job.title ?? null,
+                company: ctx.job.company ?? null,
+                job_post_id: ctx.job.job_post_id ?? ctx.job.id ?? null,
+              }
+            : null,
         }),
       });
       if (!response.ok) return 0;

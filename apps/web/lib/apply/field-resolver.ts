@@ -36,7 +36,7 @@ export interface ResolveFieldsInput {
   fields: FieldDescriptor[];
   profile: Record<string, unknown> | null | undefined;
   screeningAnswers: ScreeningAnswer[] | null | undefined;
-  job?: { title?: string | null; company?: string | null } | null;
+  job?: { title?: string | null; company?: string | null; description?: string | null } | null;
   amId?: string | null;
 }
 
@@ -198,33 +198,62 @@ function readRuleValue(mapping: Record<string, unknown> | null | undefined): str
 
 // ─── LLM classification (batched) ───
 
+function truncate(value: unknown, max: number): string {
+  const str = typeof value === "string" ? value : value == null ? "" : String(value);
+  return str.length > max ? `${str.slice(0, max)}…` : str;
+}
+
+type ClassifyJob = {
+  title?: string | null;
+  company?: string | null;
+  description?: string | null;
+};
+
+// Aggregate the client's information into a compact dossier the LLM can use to
+// answer spontaneous / case-based questions (essays, "describe a time…", "why
+// this company") grounded in the applicant's real background.
 function buildProfileSummary(profile: Record<string, unknown> | null | undefined): string {
   const p = profile ?? {};
   const workHistory = Array.isArray(p.work_history) ? p.work_history : [];
   return JSON.stringify({
     name: p.full_name ?? p.name ?? "",
-    email: p.email ?? "",
-    phone: p.phone ?? "",
     location: p.location ?? "",
-    linkedin: p.linkedin_url ?? "",
-    portfolio: p.portfolio_url ?? "",
-    work_history: workHistory.slice(0, 3).map((w: Record<string, unknown>) => ({
+    seniority: p.seniority ?? "",
+    years_experience: p.years_experience ?? "",
+    target_titles: Array.isArray(p.target_titles) ? p.target_titles.slice(0, 5) : [],
+    preferred_industries: Array.isArray(p.preferred_industries)
+      ? p.preferred_industries.slice(0, 5)
+      : [],
+    skills: Array.isArray(p.skills) ? p.skills.slice(0, 20) : [],
+    education: truncate(p.education, 400),
+    summary: truncate(p.bio ?? p.summary, 600),
+    work_history: workHistory.slice(0, 5).map((w: Record<string, unknown>) => ({
       title: w?.title ?? "",
       company: w?.company ?? "",
+      dates: [w?.start_date ?? w?.start ?? "", w?.end_date ?? w?.end ?? ""]
+        .filter(Boolean)
+        .join("–"),
+      summary: truncate(w?.description ?? w?.summary ?? w?.responsibilities, 400),
     })),
-    education: p.education ?? "",
-    skills: Array.isArray(p.skills) ? p.skills.slice(0, 10) : [],
-    years_experience: p.years_experience ?? "",
+    resume_excerpt: truncate(p.resume_text, 2000),
   });
 }
 
 function buildPrompt(
   fields: FieldDescriptor[],
   profile: Record<string, unknown> | null | undefined,
-  job?: { title?: string | null; company?: string | null } | null
+  job?: ClassifyJob | null
 ): string {
   const profileSummary = buildProfileSummary(profile);
-  const jobSummary = job ? `Job: ${job.title ?? ""} at ${job.company ?? ""}` : "";
+  const jobLines = job
+    ? [
+        `Job title: ${job.title ?? ""}`,
+        `Company: ${job.company ?? ""}`,
+        job.description ? `Job description (excerpt): ${truncate(job.description, 1500)}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   const fieldDescriptions = fields
     .map((f) => {
       let desc = `- "${f.label}" (type: ${f.type ?? "text"})`;
@@ -235,31 +264,47 @@ function buildPrompt(
     })
     .join("\n");
 
-  return `You are filling out a job application form. Given the applicant profile and the following unfilled required fields, provide the best answer for each field.
+  return `You are completing a job application on behalf of the applicant described below. Answer each unfilled field as the applicant would, in the first person, grounded ONLY in the applicant's real background. Never invent employers, job titles, degrees, or credentials that are not present in the applicant data.
 
-Profile: ${profileSummary}
-${jobSummary}
+Applicant: ${profileSummary}
 
-Fields to fill:
+${jobLines}
+
+Fields to answer:
 ${fieldDescriptions}
 
-Rules:
-- For EEO/demographic questions (gender, race, veteran, disability), always answer "Prefer not to answer" or select the decline option.
-- For work authorization, answer "Yes" (assume authorized).
-- For sponsorship, answer "No" (does not require).
-- For salary, give a reasonable range based on the job title, or "Negotiable".
-- For years of experience, estimate from work history.
-- For "How did you hear about us", answer "Job board".
-- For select fields, choose the exact option text from the provided options.
-- Keep answers concise and professional.
+Guidance:
+- Factual fields (name, salary, years of experience, yes/no, selects): give a short, direct value. For select fields, return the exact option text from the provided options.
+- Open-ended / case-based questions ("describe a time…", "why are you interested…", "tell us about…", cover letters, "in N sentences…"): write a concise, specific, professional first-person answer drawn from the applicant's work history, skills, and resume, tailored to THIS job and company. Respect any stated length limit (e.g. "2–3 sentences"). Do not fabricate specifics — if the background lacks detail, stay general but truthful.
+- EEO/demographic (gender, race, veteran, disability): "Prefer not to answer" or the decline option.
+- Work authorization: "Yes". Sponsorship: "No". "How did you hear about us": "Job board".
+- Keep every answer plausible and submission-ready.
 
-Return a JSON object mapping field labels to answers. Only include fields you can answer.`;
+Return a JSON object mapping each field label to its answer. Only include fields you can answer.`;
+}
+
+// Only enumerated or short-factual fields may be cached as global learned rules.
+// Free-text / essay answers are applicant- and job-specific and must never be
+// shared across seekers.
+function isCacheableField(field: FieldDescriptor): boolean {
+  const type = (field.type ?? "").toLowerCase();
+  if (type === "textarea") return false;
+  if (Array.isArray(field.options) && field.options.length > 0) return true;
+  const label = (field.label ?? "").toLowerCase();
+  if (
+    /describe|tell us|why |cover letter|in \d|sentence|explain|what makes|your experience|motivat/.test(
+      label
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 async function classifyWithLlm(
   fields: FieldDescriptor[],
   profile: Record<string, unknown> | null | undefined,
-  job?: { title?: string | null; company?: string | null } | null
+  job?: ClassifyJob | null
 ): Promise<Record<string, string>> {
   if (!isOpenAIConfigured() || fields.length === 0) return {};
   try {
@@ -342,16 +387,20 @@ export async function resolveFields(input: ResolveFieldsInput): Promise<ResolveF
       resolved.push({ label: field.label, value: coerced, source: "llm", confidence: 0.6 });
       map[field.label] = coerced;
 
-      // Record so the next application with this signature is a cache hit.
-      void recordFieldClassification({
-        atsType,
-        urlHost,
-        field,
-        mapping: { kind: "static", value: coerced },
-        source: "llm",
-        confidence: 0.6,
-        createdBy: amId ?? null,
-      });
+      // Cache only enumerated / short-factual answers. Free-text and essay
+      // answers are applicant- and job-specific, so they are generated fresh
+      // each time rather than shared across seekers via a global rule.
+      if (isCacheableField(field)) {
+        void recordFieldClassification({
+          atsType,
+          urlHost,
+          field,
+          mapping: { kind: "static", value: coerced },
+          source: "llm",
+          confidence: 0.6,
+          createdBy: amId ?? null,
+        });
+      }
     }
   }
 
