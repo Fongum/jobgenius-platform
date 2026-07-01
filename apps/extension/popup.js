@@ -1398,7 +1398,7 @@ async function autofillCurrentPage(tailor = false) {
 
     setStatus(
       els.saveStatus,
-      "Autofill running — review the form on the page, then submit.",
+      "Autofill started — see the checklist panel on the page.",
       "success"
     );
   } catch (error) {

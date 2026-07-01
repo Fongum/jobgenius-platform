@@ -387,6 +387,94 @@
     );
   }
 
+  // ── Mode 3 persistent sidebar (JobWizard-style field checklist) ─────────
+  // A steady on-page panel that lists the form's fields and ticks each one as
+  // it gets autofilled. Self-contained (no dependency on the autonomous runner
+  // sidebar) so it always renders when the autofill runs.
+  const mode3Sidebar = (() => {
+    const PANEL_ID = "jobgenius-autofill-panel";
+    let rowsBySig = new Map();
+
+    function injectStyle() {
+      if (document.getElementById("jobgenius-autofill-style")) return;
+      const s = document.createElement("style");
+      s.id = "jobgenius-autofill-style";
+      s.textContent = `
+        #${PANEL_ID}{position:fixed;top:76px;right:16px;width:300px;max-height:72vh;
+          display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;
+          border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);z-index:2147483647;
+          font-family:Segoe UI,Arial,sans-serif;color:#111827;overflow:hidden}
+        #${PANEL_ID} .jg-hd{display:flex;align-items:center;justify-content:space-between;
+          padding:11px 14px;border-bottom:1px solid #eef2f7}
+        #${PANEL_ID} .jg-ti{font-size:13px;font-weight:700}
+        #${PANEL_ID} .jg-x{cursor:pointer;color:#9ca3af;font-size:18px;line-height:1;border:0;background:none}
+        #${PANEL_ID} .jg-sub{padding:8px 14px;font-size:11px;color:#6b7280;border-bottom:1px solid #f3f4f6}
+        #${PANEL_ID} .jg-list{overflow:auto;padding:2px 0}
+        #${PANEL_ID} .jg-row{display:flex;align-items:center;justify-content:space-between;
+          gap:8px;padding:8px 14px;border-bottom:1px solid #f6f7f9;font-size:12px}
+        #${PANEL_ID} .jg-lb{color:#374151;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #${PANEL_ID} .jg-st{width:18px;height:18px;border-radius:50%;flex:none;display:flex;
+          align-items:center;justify-content:center;font-size:11px;font-weight:700}
+        #${PANEL_ID} .jg-pending{border:2px solid #d1d5db;color:transparent}
+        #${PANEL_ID} .jg-filled{background:#16a34a;color:#fff}
+        #${PANEL_ID} .jg-attn{background:#f59e0b;color:#fff}`;
+      (document.head || document.documentElement).appendChild(s);
+    }
+
+    function mount() {
+      injectStyle();
+      let el = document.getElementById(PANEL_ID);
+      if (el) return el;
+      el = document.createElement("div");
+      el.id = PANEL_ID;
+      el.innerHTML =
+        '<div class="jg-hd"><span class="jg-ti">JobGenius Autofill</span>' +
+        '<button class="jg-x" aria-label="Close">×</button></div>' +
+        '<div class="jg-sub" data-jg-sub>Scanning form…</div>' +
+        '<div class="jg-list" data-jg-list></div>';
+      (document.body || document.documentElement).appendChild(el);
+      el.querySelector(".jg-x").addEventListener("click", () => el.remove());
+      return el;
+    }
+
+    function renderFields(rows) {
+      const el = mount();
+      const list = el.querySelector("[data-jg-list]");
+      list.innerHTML = "";
+      rowsBySig = new Map();
+      for (const r of rows) {
+        const row = document.createElement("div");
+        row.className = "jg-row";
+        const lb = document.createElement("span");
+        lb.className = "jg-lb";
+        lb.textContent = r.label;
+        lb.title = r.label;
+        const st = document.createElement("span");
+        st.className = "jg-st jg-pending";
+        row.appendChild(lb);
+        row.appendChild(st);
+        list.appendChild(row);
+        rowsBySig.set(r.sig, st);
+      }
+    }
+
+    function setStatus(sig, state) {
+      const st = rowsBySig.get(sig);
+      if (!st) return;
+      st.className =
+        "jg-st " +
+        (state === "filled" ? "jg-filled" : state === "attention" ? "jg-attn" : "jg-pending");
+      st.textContent = state === "filled" ? "✓" : state === "attention" ? "!" : "";
+    }
+
+    function setHeader(text) {
+      const el = document.getElementById(PANEL_ID);
+      if (el) el.querySelector("[data-jg-sub]").textContent = text;
+    }
+
+    return { mount, renderFields, setStatus, setHeader };
+  })();
+
   // ── Mode 3: interactive "Autofill this page" ──────────────────────────
   // Fills the visible application form from the seeker's profile on ANY page
   // (matched or unmatched). No plan, no run, no submit — the human reviews and
@@ -411,40 +499,48 @@
       atsType,
     };
 
-    sidebar?.show?.({
+    console.log(
+      "[JobGenius] AUTOFILL_PAGE received. ATS:",
       atsType,
-      jobTitle: ctx.job?.title ?? null,
-      step: "AUTOFILL",
-    });
-    sidebar?.setStatus?.("Autofilling this page");
+      "profile:",
+      !!ctx.profile
+    );
+
+    // Render the checklist immediately from the fields currently on the page,
+    // so the user sees the panel even before/if filling has any effect.
+    const labelOk = (l) => l && l.toLowerCase() !== "unknown field";
+    const preFields = dom.enumerateFields ? dom.enumerateFields() : [];
+    const rows = [];
+    const seen = new Set();
+    for (const f of preFields) {
+      if (!labelOk(f.label)) continue;
+      const sig = fieldSignature(f);
+      if (seen.has(sig)) continue;
+      seen.add(sig);
+      rows.push({ sig, label: f.label });
+    }
+    const hasFileInput = !!document.querySelector("input[type='file']");
+    if (ctx.resumeUrl && hasFileInput) {
+      rows.push({ sig: "__resume__", label: "Resume / CV" });
+    }
+    mode3Sidebar.renderFields(rows);
+    mode3Sidebar.setHeader("Autofilling…");
 
     if (dom.hasCaptcha()) {
-      sidebar?.finish?.(
-        "Needs Attention",
-        "Captcha detected — solve it, then autofill again."
-      );
+      mode3Sidebar.setHeader("Captcha detected — solve it, then autofill again.");
       chrome.runtime.sendMessage({ type: "AUTOFILL_COMPLETE", ok: false, reason: "CAPTCHA" });
       return;
     }
 
-    // Optionally open the application form if the page shows an apply entry.
-    if (adapter?.clickApplyEntry) {
-      try {
-        await adapter.clickApplyEntry(ctx);
-      } catch (error) {
-        console.warn("clickApplyEntry failed (non-fatal):", error);
-      }
-    }
-
-    // Fill known fields (adapter wraps dom.fillAllFields + resume upload).
-    let fillSummary = null;
+    // Fill known fields (adapter wraps dom.fillAllFields + resume upload). We do
+    // NOT click any "apply" entry button here — Mode 3 fills the form the user is
+    // already viewing, and clicking "Apply"/"Quick Apply" can navigate away.
     let resumeUploaded = false;
     if (adapter?.fillKnownFields) {
       const res = await adapter.fillKnownFields(ctx);
-      fillSummary = res?.fillSummary ?? null;
       resumeUploaded = res?.ok !== false;
     } else {
-      fillSummary = dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
+      dom.fillAllFields(ctx.defaultEmail, ctx.profile, ctx.job);
       if (ctx.resumeUrl) {
         const up = await dom.uploadResume(ctx.resumeUrl);
         resumeUploaded = Boolean(up?.ok);
@@ -459,17 +555,51 @@
         : dom.extractRequiredFields();
 
     let missing = extractMissing();
-    let classified = 0;
     if (Array.isArray(missing) && missing.length > 0) {
-      classified = (await dom.classifyAndFill?.(ctx, missing)) ?? 0;
+      const classified = (await dom.classifyAndFill?.(ctx, missing)) ?? 0;
       if (classified > 0) {
         await dom.sleep(400);
         missing = extractMissing();
       }
     }
 
-    const remaining = Array.isArray(missing) ? missing.length : 0;
-    const filledTotal = (fillSummary?.total ?? 0) + classified;
+    // Update the checklist from the post-fill DOM state: a field with a value is
+    // ticked; a still-empty REQUIRED field is flagged for the user's attention.
+    const missingSigs = new Set(
+      (Array.isArray(missing) ? missing : []).map((f) => fieldSignature(f))
+    );
+    const postValueBySig = new Map();
+    for (const f of dom.enumerateFields ? dom.enumerateFields() : []) {
+      postValueBySig.set(fieldSignature(f), String(f.value ?? "").trim());
+    }
+
+    let filledCount = 0;
+    for (const r of rows) {
+      if (r.sig === "__resume__") {
+        mode3Sidebar.setStatus(r.sig, resumeUploaded ? "filled" : "attention");
+        if (resumeUploaded) filledCount++;
+        continue;
+      }
+      const val = postValueBySig.get(r.sig) ?? "";
+      if (val) {
+        mode3Sidebar.setStatus(r.sig, "filled");
+        filledCount++;
+      } else if (missingSigs.has(r.sig)) {
+        mode3Sidebar.setStatus(r.sig, "attention");
+      } else {
+        mode3Sidebar.setStatus(r.sig, "pending");
+      }
+    }
+
+    const remaining = missingSigs.size;
+    console.log(
+      `[JobGenius] autofill done: ${filledCount}/${rows.length} filled, ${remaining} required remaining`
+    );
+    mode3Sidebar.setHeader(
+      remaining > 0
+        ? `Filled ${filledCount}. ${remaining} still need your input — review & submit.`
+        : `Filled ${filledCount}. Review & submit.`
+    );
 
     // Start watching for the human's corrections so we can teach the runner.
     try {
@@ -478,17 +608,10 @@
       console.warn("setupLearningCapture failed (non-fatal):", error);
     }
 
-    sidebar?.finish?.(
-      "Ready for review",
-      remaining > 0
-        ? `Filled ${filledTotal} field(s). ${remaining} still need your input — review and submit.`
-        : `Filled ${filledTotal} field(s). Review and submit.`
-    );
-
     chrome.runtime.sendMessage({
       type: "AUTOFILL_COMPLETE",
       ok: true,
-      filled: filledTotal,
+      filled: filledCount,
       remaining,
       resume_uploaded: resumeUploaded,
     });
@@ -511,8 +634,12 @@
     // Same per-frame self-election as START_RUN so exactly one frame fills.
     if (!shouldRunInThisFrame()) return;
     runAutofill(message).catch((error) => {
-      console.error("Autofill error:", error);
-      sidebar?.finish?.("Error", error?.message ?? "Autofill failed.");
+      console.error("[JobGenius] Autofill error:", error);
+      try {
+        mode3Sidebar.setHeader("Autofill error: " + (error?.message ?? "failed"));
+      } catch (_) {
+        /* panel may not be mounted */
+      }
       chrome.runtime.sendMessage({ type: "AUTOFILL_COMPLETE", ok: false, reason: "ERROR" });
     });
   });
