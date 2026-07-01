@@ -285,6 +285,24 @@
     return `${label}|${type}|${opts}`;
   }
 
+  // Map an identity/profile field label to the seeker's profile column, so an AM
+  // correction updates the profile (not the global learning cache). Returns null
+  // for non-profile fields (which go to the learning loop instead).
+  function profileTargetForLabel(label) {
+    const l = String(label || "").toLowerCase();
+    if (/first name/.test(l) && !/last/.test(l) && !/preferred/.test(l)) {
+      return { key: "full_name", part: "first" };
+    }
+    if (/last name/.test(l)) return { key: "full_name", part: "last" };
+    if (/e-?mail/.test(l)) return { key: "email" };
+    if (/\b(phone|mobile|telephone)\b/.test(l)) return { key: "phone" };
+    if (/linkedin/.test(l)) return { key: "linkedin_url" };
+    if (/website|portfolio/.test(l)) return { key: "portfolio_url" };
+    if (/country/.test(l)) return { key: "address_country" };
+    if (/location|city/.test(l)) return { key: "location" };
+    return null;
+  }
+
   function setupLearningCapture(ctx) {
     if (!dom.enumerateFields) return;
 
@@ -417,7 +435,8 @@
         #${PANEL_ID} .jg-st{width:18px;height:18px;border-radius:50%;flex:none;display:flex;
           align-items:center;justify-content:center;font-size:11px;font-weight:700}
         #${PANEL_ID} .jg-pending{border:2px solid #d1d5db;color:transparent}
-        #${PANEL_ID} .jg-filled{background:#16a34a;color:#fff}
+        #${PANEL_ID} .jg-filled{background:#16a34a;color:#fff;cursor:pointer}
+        #${PANEL_ID} .jg-captured{background:#4f46e5;color:#fff;cursor:pointer}
         #${PANEL_ID} .jg-attn{background:#f59e0b;color:#fff;cursor:pointer}
         #${PANEL_ID} .jg-ed{display:flex;gap:6px;padding:0 14px 10px 14px}
         #${PANEL_ID} .jg-in{flex:1;border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:12px}
@@ -463,8 +482,13 @@
         top.appendChild(st);
         row.appendChild(top);
         container.appendChild(row);
-        rows.set(r.sig, { row, statusEl: st, field: r.field ?? null });
+        rows.set(r.sig, { row, statusEl: st, field: r.field ?? null, value: "" });
       }
+    }
+
+    function setRowValue(sig, value) {
+      const entry = rows.get(sig);
+      if (entry) entry.value = String(value ?? "");
     }
 
     // Inline editor so the AM can answer a field we couldn't fill; saving fills
@@ -496,18 +520,24 @@
         input.placeholder = "Type an answer…";
       }
       input.className = "jg-in";
+      // Pre-fill with the current value so the AM edits rather than retypes.
+      input.value = entry.value || "";
       const save = document.createElement("button");
       save.className = "jg-save";
       save.textContent = "Save";
       save.addEventListener("click", async () => {
         const value = String(input.value || "").trim();
         if (!value || !provideHandler) return;
+        // Non-empty before = the AM is CORRECTING a value we filled.
+        const outcome = entry.value ? "corrected" : "filled_blank";
         save.disabled = true;
         save.textContent = "Saving…";
         try {
-          const ok = await provideHandler(entry.field, value);
+          const ok = await provideHandler(entry.field, value, outcome);
           if (ok) {
-            setStatus(sig, "filled");
+            entry.value = value;
+            setStatus(sig, "captured");
+            setHeader(`Captured "${entry.field.label}" — will be reused.`);
             wrap.remove();
           } else {
             save.disabled = false;
@@ -528,17 +558,29 @@
       const entry = rows.get(sig);
       if (!entry) return;
       const st = entry.statusEl;
+      const editable = Boolean(entry.field && provideHandler);
       st.className =
         "jg-st " +
-        (state === "filled" ? "jg-filled" : state === "attention" ? "jg-attn" : "jg-pending");
-      st.textContent = state === "filled" ? "✓" : state === "attention" ? "+" : "";
-      st.onclick =
-        state === "attention" && entry.field && provideHandler
-          ? () => openEditor(sig, entry)
-          : null;
-      if (state === "attention" && entry.field && provideHandler) {
-        st.title = "Add an answer — fills now and saves for next time";
-      }
+        (state === "filled"
+          ? "jg-filled"
+          : state === "captured"
+          ? "jg-captured"
+          : state === "attention"
+          ? "jg-attn"
+          : "jg-pending");
+      st.textContent =
+        state === "filled" || state === "captured" ? "✓" : state === "attention" ? "+" : "";
+      // Every real field is editable: click to correct (filled/captured) or to
+      // provide (attention). Saving fills now AND teaches the engine.
+      st.onclick = editable ? () => openEditor(sig, entry) : null;
+      st.style.cursor = editable ? "pointer" : "";
+      st.title = !editable
+        ? ""
+        : state === "captured"
+        ? "Captured — will be reused. Click to edit."
+        : state === "attention"
+        ? "Add an answer — fills now and saves for next time"
+        : "Click to correct — saves for next time";
     }
 
     function setHeader(text) {
@@ -550,7 +592,7 @@
       provideHandler = cb;
     }
 
-    return { mount, renderFields, setStatus, setHeader, setProvideHandler };
+    return { mount, renderFields, setStatus, setRowValue, setHeader, setProvideHandler };
   })();
 
   // ── Mode 3: interactive "Autofill this page" ──────────────────────────
@@ -616,13 +658,33 @@
 
     // When the AM answers a field we couldn't fill: fill it on the page now AND
     // teach the engine (screening answer / learned rule) so next time it's auto.
-    mode3Sidebar.setProvideHandler(async (field, value) => {
+    mode3Sidebar.setProvideHandler(async (field, value, outcome) => {
       if (!field?.label) return false;
+      // Fill it on the page immediately.
       try {
         if (dom.fillFieldsByLabel) dom.fillFieldsByLabel({ [field.label]: value });
       } catch (error) {
         console.warn("[JobGenius] manual fill failed:", error);
       }
+
+      // Identity/profile field → write back to the seeker's profile so the next
+      // autofill uses the corrected value. We confirm success via the callback.
+      const profileTarget = profileTargetForLabel(field.label);
+      if (profileTarget) {
+        return await new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            {
+              type: "PROFILE_UPDATE",
+              key: profileTarget.key,
+              part: profileTarget.part ?? null,
+              value,
+            },
+            (resp) => resolve(Boolean(resp && resp.success))
+          );
+        });
+      }
+
+      // Screening/other → teach the engine (screening answer / learned rule).
       chrome.runtime.sendMessage({
         type: "LEARN_FIELDS",
         ats_type: ctx.atsType ?? null,
@@ -640,7 +702,7 @@
             label: field.label,
             type: field.type,
             options: field.options,
-            outcome: "filled_blank",
+            outcome: outcome === "corrected" ? "corrected" : "filled_blank",
             autofilled_value: "",
             final_value: value,
           },
@@ -705,13 +767,17 @@
         continue;
       }
       const val = postValueBySig.get(r.sig) ?? "";
+      // Remember the current value so the AM's editor opens pre-filled (correct
+      // rather than retype).
+      mode3Sidebar.setRowValue(r.sig, val);
       if (val) {
         mode3Sidebar.setStatus(r.sig, "filled");
         filledCount++;
       } else if (missingSigs.has(r.sig)) {
         mode3Sidebar.setStatus(r.sig, "attention");
       } else {
-        mode3Sidebar.setStatus(r.sig, "pending");
+        // Not required and empty — still editable so the AM can add it if wanted.
+        mode3Sidebar.setStatus(r.sig, "attention");
       }
     }
 
@@ -721,9 +787,7 @@
     );
     const captchaNote = captchaPresent ? " Solve the captcha when you submit." : "";
     mode3Sidebar.setHeader(
-      remaining > 0
-        ? `Filled ${filledCount}. Tap the + on amber fields to answer & teach.${captchaNote}`
-        : `Filled ${filledCount}. Review & submit.${captchaNote}`
+      `Filled ${filledCount}. Tap ✓ to correct or + to add — each is saved for reuse.${captchaNote}`
     );
 
     // Start watching for the human's corrections so we can teach the runner.

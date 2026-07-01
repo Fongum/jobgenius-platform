@@ -547,6 +547,32 @@ async function scrapeJobContext(tabId) {
   }
 }
 
+// Mode 3: persist an AM's correction of an identity/profile field back to the
+// active seeker's profile so the next autofill uses the right value.
+async function updateSeekerProfile(message) {
+  const { apiBaseUrl, authToken } = await getStorage(Object.values(STORAGE_KEYS));
+  if (!apiBaseUrl || !authToken) {
+    return { success: false, error: "Not connected." };
+  }
+  const response = await fetch(`${apiBaseUrl}/api/extension/update-profile`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      key: message.key,
+      value: message.value,
+      part: message.part ?? null,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { success: false, error: data?.error || `Update failed (${response.status}).` };
+  }
+  return { success: true };
+}
+
 // Mode 3 learning: forward the runner's field-diff events to the server, which
 // canonicalizes them into screening answers / learned rules. Fire-and-forget.
 async function submitFieldLearning(message) {
@@ -1185,6 +1211,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.warn("learn-fields submit failed:", error)
     );
     return false;
+  }
+
+  if (message?.type === "PROFILE_UPDATE") {
+    updateSeekerProfile(message)
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({ success: false, error: error?.message ?? "Profile update failed." })
+      );
+    return true;
   }
 
   if (message?.type === "AUTOFILL_ACTIVE_TAB") {
