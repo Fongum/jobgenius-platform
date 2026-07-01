@@ -393,14 +393,15 @@
   // sidebar) so it always renders when the autofill runs.
   const mode3Sidebar = (() => {
     const PANEL_ID = "jobgenius-autofill-panel";
-    let rowsBySig = new Map();
+    let rows = new Map(); // sig -> { row, statusEl, field }
+    let provideHandler = null;
 
     function injectStyle() {
       if (document.getElementById("jobgenius-autofill-style")) return;
       const s = document.createElement("style");
       s.id = "jobgenius-autofill-style";
       s.textContent = `
-        #${PANEL_ID}{position:fixed;top:76px;right:16px;width:300px;max-height:72vh;
+        #${PANEL_ID}{position:fixed;top:76px;right:16px;width:310px;max-height:74vh;
           display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;
           border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);z-index:2147483647;
           font-family:Segoe UI,Arial,sans-serif;color:#111827;overflow:hidden}
@@ -410,14 +411,19 @@
         #${PANEL_ID} .jg-x{cursor:pointer;color:#9ca3af;font-size:18px;line-height:1;border:0;background:none}
         #${PANEL_ID} .jg-sub{padding:8px 14px;font-size:11px;color:#6b7280;border-bottom:1px solid #f3f4f6}
         #${PANEL_ID} .jg-list{overflow:auto;padding:2px 0}
-        #${PANEL_ID} .jg-row{display:flex;align-items:center;justify-content:space-between;
-          gap:8px;padding:8px 14px;border-bottom:1px solid #f6f7f9;font-size:12px}
+        #${PANEL_ID} .jg-row{border-bottom:1px solid #f6f7f9;font-size:12px}
+        #${PANEL_ID} .jg-rowtop{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px}
         #${PANEL_ID} .jg-lb{color:#374151;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         #${PANEL_ID} .jg-st{width:18px;height:18px;border-radius:50%;flex:none;display:flex;
           align-items:center;justify-content:center;font-size:11px;font-weight:700}
         #${PANEL_ID} .jg-pending{border:2px solid #d1d5db;color:transparent}
         #${PANEL_ID} .jg-filled{background:#16a34a;color:#fff}
-        #${PANEL_ID} .jg-attn{background:#f59e0b;color:#fff}`;
+        #${PANEL_ID} .jg-attn{background:#f59e0b;color:#fff;cursor:pointer}
+        #${PANEL_ID} .jg-ed{display:flex;gap:6px;padding:0 14px 10px 14px}
+        #${PANEL_ID} .jg-in{flex:1;border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:12px}
+        #${PANEL_ID} .jg-save{border:0;border-radius:6px;background:#4f46e5;color:#fff;font-size:12px;
+          font-weight:600;padding:6px 10px;cursor:pointer}
+        #${PANEL_ID} .jg-save:disabled{opacity:.6;cursor:default}`;
       (document.head || document.documentElement).appendChild(s);
     }
 
@@ -437,34 +443,102 @@
       return el;
     }
 
-    function renderFields(rows) {
+    function renderFields(list) {
       const el = mount();
-      const list = el.querySelector("[data-jg-list]");
-      list.innerHTML = "";
-      rowsBySig = new Map();
-      for (const r of rows) {
+      const container = el.querySelector("[data-jg-list]");
+      container.innerHTML = "";
+      rows = new Map();
+      for (const r of list) {
         const row = document.createElement("div");
         row.className = "jg-row";
+        const top = document.createElement("div");
+        top.className = "jg-rowtop";
         const lb = document.createElement("span");
         lb.className = "jg-lb";
         lb.textContent = r.label;
         lb.title = r.label;
         const st = document.createElement("span");
         st.className = "jg-st jg-pending";
-        row.appendChild(lb);
-        row.appendChild(st);
-        list.appendChild(row);
-        rowsBySig.set(r.sig, st);
+        top.appendChild(lb);
+        top.appendChild(st);
+        row.appendChild(top);
+        container.appendChild(row);
+        rows.set(r.sig, { row, statusEl: st, field: r.field ?? null });
       }
     }
 
+    // Inline editor so the AM can answer a field we couldn't fill; saving fills
+    // it now AND teaches the engine (via the provide handler) for next time.
+    function openEditor(sig, entry) {
+      if (entry.row.querySelector(".jg-ed")) {
+        entry.row.querySelector(".jg-ed").remove();
+        return;
+      }
+      const wrap = document.createElement("div");
+      wrap.className = "jg-ed";
+      const opts = entry.field?.options;
+      let input;
+      if (Array.isArray(opts) && opts.length > 0) {
+        input = document.createElement("select");
+        const ph = document.createElement("option");
+        ph.value = "";
+        ph.textContent = "Select…";
+        input.appendChild(ph);
+        for (const o of opts) {
+          const op = document.createElement("option");
+          op.value = o;
+          op.textContent = o;
+          input.appendChild(op);
+        }
+      } else {
+        input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = "Type an answer…";
+      }
+      input.className = "jg-in";
+      const save = document.createElement("button");
+      save.className = "jg-save";
+      save.textContent = "Save";
+      save.addEventListener("click", async () => {
+        const value = String(input.value || "").trim();
+        if (!value || !provideHandler) return;
+        save.disabled = true;
+        save.textContent = "Saving…";
+        try {
+          const ok = await provideHandler(entry.field, value);
+          if (ok) {
+            setStatus(sig, "filled");
+            wrap.remove();
+          } else {
+            save.disabled = false;
+            save.textContent = "Save";
+          }
+        } catch (_) {
+          save.disabled = false;
+          save.textContent = "Save";
+        }
+      });
+      wrap.appendChild(input);
+      wrap.appendChild(save);
+      entry.row.appendChild(wrap);
+      input.focus();
+    }
+
     function setStatus(sig, state) {
-      const st = rowsBySig.get(sig);
-      if (!st) return;
+      const entry = rows.get(sig);
+      if (!entry) return;
+      const st = entry.statusEl;
       st.className =
         "jg-st " +
         (state === "filled" ? "jg-filled" : state === "attention" ? "jg-attn" : "jg-pending");
-      st.textContent = state === "filled" ? "✓" : state === "attention" ? "!" : "";
+      st.textContent = state === "filled" ? "✓" : state === "attention" ? "+" : "";
+      st.onclick =
+        state === "attention" && entry.field && provideHandler
+          ? () => openEditor(sig, entry)
+          : null;
+      if (state === "attention" && entry.field && provideHandler) {
+        st.title = "Add an answer — fills now and saves for next time";
+      }
     }
 
     function setHeader(text) {
@@ -472,7 +546,11 @@
       if (el) el.querySelector("[data-jg-sub]").textContent = text;
     }
 
-    return { mount, renderFields, setStatus, setHeader };
+    function setProvideHandler(cb) {
+      provideHandler = cb;
+    }
+
+    return { mount, renderFields, setStatus, setHeader, setProvideHandler };
   })();
 
   // ── Mode 3: interactive "Autofill this page" ──────────────────────────
@@ -517,7 +595,11 @@
       const sig = fieldSignature(f);
       if (seen.has(sig)) continue;
       seen.add(sig);
-      rows.push({ sig, label: f.label });
+      rows.push({
+        sig,
+        label: f.label,
+        field: { label: f.label, type: f.type, options: f.options },
+      });
     }
     const hasFileInput = !!document.querySelector("input[type='file']");
     if (ctx.resumeUrl && hasFileInput) {
@@ -532,14 +614,47 @@
       return;
     }
 
+    // When the AM answers a field we couldn't fill: fill it on the page now AND
+    // teach the engine (screening answer / learned rule) so next time it's auto.
+    mode3Sidebar.setProvideHandler(async (field, value) => {
+      if (!field?.label) return false;
+      try {
+        if (dom.fillFieldsByLabel) dom.fillFieldsByLabel({ [field.label]: value });
+      } catch (error) {
+        console.warn("[JobGenius] manual fill failed:", error);
+      }
+      chrome.runtime.sendMessage({
+        type: "LEARN_FIELDS",
+        ats_type: ctx.atsType ?? null,
+        url_host: window.location.hostname,
+        job: ctx.job
+          ? {
+              title: ctx.job.title ?? null,
+              company: ctx.job.company ?? null,
+              url: ctx.job.url ?? null,
+              job_post_id: ctx.job.job_post_id ?? null,
+            }
+          : null,
+        events: [
+          {
+            label: field.label,
+            type: field.type,
+            options: field.options,
+            outcome: "filled_blank",
+            autofilled_value: "",
+            final_value: value,
+          },
+        ],
+      });
+      return true;
+    });
+
     mode3Sidebar.renderFields(rows);
     mode3Sidebar.setHeader("Autofilling…");
 
-    if (dom.hasCaptcha()) {
-      mode3Sidebar.setHeader("Captcha detected — solve it, then autofill again.");
-      chrome.runtime.sendMessage({ type: "AUTOFILL_COMPLETE", ok: false, reason: "CAPTCHA" });
-      return;
-    }
+    // A captcha (e.g. an invisible reCAPTCHA badge) does NOT block filling — the
+    // human solves it at submit time. We only note it in the summary.
+    const captchaPresent = dom.hasCaptcha();
 
     // Fill known fields (adapter wraps dom.fillAllFields + resume upload). We do
     // NOT click any "apply" entry button here — Mode 3 fills the form the user is
@@ -604,10 +719,11 @@
     console.log(
       `[JobGenius] autofill done: ${filledCount}/${rows.length} filled, ${remaining} required remaining`
     );
+    const captchaNote = captchaPresent ? " Solve the captcha when you submit." : "";
     mode3Sidebar.setHeader(
       remaining > 0
-        ? `Filled ${filledCount}. ${remaining} still need your input — review & submit.`
-        : `Filled ${filledCount}. Review & submit.`
+        ? `Filled ${filledCount}. Tap the + on amber fields to answer & teach.${captchaNote}`
+        : `Filled ${filledCount}. Review & submit.${captchaNote}`
     );
 
     // Start watching for the human's corrections so we can teach the runner.
