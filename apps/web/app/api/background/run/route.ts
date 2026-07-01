@@ -24,6 +24,7 @@ import {
   evaluateAutoApplyPreflight,
   loadSavedRunnerStorageState,
 } from "@/lib/auto-apply-preflight";
+import { applyHostGraduation } from "@/lib/host-graduation";
 import { decide, recordDecision, routeDecision } from "@/lib/consultant/decision-engine";
 import {
   appendVoiceConversationNote,
@@ -1276,13 +1277,17 @@ async function runAutoStartRun(payload: Record<string, unknown>) {
     loadSavedRunnerStorageState(queueItem.job_seeker_id),
   ]);
 
-  const preflight = evaluateAutoApplyPreflight({
+  let preflight = evaluateAutoApplyPreflight({
     source: jobPost.source,
     url: jobPost.url,
     matchScore,
     storageState,
     allowedAts: AUTO_APPLY_ALLOWED_ATS,
   });
+
+  // Mode 3 graduation: a host proven by interactive autofill can auto-run even
+  // without a curated host rule (flag-gated; only relaxes HOST_UNSUPPORTED).
+  preflight = await applyHostGraduation(preflight);
 
   if (!preflight.eligible) {
     await flagQueueAttention(

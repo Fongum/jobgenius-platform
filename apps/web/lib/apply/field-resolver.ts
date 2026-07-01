@@ -85,6 +85,20 @@ const QUESTION_KEY_PATTERNS: { key: string; patterns: string[] }[] = [
   { key: "how_did_you_hear", patterns: ["how did you hear", "where did you find", "referred by", "how did you find"] },
 ];
 
+/**
+ * Map a form field label to a canonical screening question_key, or null if the
+ * label doesn't match a known question. Shared with the Mode 3 learning emitter
+ * so a human's answer is stored under the same key the resolver later reads.
+ */
+export function deriveQuestionKey(label: string | null | undefined): string | null {
+  const l = (label ?? "").toLowerCase().trim();
+  if (!l) return null;
+  for (const { key, patterns } of QUESTION_KEY_PATTERNS) {
+    if (patterns.some((p) => l.includes(p))) return key;
+  }
+  return null;
+}
+
 const EEO_KEYWORDS = ["gender", "race", "ethnicity", "veteran", "disability", "demographic"];
 const WORK_AUTH_PATTERNS = ["authorized", "legally work", "eligible to work", "work authorization", "right to work"];
 const SPONSORSHIP_PATTERNS = ["sponsor", "sponsorship", "visa sponsor"];

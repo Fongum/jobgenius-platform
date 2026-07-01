@@ -6,6 +6,7 @@ import {
   evaluateAutoApplyPreflight,
   loadSavedRunnerStorageState,
 } from "@/lib/auto-apply-preflight";
+import { applyHostGraduation } from "@/lib/host-graduation";
 
 const AUTO_APPLY_ALLOWED_ATS = new Set(
   (process.env.AUTO_APPLY_ALLOWED_ATS ?? "LINKEDIN,GREENHOUSE,WORKDAY,LEVER,SMARTRECRUITERS,GENERIC")
@@ -177,7 +178,7 @@ async function runSweep(request: Request) {
       continue;
     }
 
-    const preflight = evaluateAutoApplyPreflight({
+    let preflight = evaluateAutoApplyPreflight({
       source: jp.source,
       url: jp.url,
       matchScore:
@@ -185,6 +186,9 @@ async function runSweep(request: Request) {
       storageState: await getStorageState(item.job_seeker_id),
       allowedAts: AUTO_APPLY_ALLOWED_ATS,
     });
+
+    // Mode 3 graduation (flag-gated; only relaxes HOST_UNSUPPORTED).
+    preflight = await applyHostGraduation(preflight);
 
     if (!preflight.eligible) {
       await flagQueueAttention(

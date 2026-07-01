@@ -18,7 +18,12 @@ const log = createLogger("learned-fields");
 
 const PROMOTION_HITS = 3;
 
-export type LearnedFieldSource = "llm" | "rule" | "am_fix" | "promoted";
+export type LearnedFieldSource =
+  | "llm"
+  | "rule"
+  | "am_fix"
+  | "promoted"
+  | "user_confirmed";
 
 export interface FieldDescriptor {
   /** The visible label as rendered in the form. */
