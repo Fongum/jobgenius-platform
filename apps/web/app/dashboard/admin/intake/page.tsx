@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
+import { normalizeAMRole } from "@/lib/auth/roles";
 import { getCapacitySnapshot } from "@/lib/intake";
 import IntakeQueueClient from "./IntakeQueueClient";
 
@@ -100,6 +101,7 @@ export default async function IntakePage() {
       initialIntakeStates={hydratedStates}
       accountManagers={(accountManagers ?? []) as AccountManagerRow[]}
       initialCapacity={initialCapacity}
+      isSuperAdmin={normalizeAMRole(user.role) === "superadmin"}
     />
   );
 }

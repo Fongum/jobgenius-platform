@@ -124,10 +124,12 @@ export default function IntakeQueueClient({
   initialIntakeStates,
   accountManagers,
   initialCapacity,
+  isSuperAdmin = false,
 }: {
   initialIntakeStates: IntakeState[];
   accountManagers: AccountManager[];
   initialCapacity: CapacitySnapshot;
+  isSuperAdmin?: boolean;
 }) {
   const router = useRouter();
   const [filter, setFilter] =
@@ -244,7 +246,7 @@ export default function IntakeQueueClient({
   async function runAction(
     id: string,
     action: "approve" | "waitlist" | "reject" | "startPreview" | "expirePreview"
-    | "markCallComplete"
+    | "markCallComplete" | "activate"
   ) {
     const current = rowState[id] ?? { accountManagerId: "", notes: "" };
     if (action === "approve" && !current.accountManagerId) {
@@ -265,6 +267,8 @@ export default function IntakeQueueClient({
         ? `/api/admin/intake/${id}/start-preview`
         : action === "expirePreview"
         ? `/api/admin/intake/${id}/expire-preview`
+        : action === "activate"
+        ? `/api/admin/intake/${id}/activate`
         : action === "waitlist"
         ? `/api/admin/intake/${id}/waitlist`
         : `/api/admin/intake/${id}/reject`;
@@ -298,6 +302,8 @@ export default function IntakeQueueClient({
       setMessage(
           action === "approve"
           ? "Spot approved and reserved."
+          : action === "activate"
+          ? "Client marked active (override)."
           : action === "markCallComplete"
           ? "First call marked complete."
           : action === "startPreview"
@@ -552,6 +558,28 @@ export default function IntakeQueueClient({
                           placeholder="Optional internal note"
                         />
                       </div>
+
+                      {isSuperAdmin && state.status !== "active_client" ? (
+                        <div className="mt-4">
+                          <button
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Override: mark this client ACTIVE without a confirmed payment? This grants live applications immediately and is audit-logged."
+                                )
+                              ) {
+                                runAction(state.id, "activate");
+                              }
+                            }}
+                            disabled={processingId === state.id}
+                            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                          >
+                            {processingId === state.id
+                              ? "Saving..."
+                              : "Mark active (override)"}
+                          </button>
+                        </div>
+                      ) : null}
 
                       {showReviewActions ? (
                         <div className="mt-4 flex flex-wrap gap-2">

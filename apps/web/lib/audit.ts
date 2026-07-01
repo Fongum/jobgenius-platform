@@ -23,6 +23,7 @@ type AuditAction =
   | "referral.update"
   | "recruiter_partner.send_workspace_link"
   | "intake.approve"
+  | "intake.activate_override"
   | "intake.mark_call_complete"
   | "intake.waitlist"
   | "intake.reject"
