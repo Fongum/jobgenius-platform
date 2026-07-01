@@ -15,6 +15,10 @@ import {
   getActiveModel,
 } from "@/lib/learned-ranker";
 
+// Allow the unattended pipeline run to complete its sequential scoring writes.
+// (Effective on Vercel plans that permit longer functions; a no-op otherwise.)
+export const maxDuration = 300;
+
 type RunAllPayload = {
   job_seeker_ids?: string[];
   reparse_jobs?: boolean;

@@ -1,29 +1,46 @@
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { supabaseAdmin } from "@/lib/auth";
 import { isAdminRole } from "@/lib/auth/roles";
+import { requireOpsAuth } from "@/lib/ops-auth";
 import { parseJobPost } from "@/lib/matching";
+
+// When auto-promoting, cap how many staged jobs we drain per invocation so a
+// single serverless call stays within the function time limit. Steady-state
+// inflow per refresh is well below this, so the scheduled run effectively
+// promotes every fresh job; large backlogs drain across successive runs.
+const AUTO_PROMOTE_LIMIT = 500;
+
+// Allow auto-promotion of a full batch to complete unattended.
+export const maxDuration = 300;
 
 /**
  * POST /api/admin/promote-jobs
  *
  * Promote external_jobs to job_posts (the main job bank used for matching).
  * Supports promoting by ID list, source, category, or auto-promoting high-quality jobs.
+ *
+ * Auth: admin AM session cookie, OR an OPS API key (so the scheduled pipeline
+ * can call it unattended).
  */
 export async function POST(request: Request) {
-  const amResult = await getAccountManagerFromRequest(request.headers);
-  if ("error" in amResult) {
-    return Response.json({ error: amResult.error }, { status: 401 });
-  }
+  // Allow OPS/service auth for the scheduled pipeline; otherwise require an admin AM.
+  const opsAuth = requireOpsAuth(request.headers);
+  if (!opsAuth.ok) {
+    const amResult = await getAccountManagerFromRequest(request.headers);
+    if ("error" in amResult) {
+      return Response.json({ error: amResult.error }, { status: 401 });
+    }
 
-  // Require admin role
-  const { data: amData } = await supabaseAdmin
-    .from("account_managers")
-    .select("role")
-    .eq("id", amResult.accountManager.id)
-    .single();
+    // Require admin role
+    const { data: amData } = await supabaseAdmin
+      .from("account_managers")
+      .select("role")
+      .eq("id", amResult.accountManager.id)
+      .single();
 
-  if (!amData || !isAdminRole(amData.role)) {
-    return Response.json({ error: "Admin access required." }, { status: 403 });
+    if (!amData || !isAdminRole(amData.role)) {
+      return Response.json({ error: "Admin access required." }, { status: 403 });
+    }
   }
 
   let body: {
@@ -52,7 +69,10 @@ export async function POST(request: Request) {
   } else {
     if (body.source) query = query.eq("source", body.source);
     if (body.category) query = query.eq("category", body.category);
-    query = query.limit(body.limit ?? 100);
+    // auto: drain the freshest eligible jobs (capped per run). Otherwise use the
+    // caller-supplied limit, defaulting to a small manual batch.
+    const limit = body.auto ? (body.limit ?? AUTO_PROMOTE_LIMIT) : (body.limit ?? 100);
+    query = query.order("fetched_at", { ascending: false }).limit(limit);
   }
 
   const { data: externalJobs, error: fetchError } = await query;

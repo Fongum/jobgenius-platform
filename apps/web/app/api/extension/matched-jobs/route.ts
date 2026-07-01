@@ -159,6 +159,7 @@ export async function GET(request: Request) {
         )
       `)
       .eq("job_seeker_id", session.active_job_seeker_id)
+      .is("archived_at", null)
       .gte("score", threshold)
       .order("score", { ascending: false })
       .limit(100);
@@ -231,6 +232,7 @@ export async function GET(request: Request) {
           )
         `)
         .eq("job_seeker_id", session.active_job_seeker_id)
+        .is("archived_at", null)
         .lt("score", threshold)
         .gte("score", adjacentFloor)
         .order("score", { ascending: false })
