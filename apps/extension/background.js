@@ -586,25 +586,22 @@ async function autofillActiveTab(tabId, options = {}) {
     return { success: false, error: "No active tab to autofill." };
   }
 
-  let context;
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/extension/autofill-context`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${authToken}` },
-    });
-    context = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return {
-        success: false,
-        error: context?.error || `Failed to load profile (${response.status}).`,
-      };
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error?.message ?? "Failed to load autofill profile.",
-    };
-  }
+  // Load the profile bundle in parallel with settling + scraping the tab — the
+  // context fetch is independent of the tab work, so overlap their latency.
+  const contextPromise = fetch(`${apiBaseUrl}/api/extension/autofill-context`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${authToken}` },
+  })
+    .then(async (response) => ({
+      ok: response.ok,
+      status: response.status,
+      body: await response.json().catch(() => ({})),
+    }))
+    .catch((error) => ({
+      ok: false,
+      status: 0,
+      body: { error: error?.message ?? "Failed to load autofill profile." },
+    }));
 
   const tab = await waitForTabComplete(tabId);
   if (tab?.url) {
@@ -614,6 +611,15 @@ async function autofillActiveTab(tabId, options = {}) {
   // Capture the job (link + description) so unmatched opportunities persist and
   // get a job_post_id for tailoring/tracking. Best-effort; never blocks fill.
   const scraped = await scrapeJobContext(tabId);
+
+  const contextResult = await contextPromise;
+  if (!contextResult.ok) {
+    return {
+      success: false,
+      error: contextResult.body?.error || `Failed to load profile (${contextResult.status}).`,
+    };
+  }
+  const context = contextResult.body;
   let jobPostId = null;
   try {
     const captureRes = await fetch(`${apiBaseUrl}/api/extension/capture-job`, {

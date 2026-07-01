@@ -75,6 +75,21 @@ function toAnswerType(type: string | null | undefined): string {
   return "text";
 }
 
+// An enumerated field's value is one of a shared, non-PII option set, so it is
+// safe to learn as a global rule. Free-text values may be seeker-specific.
+function isEnumeratedField(
+  type: string | null | undefined,
+  options: string[] | null
+): boolean {
+  const t = (type ?? "").toLowerCase();
+  return (
+    t === "select" ||
+    t === "radio" ||
+    t === "checkbox" ||
+    (Array.isArray(options) && options.length > 0)
+  );
+}
+
 function sha256(value: string | null | undefined): string | null {
   if (value === null || value === undefined || value === "") return null;
   return crypto.createHash("sha256").update(String(value)).digest("hex");
@@ -120,10 +135,14 @@ export async function POST(request: Request) {
   const urlHost = payload.url_host ?? null;
   const events = Array.isArray(payload.events) ? payload.events : [];
 
-  let screeningUpserted = 0;
-  let rulesLearned = 0;
   let identitySkipped = 0;
+  let freetextSkipped = 0;
   const auditRows: Record<string, unknown>[] = [];
+  // Batch the learning writes (one screening upsert, parallel rule classifications)
+  // instead of a round-trip per field. Screening rows are deduped by question_key
+  // (last wins) so a single upsert can't hit the same conflict row twice.
+  const screeningByKey = new Map<string, Record<string, unknown>>();
+  const classificationTasks: Array<ReturnType<typeof recordFieldClassification>> = [];
 
   for (const event of events) {
     const label = event.label?.trim();
@@ -153,34 +172,37 @@ export async function POST(request: Request) {
         const questionKey = deriveQuestionKey(label);
         if (questionKey) {
           // Per-seeker: the resolver matches this label to the key automatically.
-          const { error } = await supabaseAdmin
-            .from("job_seeker_screening_answers")
-            .upsert(
-              {
-                job_seeker_id: jobSeekerId,
-                question_key: questionKey,
-                question_text: label,
-                answer_value: finalValue,
-                answer_type: toAnswerType(event.type),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "job_seeker_id,question_key" }
-            );
-          if (!error) screeningUpserted++;
-          mapping = { kind: "screening_answer", key: questionKey };
-        } else {
-          // Novel field → global static rule (upgrades the LLM cache).
-          const rule = await recordFieldClassification({
-            atsType,
-            urlHost,
-            field,
-            mapping: { kind: "static", value: finalValue },
-            source: "user_confirmed",
-            confidence: 0.8,
-            createdBy: session.account_manager_id,
+          screeningByKey.set(questionKey, {
+            job_seeker_id: jobSeekerId,
+            question_key: questionKey,
+            question_text: label,
+            answer_value: finalValue,
+            answer_type: toAnswerType(event.type),
+            updated_at: new Date().toISOString(),
           });
-          if (rule) rulesLearned++;
+          mapping = { kind: "screening_answer", key: questionKey };
+        } else if (isEnumeratedField(event.type, field.options)) {
+          // Novel *enumerated* field (select/radio/checkbox) → a global static
+          // rule is safe: the value is a shared option, not free text. This
+          // upgrades the existing global LLM cache with a human-confirmed value.
+          classificationTasks.push(
+            recordFieldClassification({
+              atsType,
+              urlHost,
+              field,
+              mapping: { kind: "static", value: finalValue },
+              source: "user_confirmed",
+              confidence: 0.8,
+              createdBy: session.account_manager_id,
+            })
+          );
           mapping = { kind: "static", value: finalValue };
+        } else {
+          // Novel *free-text* field — the value may be seeker-specific PII
+          // (current employer, GitHub, essays). NEVER learn it globally, or one
+          // seeker's answer would be injected into every seeker on this host.
+          freetextSkipped++;
+          mapping = { kind: "freetext_skipped" };
         }
       }
     }
@@ -202,6 +224,20 @@ export async function POST(request: Request) {
     });
   }
 
+  // Execute the batched learning writes.
+  let screeningUpserted = 0;
+  if (screeningByKey.size > 0) {
+    const { error } = await supabaseAdmin
+      .from("job_seeker_screening_answers")
+      .upsert(Array.from(screeningByKey.values()), {
+        onConflict: "job_seeker_id,question_key",
+      });
+    if (!error) screeningUpserted = screeningByKey.size;
+    else console.error("[learn-fields] screening upsert failed:", error.message);
+  }
+
+  const rulesLearned = (await Promise.all(classificationTasks)).filter(Boolean).length;
+
   if (auditRows.length > 0) {
     const { error: auditError } = await supabaseAdmin
       .from("learned_field_events")
@@ -217,5 +253,6 @@ export async function POST(request: Request) {
     screening_upserted: screeningUpserted,
     rules_learned: rulesLearned,
     identity_skipped: identitySkipped,
+    freetext_skipped: freetextSkipped,
   });
 }

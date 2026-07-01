@@ -325,6 +325,18 @@
             autofilled_value: before,
             final_value: after,
           });
+        } else {
+          // Autofilled value kept unchanged by the human = accepted. Emitting
+          // these gives host graduation a real accuracy denominator (accepted
+          // vs corrected); the server audits them without learning a value.
+          events.push({
+            label: field.label,
+            type: field.type,
+            options: field.options,
+            outcome: "accepted",
+            autofilled_value: before,
+            final_value: after,
+          });
         }
       }
 
