@@ -775,6 +775,95 @@
     return extractRequiredFields().length > 0;
   }
 
+  // Snapshot all fillable fields with their current values (for Mode 3 learning
+  // diffs). Unlike extractRequiredFields this includes already-filled fields and
+  // captures the value; password/hidden/file/submit inputs are skipped.
+  function enumerateFields() {
+    const fields = [];
+    const radioGroups = new Map();
+    const inputs = Array.from(queryAllDeep("input, textarea, select"));
+
+    inputs.forEach((input) => {
+      if (input.disabled) return;
+      const rawType = normalizeHint(
+        input.getAttribute("type") || input.tagName.toLowerCase()
+      );
+      if (
+        ["submit", "button", "reset", "hidden", "image", "file", "password"].includes(rawType)
+      ) {
+        return;
+      }
+
+      if (rawType === "radio") {
+        const groupKey =
+          input.getAttribute("name") ||
+          input.getAttribute("id") ||
+          getLabelText(input);
+        if (!radioGroups.has(groupKey)) radioGroups.set(groupKey, []);
+        radioGroups.get(groupKey).push(input);
+        return;
+      }
+
+      if (!isElementVisible(input)) return;
+
+      if (rawType === "checkbox") {
+        fields.push({
+          label: getLabelText(input),
+          type: "checkbox",
+          options: null,
+          value: input.checked ? "checked" : "",
+        });
+        return;
+      }
+
+      const tag = input.tagName.toLowerCase();
+      let options = null;
+      let value = String(input.value ?? "").trim();
+      if (tag === "select") {
+        options = Array.from(input.options)
+          .map((o) => o.textContent?.trim())
+          .filter(Boolean);
+        const selected = input.options[input.selectedIndex];
+        if (selected) {
+          value = (selected.textContent?.trim() || String(input.value ?? "")).trim();
+        }
+      }
+
+      fields.push({
+        label: getLabelText(input),
+        type: tag === "textarea" ? "textarea" : rawType,
+        options,
+        value,
+      });
+    });
+
+    for (const group of radioGroups.values()) {
+      const firstInput = group.find((i) => isElementVisible(i)) || group[0];
+      const checked = group.find((i) => i.checked);
+      const options = group
+        .map(
+          (i) =>
+            i.getAttribute("aria-label") ||
+            i.getAttribute("value") ||
+            getLabelText(i)
+        )
+        .filter(Boolean);
+      const value = checked
+        ? checked.getAttribute("aria-label") ||
+          checked.getAttribute("value") ||
+          getLabelText(checked)
+        : "";
+      fields.push({
+        label: getLabelText(firstInput),
+        type: "radio",
+        options,
+        value,
+      });
+    }
+
+    return fields;
+  }
+
   function captureFlowFingerprint() {
     const headerText =
       document.querySelector("h1, h2, [role='heading']")?.textContent?.trim() ?? "";
@@ -1079,6 +1168,7 @@
     fillAllFields,
     fillFieldsByLabel,
     classifyAndFill,
+    enumerateFields,
     uploadResume,
     uploadViaDragDrop,
     findOtpInput,

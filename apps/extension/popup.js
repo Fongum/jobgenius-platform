@@ -39,6 +39,8 @@ const els = {
   pageUrl: document.getElementById("pageUrl"),
   detectedBoard: document.getElementById("detectedBoard"),
   saveJobBtn: document.getElementById("saveJob"),
+  autofillPageBtn: document.getElementById("autofillPage"),
+  tailorAutofillPageBtn: document.getElementById("tailorAutofillPage"),
   scrapeVisibleBtn: document.getElementById("scrapeVisible"),
   scrapeAllBtn: document.getElementById("scrapeAll"),
   scrapePreview: document.getElementById("scrapePreview"),
@@ -1335,6 +1337,76 @@ function scrapeContactsFromPage() {
 
 // ─── Save/Scrape Job Handlers ─────────────────────────────────
 
+// Mode 3: interactive "Autofill this page" — fills the visible application
+// form on the current tab (matched or unmatched job). Fill-only; the user
+// reviews and submits themselves. When `tailor` is true, the resume is first
+// customized to the job and the tailored version is uploaded.
+async function autofillCurrentPage(tailor = false) {
+  if (!authToken || !activeSeekerId) {
+    setStatus(els.saveStatus, "Connect and select a job seeker first.", "error");
+    return;
+  }
+
+  setStatus(
+    els.saveStatus,
+    tailor ? "Tailoring résumé and launching autofill…" : "Launching autofill…",
+    "info"
+  );
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      setStatus(els.saveStatus, "Unable to access current tab.", "error");
+      return;
+    }
+
+    const resp = await sendRuntimeMessage({
+      type: "AUTOFILL_ACTIVE_TAB",
+      tabId: tab.id,
+      tailor,
+    });
+
+    if (!resp?.success) {
+      setStatus(els.saveStatus, "Error: " + (resp?.error || "Failed to autofill."), "error");
+      return;
+    }
+
+    if (tailor && !resp.tailored) {
+      // Autofill still ran with the base resume; surface why tailoring didn't apply.
+      const why = resp.tailoring?.error || "Could not tailor résumé.";
+      setStatus(
+        els.saveStatus,
+        `Autofilling with base résumé (${why}). Review the form, then submit.`,
+        "info"
+      );
+      return;
+    }
+
+    if (tailor && resp.tailored) {
+      const cov = resp.tailoring?.coverage;
+      const covText =
+        cov && typeof cov.before?.coveragePct === "number" && typeof cov.after?.coveragePct === "number"
+          ? ` Skill coverage ${cov.before.coveragePct}% → ${cov.after.coveragePct}%.`
+          : "";
+      setStatus(
+        els.saveStatus,
+        `Résumé tailored to this job.${covText} Autofilling — review the form, then submit.`,
+        "success"
+      );
+      return;
+    }
+
+    setStatus(
+      els.saveStatus,
+      "Autofill running — review the form on the page, then submit.",
+      "success"
+    );
+  } catch (error) {
+    setStatus(els.saveStatus, "Error: " + error.message, "error");
+    console.error("Autofill page error:", error);
+  }
+}
+
 async function saveCurrentJob() {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl || !isValidUrl(apiBaseUrl)) {
@@ -1964,6 +2036,8 @@ els.tabs.forEach((tab) => {
 els.connectBtn.addEventListener("click", connect);
 els.disconnectBtn.addEventListener("click", disconnect);
 els.saveJobBtn.addEventListener("click", saveCurrentJob);
+if (els.autofillPageBtn) els.autofillPageBtn.addEventListener("click", () => autofillCurrentPage(false));
+if (els.tailorAutofillPageBtn) els.tailorAutofillPageBtn.addEventListener("click", () => autofillCurrentPage(true));
 els.scrapeVisibleBtn.addEventListener("click", () => scrapeJobs(scrapeVisibleJobs));
 els.scrapeAllBtn.addEventListener("click", () => scrapeJobs(scrapeAllJobsWithScroll));
 if (els.scrapeSaveSelectedBtn) els.scrapeSaveSelectedBtn.addEventListener("click", saveScrapedJobs);

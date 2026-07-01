@@ -453,6 +453,267 @@ async function startRunnerInExistingTab(tabId, payload) {
   });
 }
 
+// Scrape the job's title/company/location/description from the page so an
+// out-of-the-blue (often unmatched) job can be captured with its link + JD.
+async function scrapeJobContext(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const norm = (v) => String(v || "").replace(/\s+/g, " ").trim();
+        const pick = (selectors, minLen) => {
+          for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+              const t = norm(el.textContent);
+              if (t.length >= minLen) return t;
+            }
+          }
+          return "";
+        };
+        const title = pick(
+          [
+            ".jobs-unified-top-card__job-title",
+            ".jobsearch-JobInfoHeader-title",
+            "[data-testid='jobsearch-JobInfoHeader-title']",
+            ".top-card-layout__title",
+            ".posting-headline h2",
+            ".posting-headline h1",
+            ".job-title",
+            "h1",
+          ],
+          4
+        );
+        const company = pick(
+          [
+            ".jobs-unified-top-card__company-name",
+            ".topcard__org-name-link",
+            ".jobsearch-InlineCompanyRating-companyHeader",
+            "[data-testid='inlineHeader-companyName']",
+            ".top-card-layout__second-subline a",
+            ".company-name",
+            ".employer",
+            "[data-testid='company-name']",
+          ],
+          2
+        );
+        const location = pick(
+          [
+            ".jobs-unified-top-card__bullet",
+            ".topcard__flavor--bullet",
+            "[data-testid='inlineHeader-companyLocation']",
+            ".top-card-layout__third-subline",
+            ".location",
+            "[data-testid='text-location']",
+          ],
+          2
+        );
+        let description = "";
+        for (const sel of [
+          ".jobs-description__content",
+          ".jobs-box__html-content",
+          ".jobs-description-content__text",
+          "#jobDescriptionText",
+          ".jobsearch-jobDescriptionText",
+          "[data-test='jobDescriptionContent']",
+          ".job-description",
+          ".job_description",
+          "#job-description",
+          ".posting-page .content",
+          ".desc",
+        ]) {
+          const el = document.querySelector(sel);
+          if (el) {
+            const t = norm(el.textContent);
+            if (t.length >= 80) {
+              description = t.slice(0, 5000);
+              break;
+            }
+          }
+        }
+        return {
+          title: title || null,
+          company: company || null,
+          location: location || null,
+          description: description || null,
+          url: window.location.href,
+        };
+      },
+    });
+    return results?.[0]?.result ?? null;
+  } catch (error) {
+    console.warn("scrapeJobContext failed (non-fatal):", error);
+    return null;
+  }
+}
+
+// Mode 3 learning: forward the runner's field-diff events to the server, which
+// canonicalizes them into screening answers / learned rules. Fire-and-forget.
+async function submitFieldLearning(message) {
+  const { apiBaseUrl, authToken } = await getStorage(Object.values(STORAGE_KEYS));
+  if (!apiBaseUrl || !authToken) return;
+  const events = Array.isArray(message?.events) ? message.events : [];
+  if (events.length === 0) return;
+
+  await fetch(`${apiBaseUrl}/api/extension/learn-fields`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      ats_type: message.ats_type ?? null,
+      url_host: message.url_host ?? null,
+      job: message.job ?? null,
+      events,
+    }),
+  });
+}
+
+// Mode 3: launch interactive "Autofill this page" in the given tab.
+// Fetches the run-less profile bundle, captures the job (link + description),
+// optionally tailors the resume to the job, injects the runner, and sends
+// AUTOFILL_PAGE. No run/plan/submit — the human reviews and submits.
+async function autofillActiveTab(tabId, options = {}) {
+  const { apiBaseUrl, authToken, activeSeekerId } = await getStorage(
+    Object.values(STORAGE_KEYS)
+  );
+
+  if (!apiBaseUrl || !authToken || !activeSeekerId) {
+    return { success: false, error: "Extension is not connected." };
+  }
+  if (!tabId) {
+    return { success: false, error: "No active tab to autofill." };
+  }
+
+  let context;
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/extension/autofill-context`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    context = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        success: false,
+        error: context?.error || `Failed to load profile (${response.status}).`,
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error?.message ?? "Failed to load autofill profile.",
+    };
+  }
+
+  const tab = await waitForTabComplete(tabId);
+  if (tab?.url) {
+    await maybeSyncSessionStateForTab(tabId, tab.url, { force: true });
+  }
+
+  // Capture the job (link + description) so unmatched opportunities persist and
+  // get a job_post_id for tailoring/tracking. Best-effort; never blocks fill.
+  const scraped = await scrapeJobContext(tabId);
+  let jobPostId = null;
+  try {
+    const captureRes = await fetch(`${apiBaseUrl}/api/extension/capture-job`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        url: tab?.url ?? scraped?.url ?? null,
+        title: scraped?.title ?? tab?.title ?? null,
+        company: scraped?.company ?? null,
+        location: scraped?.location ?? null,
+        description_text: scraped?.description ?? null,
+        source: "manual_autofill",
+      }),
+    });
+    const captureData = await captureRes.json().catch(() => ({}));
+    if (captureRes.ok) {
+      jobPostId = captureData?.job_post_id ?? null;
+    }
+  } catch (error) {
+    console.warn("capture-job failed (non-fatal):", error);
+  }
+
+  // Optionally tailor the resume to this job first, then fill with it instead
+  // of the base resume. Reuses the AM tailoring endpoint (the extension token
+  // authenticates as the AM). Best-effort: on any failure we keep the base.
+  let resumeUrl = context.resume?.url ?? null;
+  let tailoring = null;
+  if (options.tailor) {
+    if (!jobPostId) {
+      tailoring = { error: "Could not capture this job to tailor against." };
+    } else {
+      try {
+        const tRes = await fetch(`${apiBaseUrl}/api/am/resume-tailor`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            job_seeker_id: activeSeekerId,
+            job_post_id: jobPostId,
+          }),
+        });
+        const tData = await tRes.json().catch(() => ({}));
+        const tailoredUrl = tData?.tailored_resume?.resume_url ?? null;
+        if (tRes.ok && tailoredUrl) {
+          resumeUrl = tailoredUrl;
+          tailoring = {
+            ok: true,
+            changes_summary: tData?.changes_summary ?? null,
+            coverage: tData?.coverage ?? null,
+            safety: tData?.safety ?? null,
+          };
+        } else if (tRes.ok) {
+          // Tailored text saved but no PDF URL to upload — fall back to base.
+          tailoring = { error: "Tailored resume has no file to upload; using base." };
+        } else {
+          tailoring = { error: tData?.error || `Tailoring failed (${tRes.status}).` };
+        }
+      } catch (error) {
+        tailoring = { error: error?.message ?? "Resume tailoring failed." };
+      }
+    }
+  }
+
+  // Inject into all frames so forms embedded in cross-origin ATS iframes are
+  // reachable; each frame self-elects via shouldRunInThisFrame().
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: RUNNER_SCRIPT_FILES,
+  });
+
+  chrome.tabs.sendMessage(tabId, {
+    type: "AUTOFILL_PAGE",
+    apiBaseUrl,
+    authToken,
+    jobSeekerId: activeSeekerId,
+    activeSeekerId,
+    profile: context.profile ?? null,
+    resumeUrl,
+    job: {
+      title: scraped?.title ?? tab?.title ?? null,
+      company: scraped?.company ?? null,
+      url: tab?.url ?? null,
+      job_post_id: jobPostId,
+    },
+  });
+
+  return {
+    success: true,
+    screening_count: context.screening_count ?? 0,
+    job_post_id: jobPostId,
+    tailored: Boolean(tailoring?.ok),
+    tailoring,
+  };
+}
+
 async function findChildTab(parentTabId, windowId, timeoutMs = 4000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -909,6 +1170,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "RUNNER_RUN_NOW") {
     pollRunner().then(() => sendResponse({ success: true }));
+    return true;
+  }
+
+  if (message?.type === "LEARN_FIELDS") {
+    // Fire-and-forget: the sender (content script) may be navigating away.
+    submitFieldLearning(message).catch((error) =>
+      console.warn("learn-fields submit failed:", error)
+    );
+    return false;
+  }
+
+  if (message?.type === "AUTOFILL_ACTIVE_TAB") {
+    autofillActiveTab(message.tabId ?? sender?.tab?.id, {
+      tailor: Boolean(message.tailor),
+    })
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          success: false,
+          error: error?.message ?? "Autofill failed to launch.",
+        })
+      );
     return true;
   }
 
