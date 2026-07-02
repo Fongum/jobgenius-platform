@@ -325,28 +325,10 @@
         const prior = snapshot.get(key);
         const before = prior ? String(prior.value ?? "").trim() : "";
 
-        if (!before) {
-          events.push({
-            label: field.label,
-            type: field.type,
-            options: field.options,
-            outcome: "filled_blank",
-            autofilled_value: "",
-            final_value: after,
-          });
-        } else if (before !== after) {
-          events.push({
-            label: field.label,
-            type: field.type,
-            options: field.options,
-            outcome: "corrected",
-            autofilled_value: before,
-            final_value: after,
-          });
-        } else {
-          // Autofilled value kept unchanged by the human = accepted. Emitting
-          // these gives host graduation a real accuracy denominator (accepted
-          // vs corrected); the server audits them without learning a value.
+        // Only "accepted" (autofilled value kept unchanged) is emitted here — it
+        // gives host graduation a real accuracy denominator. Corrections and
+        // blank-fills are captured live as the AM makes them (see captureLive).
+        if (before && before === after) {
           events.push({
             label: field.label,
             type: field.type,
@@ -628,7 +610,18 @@
 
     // Render the checklist immediately from the fields currently on the page,
     // so the user sees the panel even before/if filling has any effect.
-    const labelOk = (l) => l && l.toLowerCase() !== "unknown field";
+    // Reject non-field noise, incl. radio options injected by other extensions
+    // (e.g. JobWizard's "Match My Input / All together / Objective questions only").
+    const NOISE_LABELS = new Set([
+      "match my input",
+      "all together",
+      "objective questions only",
+    ]);
+    const labelOk = (l) => {
+      if (!l) return false;
+      const n = l.toLowerCase().trim();
+      return n !== "unknown field" && !NOISE_LABELS.has(n);
+    };
     const preFields = dom.enumerateFields ? dom.enumerateFields() : [];
     const rows = [];
     const seen = new Set();
@@ -658,20 +651,15 @@
 
     // When the AM answers a field we couldn't fill: fill it on the page now AND
     // teach the engine (screening answer / learned rule) so next time it's auto.
-    mode3Sidebar.setProvideHandler(async (field, value, outcome) => {
-      if (!field?.label) return false;
-      // Fill it on the page immediately.
-      try {
-        if (dom.fillFieldsByLabel) dom.fillFieldsByLabel({ [field.label]: value });
-      } catch (error) {
-        console.warn("[JobGenius] manual fill failed:", error);
-      }
-
-      // Identity/profile field → write back to the seeker's profile so the next
-      // autofill uses the corrected value. We confirm success via the callback.
+    // Persist an answer (captured from the AM) so it's reused next time:
+    // identity/profile fields → the seeker's profile; everything else → the
+    // learning engine (screening answers / learned rules) with the full
+    // question + options + answer context.
+    const persistAnswer = (field, value, outcome) => {
+      if (!field?.label) return Promise.resolve(false);
       const profileTarget = profileTargetForLabel(field.label);
       if (profileTarget) {
-        return await new Promise((resolve) => {
+        return new Promise((resolve) => {
           chrome.runtime.sendMessage(
             {
               type: "PROFILE_UPDATE",
@@ -683,8 +671,6 @@
           );
         });
       }
-
-      // Screening/other → teach the engine (screening answer / learned rule).
       chrome.runtime.sendMessage({
         type: "LEARN_FIELDS",
         ats_type: ctx.atsType ?? null,
@@ -708,7 +694,18 @@
           },
         ],
       });
-      return true;
+      return Promise.resolve(true);
+    };
+
+    // The sidebar "+/✓" editor: fill the field on the page, then persist.
+    mode3Sidebar.setProvideHandler(async (field, value, outcome) => {
+      if (!field?.label) return false;
+      try {
+        if (dom.fillFieldsByLabel) dom.fillFieldsByLabel({ [field.label]: value });
+      } catch (error) {
+        console.warn("[JobGenius] manual fill failed:", error);
+      }
+      return persistAnswer(field, value, outcome);
     });
 
     mode3Sidebar.renderFields(rows);
@@ -790,7 +787,45 @@
       `Filled ${filledCount}. Tap ✓ to correct or + to add — each is saved for reuse.${captchaNote}`
     );
 
-    // Start watching for the human's corrections so we can teach the runner.
+    // Live capture: watch for the AM's genuine manual edits (isTrusted is false
+    // for our own programmatic fills), so answers to non-factual / choice
+    // questions are captured as they're entered — with their question + options —
+    // and persisted for reuse. Updates the panel to "captured" in real time.
+    const rowFieldBySig = new Map(
+      rows.filter((r) => r.field).map((r) => [r.sig, r.field])
+    );
+    const captureLive = () => {
+      for (const f of dom.enumerateFields ? dom.enumerateFields() : []) {
+        if (!labelOk(f.label)) continue;
+        const sig = fieldSignature(f);
+        const val = String(f.value ?? "").trim();
+        const base = postValueBySig.get(sig) ?? "";
+        if (!val || val === base) continue;
+        const outcome = base ? "corrected" : "filled_blank";
+        postValueBySig.set(sig, val);
+        if (rowFieldBySig.has(sig)) {
+          mode3Sidebar.setRowValue(sig, val);
+          mode3Sidebar.setStatus(sig, "captured");
+        }
+        const field =
+          rowFieldBySig.get(sig) || {
+            label: f.label,
+            type: f.type,
+            options: f.options,
+          };
+        persistAnswer(field, val, outcome);
+      }
+    };
+    document.addEventListener(
+      "change",
+      (e) => {
+        if (e && e.isTrusted) captureLive();
+      },
+      true
+    );
+
+    // On submit, record only the fields the human ACCEPTED unchanged (for host
+    // graduation's accuracy metric); corrections/fills are already captured live.
     try {
       setupLearningCapture(ctx);
     } catch (error) {

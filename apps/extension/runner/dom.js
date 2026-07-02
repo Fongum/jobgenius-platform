@@ -785,6 +785,8 @@
 
     inputs.forEach((input) => {
       if (input.disabled) return;
+      // Never enumerate the extension's own sidebar/editor inputs as form fields.
+      if (input.closest && input.closest("#jobgenius-autofill-panel")) return;
       const rawType = normalizeHint(
         input.getAttribute("type") || input.tagName.toLowerCase()
       );
