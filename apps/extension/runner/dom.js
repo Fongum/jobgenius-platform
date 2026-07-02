@@ -184,7 +184,7 @@
     if (hasBlockingCaptchaWidget()) return true;
 
     const text = document.body?.innerText?.toLowerCase() ?? "";
-    const challengePhrases = [
+    const challengePhrases = window.JobGeniusPhrases?.captcha ?? [
       "verify you are human",
       "prove you're human",
       "complete the captcha",
@@ -250,7 +250,7 @@
 
   function hasSmsOtp() {
     const text = document.body?.innerText?.toLowerCase() ?? "";
-    const smsPhrases = [
+    const smsPhrases = window.JobGeniusPhrases?.otpSms ?? [
       "sms code",
       "text message code",
       "texted you a code",
@@ -265,7 +265,7 @@
 
   function hasEmailOtp() {
     const text = document.body?.innerText?.toLowerCase() ?? "";
-    const emailPhrases = [
+    const emailPhrases = window.JobGeniusPhrases?.otpEmail ?? [
       "email code",
       "verification code",
       "confirmation code",
@@ -274,7 +274,12 @@
       "check your email",
       "sent to your inbox",
     ];
-    const smsPhrases = ["sms", "text message", "texted you", "phone"];
+    const smsPhrases = window.JobGeniusPhrases?.otpSmsNegative ?? [
+      "sms",
+      "text message",
+      "texted you",
+      "phone",
+    ];
 
     if (!hasAnyPhrase(text, emailPhrases)) {
       return false;
@@ -317,8 +322,12 @@
   function getInputHint(input) {
     const id = input.getAttribute("id");
     if (id) {
-      const label = document.querySelector(`label[for='${id}']`);
-      if (label?.textContent) return normalizeHint(label.textContent);
+      try {
+        const label = document.querySelector(`label[for='${CSS.escape(id)}']`);
+        if (label?.textContent) return normalizeHint(label.textContent);
+      } catch (_) {
+        /* invalid selector (id with special chars) — fall through */
+      }
     }
     const parentLabel = input.closest("label");
     if (parentLabel?.textContent) return normalizeHint(parentLabel.textContent);
@@ -502,52 +511,16 @@
     return filled;
   }
 
-  function fillRadioGroups(profile) {
-    let filled = 0;
-    const radios = Array.from(queryAllDeep("input[type='radio']"));
-
-    const groups = new Map();
-    radios.forEach((radio) => {
-      const name = radio.getAttribute("name");
-      if (!name) return;
-      if (!groups.has(name)) groups.set(name, []);
-      groups.get(name).push(radio);
-    });
-
-    groups.forEach((group) => {
-      if (group.some((r) => r.checked)) return;
-      if (group.every((r) => r.disabled)) return;
-
-      const firstRadio = group[0];
-      const groupHint = getGroupHint(firstRadio);
-      if (!groupHint) return;
-
-      // Work authorization, sponsorship, relocation, and EEO/demographic radio
-      // groups are deferred to the screening-aware classify step rather than
-      // answered with blind defaults that could override the seeker's own
-      // configured screening answers.
-      let targetLabel = null;
-
-      if (!targetLabel) return;
-
-      const target = group.find((r) => {
-        if (r.disabled) return false;
-        const radioHint = normalizeHint(
-          r.getAttribute("aria-label") ||
-          r.getAttribute("value") ||
-          getInputHint(r)
-        );
-        return radioHint.includes(targetLabel) || targetLabel.includes(radioHint);
-      });
-
-      if (target) {
-        target.click();
-        target.dispatchEvent(new Event("change", { bubbles: true }));
-        filled += 1;
-      }
-    });
-
-    return filled;
+  // Radio groups are intentionally NOT answered here with blind local defaults.
+  // Work authorization, sponsorship, relocation, and EEO/demographic groups (and
+  // every other radio group) are deferred to the screening-aware server step:
+  // extractRequiredFields()/enumerateFields() emit each radio group to
+  // /api/apply/classify-fields, and fillFieldsByLabel()/fillRadioByLabel() apply
+  // the returned answers. Answering radios locally here risked overriding the
+  // seeker's configured screening answers, so this is a deliberate no-op kept
+  // only to preserve the fillAllFields() aggregation shape.
+  function fillRadioGroups() {
+    return 0;
   }
 
   function fillCheckboxes() {
@@ -632,6 +605,35 @@
     };
   }
 
+  const RESUME_MIME_BY_EXT = {
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    txt: "text/plain",
+    rtf: "application/rtf",
+  };
+
+  // Pick a filename + MIME type for the uploaded resume from the URL extension,
+  // falling back to the fetched blob's type (then PDF). Uploading a .docx as
+  // "resume.pdf"/application/pdf makes some ATS validators reject the file.
+  function deriveResumeFileMeta(resumeUrl, blobType) {
+    let ext = "";
+    try {
+      const path = new URL(resumeUrl, window.location.href).pathname.toLowerCase();
+      const match = path.match(/\.([a-z0-9]+)$/);
+      if (match) ext = match[1];
+    } catch (_) {
+      /* malformed URL — fall back to blob type below */
+    }
+    if (RESUME_MIME_BY_EXT[ext]) {
+      return { fileName: `resume.${ext}`, mimeType: RESUME_MIME_BY_EXT[ext] };
+    }
+    const mimeType = blobType || "application/pdf";
+    const extFromType =
+      Object.keys(RESUME_MIME_BY_EXT).find((k) => RESUME_MIME_BY_EXT[k] === mimeType) || "pdf";
+    return { fileName: `resume.${extFromType}`, mimeType };
+  }
+
   async function uploadResume(resumeUrl) {
     const fileInputs = Array.from(queryAllDeep("input[type='file']"))
       .filter((input) => !input.disabled);
@@ -654,9 +656,8 @@
     }
 
     const blob = await response.blob();
-    const file = new File([blob], "resume.pdf", {
-      type: blob.type || "application/pdf",
-    });
+    const { fileName, mimeType } = deriveResumeFileMeta(resumeUrl, blob.type);
+    const file = new File([blob], fileName, { type: mimeType });
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
     input.files = dataTransfer.files;
@@ -1192,6 +1193,48 @@
     }
   }
 
+  // Robust "did the application actually submit?" check. The old approach —
+  // document.body.innerText.includes("thank you"/"submitted") — false-positives
+  // on any page whose body happens to contain those words (e.g. a "Thank you for
+  // your interest" blurb next to the still-present form). Instead we require BOTH:
+  //   1. a success phrase inside a *confined* success region (alert/status/
+  //      heading/confirmation container), not anywhere in the page body, and
+  //   2. the application form to be gone (no visible form fields left).
+  function isConfirmationVisible(phrases) {
+    const list =
+      Array.isArray(phrases) && phrases.length
+        ? phrases
+        : window.JobGeniusPhrases?.confirmation ?? [
+            "thank you",
+            "application submitted",
+            "submitted",
+          ];
+
+    const REGION_SELECTOR =
+      "[role='alert'], [role='status'], [aria-live], " +
+      "[class*='confirm'], [class*='success'], [class*='thank'], " +
+      "[id*='confirm'], [id*='success'], h1, h2, h3";
+
+    const hasSuccessSignal = Array.from(queryAllDeep(REGION_SELECTOR))
+      .filter((el) => isElementVisible(el))
+      .some((el) => {
+        const text = normalizeHint(el.textContent);
+        // Cap length so a whole-page container matching the selector can't be
+        // treated as a "confined" signal.
+        return text && text.length <= 400 && list.some((p) => text.includes(p));
+      });
+    if (!hasSuccessSignal) return false;
+
+    // A genuine confirmation page no longer shows the application form.
+    const formFields = Array.from(
+      queryAllDeep(
+        "form input:not([type='hidden']):not([type='submit']):not([type='button']), form textarea, form select"
+      )
+    ).filter((el) => isElementVisible(el));
+
+    return formFields.length === 0;
+  }
+
   window.JobGeniusDom = {
     sleep,
     findButtonByText,
@@ -1214,6 +1257,9 @@
     extractRequiredFields,
     requiredFieldsMissing,
     captureFlowFingerprint,
+    isConfirmationVisible,
+    resolveFieldValue,
+    deriveResumeFileMeta,
     waitForDomStable,
     dismissOverlays,
   };

@@ -1,9 +1,12 @@
 # Extension — live verification checklist
 
-The automated test (`apps/web/tests/extension-dom-shadow.test.mjs`,
-`node tests/extension-dom-shadow.test.mjs` from `apps/web`) proves the
-shadow-DOM piercing in `dom.js`. The items below need a **real browser with the
-extension loaded and real ATS logins** — they can't be checked headlessly.
+The automated tests (`apps/web/tests/extension-dom-shadow.test.ts` and
+`apps/web/tests/extension-reliability.test.ts`, run with `npm test` — i.e.
+`vitest run` — or `npx vitest run tests/extension-*.test.ts` from `apps/web`)
+cover the shadow-DOM piercing and the reliability logic (field resolution,
+resume MIME, confined confirmation detection, flow fingerprinting) in `dom.js`.
+The items below need a **real browser with the extension loaded and real ATS
+logins** — they can't be checked headlessly.
 
 ## Setup
 1. `chrome://extensions` → enable Developer mode → **Load unpacked** → select `apps/extension`.

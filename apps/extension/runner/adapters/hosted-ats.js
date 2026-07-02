@@ -9,7 +9,7 @@
   //    delegated to dom.fillAllFields + the shared, screening-aware classify
   //    brain (dom.classifyAndFill) — no fragile per-field selectors. ──
 
-  const CONFIRM_PHRASES = [
+  const CONFIRM_PHRASES = window.JobGeniusPhrases?.confirmation ?? [
     "thank you",
     "application submitted",
     "successfully applied",
@@ -94,8 +94,9 @@
       },
 
       confirm() {
-        const text = document.body?.innerText?.toLowerCase() ?? "";
-        return CONFIRM_PHRASES.some((phrase) => text.includes(phrase));
+        return dom.isConfirmationVisible
+          ? dom.isConfirmationVisible(CONFIRM_PHRASES)
+          : false;
       },
 
       async runFallback(ctx) {

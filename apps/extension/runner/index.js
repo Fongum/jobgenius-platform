@@ -4,6 +4,10 @@
   const engine = window.JobGeniusEngine;
   const sidebar = window.JobGeniusRunnerSidebar;
   const MIN_PLAN_VERSION = 4;
+  // Version of the adapter bundle shipped with this extension. Compared against
+  // the server's active adapter version (adapter_versions) to detect drift.
+  const ADAPTER_BUNDLE_VERSION =
+    window.JobGeniusAdapterRegistry?.bundleVersion ?? "1";
 
   const ATS_FRAME_HOSTS = [
     "greenhouse.io",
@@ -175,6 +179,71 @@
     chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
   }
 
+  // Fetch server-computed automation hints for this run (button/apply-entry
+  // overrides, wait tuning, and the folded-in circuit-breaker status). Returns
+  // null on any failure — the run proceeds with compiled-in defaults.
+  async function fetchApplyHints(ctx) {
+    if (!ctx?.apiBaseUrl || !ctx?.authToken) return null;
+    try {
+      const params = new URLSearchParams();
+      if (ctx.atsType) params.set("ats", ctx.atsType);
+      params.set("url", window.location.href);
+      const response = await fetch(
+        `${ctx.apiBaseUrl}/api/apply/hints?${params.toString()}`,
+        {
+          headers: {
+            "x-runner": "extension",
+            Authorization: `Bearer ${ctx.authToken}`,
+          },
+        }
+      );
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data?.hints ?? null;
+    } catch (error) {
+      console.warn("Fetch apply hints failed:", error);
+      return null;
+    }
+  }
+
+  // Compare the server's active adapter version for this ATS against the bundle
+  // shipped with the extension and emit a telemetry event on drift, so a stale
+  // extension is visible without waiting for it to start failing.
+  async function checkAdapterDrift(ctx) {
+    if (!ctx?.apiBaseUrl || !ctx?.authToken || !ctx?.atsType) return;
+    try {
+      const params = new URLSearchParams({ ats: ctx.atsType });
+      const response = await fetch(
+        `${ctx.apiBaseUrl}/api/apply/adapter-config?${params.toString()}`,
+        {
+          headers: {
+            "x-runner": "extension",
+            Authorization: `Bearer ${ctx.authToken}`,
+          },
+        }
+      );
+      if (!response.ok) return;
+      const data = await response.json();
+      const serverVersion = data?.version;
+      if (serverVersion == null) return; // nothing promoted; runner uses defaults
+      if (String(serverVersion) === String(ADAPTER_BUNDLE_VERSION)) return;
+      await engine.logEvent?.(ctx, {
+        run_id: ctx.runId,
+        event_type: "ADAPTER_VERSION_DRIFT",
+        level: "WARN",
+        message: `Adapter drift for ${ctx.atsType}: server v${serverVersion}, extension v${ADAPTER_BUNDLE_VERSION}.`,
+        last_seen_url: window.location.href,
+        payload: {
+          ats: ctx.atsType,
+          server_version: serverVersion,
+          extension_version: ADAPTER_BUNDLE_VERSION,
+        },
+      });
+    } catch (error) {
+      console.warn("Adapter drift check failed:", error);
+    }
+  }
+
   async function runAutomation(message) {
     const atsType = detectAtsType();
     const adapter = registry.resolveAdapter
@@ -221,6 +290,32 @@
       step: "INIT",
     });
     sidebar?.setStatus?.("Initializing");
+
+    // Preflight: pull server hints (incl. circuit breaker) and check adapter
+    // drift before doing any work on the page.
+    const hints = await fetchApplyHints(ctx);
+    ctx.hints = hints;
+    if (hints?.circuit_breaker?.blocked) {
+      const reason =
+        hints.circuit_breaker.reason ||
+        `${ctx.atsType} is temporarily paused after repeated failures.`;
+      sidebar?.log?.(reason, "warn");
+      await engine.pauseRun(ctx, "CIRCUIT_OPEN", {
+        step: "PREFLIGHT",
+        ats: ctx.atsType,
+        message: reason,
+      });
+      sidebar?.finish?.("Paused", "ATS temporarily paused (circuit breaker).");
+      chrome.runtime.sendMessage({ type: "RUN_COMPLETE", runId: ctx.runId });
+      return;
+    }
+    // Seed hints for the adapter fallback path (the plan path overrides these
+    // from plan.metadata.automation below).
+    if (Array.isArray(hints?.button_hints)) ctx.buttonHints = hints.button_hints;
+    if (Array.isArray(hints?.apply_entry_hints)) {
+      ctx.applyEntryHints = hints.apply_entry_hints;
+    }
+    checkAdapterDrift(ctx).catch(() => {});
 
     if (dom.hasCaptcha()) {
       const ok = await handleCaptchaAtStart(ctx);

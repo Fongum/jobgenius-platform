@@ -61,11 +61,9 @@
       return { ok: true, clickedLabel };
     },
     confirm() {
-      const confirmationText = document.body?.innerText?.toLowerCase() ?? "";
-      return (
-        confirmationText.includes("thank you") ||
-        confirmationText.includes("submitted")
-      );
+      return dom.isConfirmationVisible
+        ? dom.isConfirmationVisible(window.JobGeniusPhrases?.confirmation)
+        : false;
     },
     async runFallback(ctx) {
       if (dom.hasSmsOtp()) {

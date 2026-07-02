@@ -75,13 +75,9 @@
       return { ok: true, clickedLabel };
     },
     confirm() {
-      const text = document.body?.innerText?.toLowerCase() ?? "";
-      return (
-        text.includes("thank you") ||
-        text.includes("application submitted") ||
-        text.includes("thanks for applying") ||
-        text.includes("application received")
-      );
+      return dom.isConfirmationVisible
+        ? dom.isConfirmationVisible(window.JobGeniusPhrases?.confirmation)
+        : false;
     },
     async runFallback(ctx) {
       const entryResult = await this.clickApplyEntry(ctx);

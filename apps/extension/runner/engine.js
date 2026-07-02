@@ -64,6 +64,39 @@
     return response.json();
   }
 
+  async function getJson(url, authToken) {
+    const response = await fetch(url, {
+      headers: {
+        "x-runner": "extension",
+        Authorization: authToken ? `Bearer ${authToken}` : "",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status}).`);
+    }
+    return response.json();
+  }
+
+  // Fetch the server's remediation suggestions for the (ATS, error) that caused
+  // a pause and surface them in the sidebar, so the AM gets actionable next
+  // steps instead of a bare reason code. Best-effort — never throws.
+  async function surfaceSuggestions(ctx, reason) {
+    if (!ctx?.apiBaseUrl || !ctx?.authToken || !ctx?.atsType || !reason) return;
+    try {
+      const params = new URLSearchParams({ ats: ctx.atsType, error_code: reason });
+      const data = await getJson(
+        `${ctx.apiBaseUrl}/api/apply/suggestions?${params.toString()}`,
+        ctx.authToken
+      );
+      const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+      for (const suggestion of suggestions.slice(0, 3)) {
+        if (suggestion) sidebarLog(`Suggestion: ${suggestion}`, "info");
+      }
+    } catch (error) {
+      console.warn("Fetch apply suggestions failed:", error);
+    }
+  }
+
   async function logEvent(ctx, payload) {
     return postJson(
       `${ctx.apiBaseUrl}/api/apply/event`,
@@ -73,7 +106,7 @@
   }
 
   async function pauseRun(ctx, reason, meta) {
-    return postJson(
+    const result = await postJson(
       `${ctx.apiBaseUrl}/api/apply/pause`,
       {
         run_id: ctx.runId,
@@ -86,6 +119,9 @@
       },
       ctx.authToken
     );
+    // Surface server remediation suggestions for this pause reason (best-effort).
+    await surfaceSuggestions(ctx, reason);
+    return result;
   }
 
   async function completeRun(ctx, note) {
@@ -387,7 +423,10 @@
       }
       sidebarReportClick(submitResult?.clickedLabel || "Continue");
 
-      await dom.sleep(1300);
+      // Short nudge, then wait for the DOM to actually settle (waitForDomStable
+      // caps at 8s / 800ms idle) rather than betting on a fixed 1.3s guess that
+      // is too short for slow ATS pages and wasteful for fast ones.
+      await dom.sleep(300);
       if (dom.waitForDomStable) await dom.waitForDomStable();
       dom.dismissOverlays?.();
       const afterFingerprint =
@@ -542,6 +581,9 @@
           }
           setSidebarAction("Clicked Apply");
           sidebarLog("Clicked Apply entry.");
+          // Let the application form/modal render before the next step reads it.
+          dom.dismissOverlays?.();
+          if (dom.waitForDomStable) await dom.waitForDomStable();
         }
         continue;
       }
@@ -602,6 +644,9 @@
             return;
           }
           sidebarReportClick(result?.clickedLabel || "Continue");
+          // Wait for the post-submit page/validation to settle before CONFIRM.
+          dom.dismissOverlays?.();
+          if (dom.waitForDomStable) await dom.waitForDomStable();
         }
         continue;
       }
@@ -666,5 +711,6 @@
     retryRun,
     pauseRun,
     completeRun,
+    logEvent,
   };
 })();

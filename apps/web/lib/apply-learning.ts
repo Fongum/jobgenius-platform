@@ -3,6 +3,7 @@ import {
   resolveHostAutomationRuleAsync,
   type ResolvedHostAutomationRule,
 } from "@/lib/apply-host-rules";
+import { shouldCircuitBreak } from "@/lib/adapter-health";
 
 type BuildAutomationHintsArgs = {
   atsType: string | null;
@@ -30,6 +31,10 @@ export type ApplyAutomationHints = {
   requires_apply_entry: boolean;
   prefer_popup_handoff: boolean;
   blockers: BlockerSummary[];
+  // Circuit breaker: when the adapter has failed repeatedly, the runner should
+  // pause instead of burning another attempt. Folded in here so callers get it
+  // from the same run-start fetch as the rest of the hints.
+  circuit_breaker: { blocked: boolean; reason?: string };
   generated_at: string;
 };
 
@@ -171,6 +176,7 @@ export async function buildApplyAutomationHints(
   const urlHost = hostRule.url_host;
   const signatures = await loadSignatures(ats, urlHost);
   const { blockers, counts } = summarizeBlockers(signatures);
+  const circuitBreaker = await shouldCircuitBreak(ats);
 
   return {
     ats,
@@ -183,6 +189,7 @@ export async function buildApplyAutomationHints(
     requires_apply_entry: hostRule.requires_apply_entry,
     prefer_popup_handoff: hostRule.prefer_popup_handoff,
     blockers: blockers.slice(0, 5),
+    circuit_breaker: circuitBreaker,
     generated_at: new Date().toISOString(),
   };
 }

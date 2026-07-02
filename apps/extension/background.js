@@ -60,7 +60,34 @@ const SESSION_SYNC_EXCLUDED_HOST_HINTS = [
   "vercel.app",
   "localhost",
 ];
+// Friendly labels for session-expiry warnings, keyed by the host hints above.
+const SESSION_HOST_LABELS = {
+  "linkedin.com": "LinkedIn",
+  "indeed.com": "Indeed",
+  "greenhouse.io": "Greenhouse",
+  "workday.com": "Workday",
+  "myworkdayjobs.com": "Workday",
+  "lever.co": "Lever",
+  "smartrecruiters.com": "SmartRecruiters",
+  "icims.com": "iCIMS",
+  "jobvite.com": "Jobvite",
+  "breezy.hr": "Breezy",
+  "ashbyhq.com": "Ashby",
+  "bamboohr.com": "BambooHR",
+  "workable.com": "Workable",
+  "recruitee.com": "Recruitee",
+  "personio.com": "Personio",
+};
+// Collapse subdomains to the ATS host hint so all *.greenhouse.io share one entry.
+function sessionExpiryKey(host) {
+  return SESSION_SYNC_HOST_HINTS.find((hint) => host.includes(hint)) || host;
+}
+function sessionHostLabel(host) {
+  const hint = SESSION_SYNC_HOST_HINTS.find((h) => host.includes(h));
+  return (hint && SESSION_HOST_LABELS[hint]) || host;
+}
 const RUNNER_SCRIPT_FILES = [
+  "runner/phrases.js",
   "runner/captcha-overlay.js",
   "runner/sidebar.js",
   "runner/dom.js",
@@ -249,6 +276,12 @@ async function captureStorageStateForTab(tabId, url) {
     return null;
   }
 
+  // Record this ATS origin's session expiry so checkSessionExpiry() can warn
+  // across every platform the seeker actually logs into — not just LinkedIn.
+  recordSessionExpiry(origin, cookies).catch((error) => {
+    console.warn("Session expiry record failed:", error);
+  });
+
   return {
     cookies,
     origins: [
@@ -258,6 +291,34 @@ async function captureStorageStateForTab(tabId, url) {
       },
     ],
   };
+}
+
+// Persist the latest known session expiry for an ATS origin. Uses the longest-
+// lived persistent cookie as the "session can last until" signal — auth/refresh
+// cookies are typically the longest-lived, so this avoids false alarms from
+// short-lived CSRF/analytics cookies while still catching a login about to lapse.
+async function recordSessionExpiry(origin, cookies) {
+  let host;
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    return;
+  }
+  if (SESSION_SYNC_EXCLUDED_HOST_HINTS.some((hint) => host.includes(hint))) return;
+
+  const expiryTimes = cookies
+    .map((cookie) => cookie.expires)
+    .filter((value) => typeof value === "number");
+  if (expiryTimes.length === 0) return; // only session-scoped cookies; nothing to warn about
+
+  const key = sessionExpiryKey(host);
+  const { sessionExpiryByHost = {} } = await getStorage("sessionExpiryByHost");
+  sessionExpiryByHost[key] = {
+    label: sessionHostLabel(host),
+    expiresAt: Math.max(...expiryTimes),
+    updatedAt: Date.now(),
+  };
+  await setStorage({ sessionExpiryByHost });
 }
 
 async function uploadStorageState(apiBaseUrl, authToken, activeSeekerId, storageState) {
@@ -1125,32 +1186,53 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-async function checkSessionExpiry() {
-  const criticalCookies = [
-    { url: "https://www.linkedin.com", name: "li_at", label: "LinkedIn" },
-  ];
+// How stale a recorded expiry can be before we stop trusting it. If the seeker
+// hasn't visited a platform in this long, the cookie may have been refreshed on
+// a visit we didn't capture — so we don't nag based on outdated data.
+const SESSION_EXPIRY_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 
-  for (const { url, name, label } of criticalCookies) {
-    try {
-      const cookie = await chrome.cookies.get({ url, name });
-      if (!cookie) {
-        showSessionWarning(label, "not found — please log in to " + label);
-        continue;
-      }
-      if (typeof cookie.expirationDate === "number") {
-        const hoursUntilExpiry = (cookie.expirationDate - Date.now() / 1000) / 3600;
-        if (hoursUntilExpiry < SESSION_EXPIRY_WARN_HOURS) {
-          showSessionWarning(
-            label,
-            hoursUntilExpiry <= 0
-              ? "session expired — please log in again"
-              : `session expires in ${Math.round(hoursUntilExpiry)} hours — visit ${label} to refresh`
-          );
-        }
-      }
-    } catch (err) {
-      console.warn(`Session expiry check failed for ${label}:`, err);
+function warnIfExpiringSoon(label, expiresAtSeconds) {
+  const hoursUntilExpiry = (expiresAtSeconds - Date.now() / 1000) / 3600;
+  if (hoursUntilExpiry >= SESSION_EXPIRY_WARN_HOURS) return;
+  showSessionWarning(
+    label,
+    hoursUntilExpiry <= 0
+      ? "session expired — please log in again"
+      : `session expires in ${Math.round(hoursUntilExpiry)} hours — visit ${label} to refresh`
+  );
+}
+
+async function checkSessionExpiry() {
+  // LinkedIn is the primary target and is checked explicitly against its known
+  // auth cookie (li_at), including a warning when the seeker isn't logged in.
+  try {
+    const cookie = await chrome.cookies.get({
+      url: "https://www.linkedin.com",
+      name: "li_at",
+    });
+    if (!cookie) {
+      showSessionWarning("LinkedIn", "not found — please log in to LinkedIn");
+    } else if (typeof cookie.expirationDate === "number") {
+      warnIfExpiringSoon("LinkedIn", cookie.expirationDate);
     }
+  } catch (err) {
+    console.warn("Session expiry check failed for LinkedIn:", err);
+  }
+
+  // Every other ATS the seeker actually logs into is covered by the expiry we
+  // recorded during session-state sync (recordSessionExpiry). Absence is silent
+  // — we never nag about a platform the seeker doesn't use.
+  try {
+    const { sessionExpiryByHost = {} } = await getStorage("sessionExpiryByHost");
+    const now = Date.now();
+    for (const [key, entry] of Object.entries(sessionExpiryByHost)) {
+      if (key === "linkedin.com") continue; // handled explicitly above
+      if (!entry || typeof entry.expiresAt !== "number") continue;
+      if (now - (entry.updatedAt ?? 0) > SESSION_EXPIRY_STALE_MS) continue; // stale record
+      warnIfExpiringSoon(entry.label || key, entry.expiresAt);
+    }
+  } catch (err) {
+    console.warn("Session expiry check failed for synced ATS hosts:", err);
   }
 }
 

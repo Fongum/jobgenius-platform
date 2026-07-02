@@ -2,7 +2,9 @@
   const dom = window.JobGeniusDom;
   const registry = window.JobGeniusAdapterRegistry;
 
-  const DEFAULT_SUBMIT_BUTTONS = [
+  // Shared, i18n-seeded phrase lists (runner/phrases.js); inline fallbacks keep
+  // the adapter working if that file isn't present.
+  const DEFAULT_SUBMIT_BUTTONS = window.JobGeniusPhrases?.submit ?? [
     "next",
     "continue",
     "save and continue",
@@ -13,7 +15,7 @@
     "begin application",
   ];
 
-  const APPLY_ENTRY_BUTTONS = [
+  const APPLY_ENTRY_BUTTONS = window.JobGeniusPhrases?.apply ?? [
     "easy apply",
     "apply now",
     "apply on company site",
@@ -114,15 +116,9 @@
     },
 
     confirm() {
-      const text = document.body?.innerText?.toLowerCase() ?? "";
-      return (
-        text.includes("thank you") ||
-        text.includes("application submitted") ||
-        text.includes("successfully applied") ||
-        text.includes("application received") ||
-        text.includes("we have received") ||
-        text.includes("application complete")
-      );
+      return dom.isConfirmationVisible
+        ? dom.isConfirmationVisible(window.JobGeniusPhrases?.confirmation)
+        : false;
     },
 
     async runFallback(ctx) {

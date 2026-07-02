@@ -1,0 +1,155 @@
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { JSDOM } from "jsdom";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
+
+// Loads the real apps/extension/runner/{phrases,dom}.js into jsdom and locks in
+// the reliability logic touched by the "quick wins" pass: field resolution,
+// resume MIME derivation, the confined confirmation check (isConfirmationVisible),
+// and flow fingerprinting. A true end-to-end check still needs the extension in a
+// real browser (apps/extension/VERIFY.md).
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let JG: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let win: any;
+
+beforeAll(() => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const read = (rel: string) =>
+    readFileSync(path.resolve(here, "../../extension", rel), "utf8");
+
+  const dom = new JSDOM(`<!DOCTYPE html><body></body>`, {
+    runScripts: "outside-only",
+  });
+  win = dom.window;
+
+  // jsdom doesn't lay out; force a non-zero box so visibility checks pass.
+  win.Element.prototype.getBoundingClientRect = function () {
+    return { width: 120, height: 24, top: 0, left: 0, right: 120, bottom: 24, x: 0, y: 0, toJSON() {} } as DOMRect;
+  };
+
+  // phrases.js must load before dom.js so window.JobGeniusPhrases is available.
+  win.eval(read("runner/phrases.js"));
+  win.eval(read("runner/dom.js"));
+  JG = win.JobGeniusDom;
+});
+
+beforeEach(() => {
+  win.document.body.innerHTML = "";
+});
+
+describe("phrases.js — i18n phrase table", () => {
+  it("exposes intent-keyed lowercase phrase lists with non-English seeds", () => {
+    const P = win.JobGeniusPhrases;
+    expect(P).toBeTruthy();
+    for (const key of ["apply", "submit", "confirmation", "captcha", "otpEmail", "otpSms"]) {
+      expect(Array.isArray(P[key])).toBe(true);
+      expect(P[key].every((s: string) => s === s.toLowerCase())).toBe(true);
+    }
+    // A few non-English seeds so international ATS pages don't hard-fail.
+    expect(P.apply).toContain("postuler"); // fr
+    expect(P.submit).toContain("enviar"); // es
+    expect(P.confirmation).toContain("vielen dank"); // de
+  });
+});
+
+describe("dom.js — resolveFieldValue", () => {
+  const profile = {
+    full_name: "Ada Lovelace",
+    email: "ada@analytical.dev",
+    work_history: [{ company: "Analytical Engines" }, {}, {}],
+  };
+
+  it("splits the applicant's name", () => {
+    expect(JG.resolveFieldValue("first name", "text", profile, "x@y.com")).toBe("Ada");
+    expect(JG.resolveFieldValue("last name", "text", profile, "x@y.com")).toBe("Lovelace");
+    expect(JG.resolveFieldValue("full name", "text", profile, "x@y.com")).toBe("Ada Lovelace");
+  });
+
+  it("resolves email and the canned defaults", () => {
+    expect(JG.resolveFieldValue("email address", "email", profile, "fallback@x.com")).toBe(
+      "ada@analytical.dev"
+    );
+    expect(JG.resolveFieldValue("desired salary expectation", "text", profile, "")).toBe(
+      "Negotiable"
+    );
+    expect(JG.resolveFieldValue("notice period", "text", profile, "")).toBe("2 weeks");
+  });
+
+  it("derives years of experience from work history (2 per role, capped at 15)", () => {
+    expect(JG.resolveFieldValue("years of experience", "text", profile, "")).toBe("6");
+  });
+
+  it("does not fill a company field with the applicant's name", () => {
+    expect(JG.resolveFieldValue("company name", "text", profile, "")).not.toBe("Ada Lovelace");
+  });
+});
+
+describe("dom.js — deriveResumeFileMeta", () => {
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+  it("derives filename + MIME from the URL extension", () => {
+    expect(JG.deriveResumeFileMeta("https://cdn.x.com/a/resume.docx", "")).toEqual({
+      fileName: "resume.docx",
+      mimeType: DOCX,
+    });
+    expect(JG.deriveResumeFileMeta("https://cdn.x.com/a/cv.pdf?token=abc", "")).toEqual({
+      fileName: "resume.pdf",
+      mimeType: "application/pdf",
+    });
+  });
+
+  it("falls back to the blob type, then PDF, when the URL has no extension", () => {
+    expect(JG.deriveResumeFileMeta("https://cdn.x.com/download", "application/msword")).toEqual({
+      fileName: "resume.doc",
+      mimeType: "application/msword",
+    });
+    expect(JG.deriveResumeFileMeta("https://cdn.x.com/download", "")).toEqual({
+      fileName: "resume.pdf",
+      mimeType: "application/pdf",
+    });
+  });
+});
+
+describe("dom.js — isConfirmationVisible (confined confirmation)", () => {
+  it("returns true for a success banner with the form gone", () => {
+    win.document.body.innerHTML = `<div role="status">Your application was submitted</div>`;
+    expect(JG.isConfirmationVisible()).toBe(true);
+  });
+
+  it("ignores a success phrase that only appears in ordinary body text", () => {
+    // The OLD body-substring check returned true here (false positive).
+    win.document.body.innerHTML = `
+      <p>Thank you for your interest in this role.</p>
+      <form><input aria-label="Email" required></form>`;
+    expect(JG.isConfirmationVisible()).toBe(false);
+  });
+
+  it("requires the application form to be gone even with a success heading", () => {
+    win.document.body.innerHTML = `
+      <h2>Thank you</h2>
+      <form><input aria-label="Email" required></form>`;
+    expect(JG.isConfirmationVisible()).toBe(false);
+  });
+});
+
+describe("dom.js — captureFlowFingerprint (no-progress detection)", () => {
+  it("changes when the page advances and is stable for identical DOM", () => {
+    const stateA = `<h1>Personal details</h1><input aria-label="Email" required>`;
+    const stateB = `<h1>Review and submit</h1>`;
+
+    win.document.body.innerHTML = stateA;
+    const fpA = JG.captureFlowFingerprint();
+
+    win.document.body.innerHTML = stateB;
+    const fpB = JG.captureFlowFingerprint();
+
+    win.document.body.innerHTML = stateA;
+    const fpA2 = JG.captureFlowFingerprint();
+
+    expect(fpA).not.toBe(fpB); // progressed
+    expect(fpA2).toBe(fpA); // same page → same fingerprint
+  });
+});
