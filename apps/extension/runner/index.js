@@ -730,21 +730,42 @@
       }
     }
 
-    // Resolve any remaining required fields via the shared field classifier
-    // (learned rules → screening answers → LLM), same as the autonomous runner.
+    // Resolve remaining fields via the shared intelligence engine (learned
+    // rules → screening answers → LLM). Send required-empty fields PLUS empty
+    // open-ended / text-area fields (cover letters, "describe…", message boxes)
+    // — even when not required — so the engine generates them from the client's
+    // context.
     const extractMissing = () =>
       adapter?.extractRequiredFields
         ? adapter.extractRequiredFields()
         : dom.extractRequiredFields();
 
+    const openEndedEmpty = (dom.enumerateFields ? dom.enumerateFields() : []).filter((f) => {
+      if (!labelOk(f.label)) return false;
+      if (String(f.value ?? "").trim()) return false;
+      const t = (f.type || "").toLowerCase();
+      return (
+        t === "textarea" ||
+        /describe|why|tell us|cover letter|message|about you|in \d|sentence|motivat|summary|comment/i.test(
+          f.label || ""
+        )
+      );
+    });
+
     let missing = extractMissing();
-    if (Array.isArray(missing) && missing.length > 0) {
-      const classified = (await dom.classifyAndFill?.(ctx, missing)) ?? 0;
-      if (classified > 0) {
-        await dom.sleep(400);
-        missing = extractMissing();
+    const byLabel = new Map();
+    for (const f of [...(Array.isArray(missing) ? missing : []), ...openEndedEmpty]) {
+      const k = String(f.label || "").toLowerCase().trim();
+      if (k && !byLabel.has(k)) {
+        byLabel.set(k, { label: f.label, type: f.type, options: f.options });
       }
     }
+    const toClassify = Array.from(byLabel.values());
+    if (toClassify.length > 0) {
+      const classified = (await dom.classifyAndFill?.(ctx, toClassify)) ?? 0;
+      if (classified > 0) await dom.sleep(400);
+    }
+    missing = extractMissing();
 
     // Update the checklist from the post-fill DOM state: a field with a value is
     // ticked; a still-empty REQUIRED field is flagged for the user's attention.

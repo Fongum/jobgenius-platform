@@ -174,13 +174,17 @@
     const { authToken, activeSeekerId, autoAutofill } = await getStorage(
       Object.values(STORAGE_KEYS)
     );
-    // Only when connected with an active seeker, and on an application-like page.
+    // Show the bubble whenever connected with an active seeker (except on our own
+    // app). It stays a persistent launcher — the application form may live in an
+    // iframe the top frame can't see, so we don't gate visibility on detection.
     if (!authToken || !activeSeekerId) return;
-    if (!looksLikeApplication()) return;
+    const host = location.hostname.toLowerCase();
+    if (EXCLUDED_HOSTS.some((h) => host.includes(h))) return;
 
     renderBubble();
 
-    if (autoAutofill && !autoFired) {
+    // Auto-autofill only when the page actually looks like an application.
+    if (autoAutofill && !autoFired && looksLikeApplication()) {
       autoFired = true;
       sendAutofill(false);
     }
