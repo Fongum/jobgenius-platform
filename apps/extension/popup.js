@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   activeSeekerId: "activeSeekerId",
   runnerEnabled: "runnerEnabled",
   dryRun: "dryRun",
+  autoAutofill: "autoAutofill",
 };
 
 const DEFAULT_API_BASE_URL = "https://job-genius.com";
@@ -68,6 +69,7 @@ const els = {
   contactsEmpty: document.getElementById("contactsEmpty"),
   contactsStatus: document.getElementById("contactsStatus"),
   dryRun: document.getElementById("dryRun"),
+  autoAutofill: document.getElementById("autoAutofill"),
   toggleRunnerBtn: document.getElementById("toggleRunner"),
   saveSessionStateBtn: document.getElementById("saveSessionState"),
   runnerIndicator: document.getElementById("runnerIndicator"),
@@ -2081,6 +2083,11 @@ els.seekerSelect.addEventListener("change", (e) => {
   }
 });
 
+if (els.autoAutofill) {
+  els.autoAutofill.addEventListener("change", () => {
+    chrome.storage.local.set({ [STORAGE_KEYS.autoAutofill]: els.autoAutofill.checked });
+  });
+}
 els.dryRun.addEventListener("change", () => {
   chrome.storage.local.set({ [STORAGE_KEYS.dryRun]: els.dryRun.checked });
 });
@@ -2102,6 +2109,7 @@ async function init() {
   setApiBaseUrl(DEFAULT_API_BASE_URL);
   await chrome.storage.local.set({ [STORAGE_KEYS.apiBaseUrl]: getApiBaseUrl() });
   els.dryRun.checked = result[STORAGE_KEYS.dryRun] || false;
+  if (els.autoAutofill) els.autoAutofill.checked = result[STORAGE_KEYS.autoAutofill] || false;
   updateRunnerUI(result[STORAGE_KEYS.runnerEnabled] || false);
 
   if (authToken && amInfo) {
