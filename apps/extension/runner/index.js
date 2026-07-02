@@ -618,8 +618,8 @@
       "objective questions only",
     ]);
     const labelOk = (l) => {
-      if (!l) return false;
-      const n = l.toLowerCase().trim();
+      const n = String(l || "").toLowerCase().trim();
+      if (!n) return false; // reject empty / whitespace-only labels
       return n !== "unknown field" && !NOISE_LABELS.has(n);
     };
     const preFields = dom.enumerateFields ? dom.enumerateFields() : [];

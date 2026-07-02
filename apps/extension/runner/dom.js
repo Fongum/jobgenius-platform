@@ -664,21 +664,52 @@
     return { ok: true };
   }
 
+  function cleanLabel(text) {
+    return String(text || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  }
+
   function getLabelText(input) {
     const id = input.getAttribute("id");
     if (id) {
-      const label = document.querySelector(`label[for='${id}']`);
-      if (label?.textContent) return label.textContent.trim();
+      try {
+        const label = document.querySelector(`label[for='${CSS.escape(id)}']`);
+        if (label?.textContent?.trim()) return cleanLabel(label.textContent);
+      } catch (_) {
+        /* invalid selector */
+      }
     }
 
     const parentLabel = input.closest("label");
-    if (parentLabel?.textContent) return parentLabel.textContent.trim();
+    if (parentLabel?.textContent?.trim()) return cleanLabel(parentLabel.textContent);
+
+    // aria-labelledby → resolve the referenced element(s).
+    const labelledBy = input.getAttribute("aria-labelledby");
+    if (labelledBy) {
+      const parts = labelledBy
+        .split(/\s+/)
+        .map((ref) => document.getElementById(ref)?.textContent?.trim())
+        .filter(Boolean);
+      if (parts.length) return cleanLabel(parts.join(" "));
+    }
 
     const ariaLabel = input.getAttribute("aria-label");
-    if (ariaLabel) return ariaLabel.trim();
+    if (ariaLabel?.trim()) return cleanLabel(ariaLabel);
+
+    // Walk up the field's container (e.g. Ashby/React forms whose label isn't
+    // linked via for/aria) and use the label scoped to just this control.
+    let node = input.parentElement;
+    for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
+      const controls = node.querySelectorAll("input, textarea, select");
+      if (controls.length > 1) break; // container now spans multiple fields
+      const lbl = node.querySelector("label");
+      if (lbl?.textContent?.trim()) return cleanLabel(lbl.textContent);
+    }
+
+    const placeholder = input.getAttribute("placeholder");
+    if (placeholder?.trim()) return cleanLabel(placeholder);
 
     const name = input.getAttribute("name");
-    return name ? name.trim() : "Unknown field";
+    return name?.trim() ? cleanLabel(name) : "Unknown field";
   }
 
   function isRequiredField(input) {
