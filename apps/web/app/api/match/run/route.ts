@@ -3,7 +3,7 @@ import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-acces
 import { requireOpsAuth } from "@/lib/ops-auth";
 import {
   computeMatchScore,
-  parseJobPost,
+  parseJobPostSmart,
   type JobSeekerProfile,
   type JobPost,
 } from "@/lib/matching";
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
       const needsParsing = !post.parsed_at || payload.reparse_jobs;
 
       if (needsParsing && post.description_text) {
-        const parsed = parseJobPost(
+        const parsed = await parseJobPostSmart(
           post.title,
           post.company,
           post.location,
@@ -241,6 +241,9 @@ export async function POST(request: Request) {
             company_size: parsed.company_size,
             offers_visa_sponsorship: parsed.offers_visa_sponsorship,
             employment_type: parsed.employment_type,
+            parse_source: parsed.parse_source,
+            responsibilities: parsed.responsibilities,
+            screening_questions: parsed.screening_questions,
             parsed_at: new Date().toISOString(),
           })
           .eq("id", post.id);

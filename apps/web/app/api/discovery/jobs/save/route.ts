@@ -1,6 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
-import { parseJobPost } from "@/lib/matching";
+import { parseJobPostSmart } from "@/lib/matching";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { normalizeJobUrl } from "@/lib/job-url";
 import { computeDiscoveredJobContentHash } from "@/lib/discovery/content-hash";
@@ -54,7 +54,7 @@ function parseDiscoveryTimestamp(value: string | null | undefined) {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
-function buildParsedData(job: {
+async function buildParsedData(job: {
   title: string;
   company: string | null;
   location: string | null;
@@ -66,7 +66,7 @@ function buildParsedData(job: {
   }
 
   return {
-    parsedData: parseJobPost(
+    parsedData: await parseJobPostSmart(
       job.title,
       job.company,
       job.location,
@@ -241,7 +241,7 @@ export async function POST(request: Request) {
         const contentChanged = mergedHash !== existingHash;
         const postedAtChanged = mergedJob.posted_at !== mirroredExisting.posted_at;
         const needsRefresh = contentChanged || postedAtChanged;
-        const { parsedData, parsedAt } = buildParsedData(mergedJob);
+        const { parsedData, parsedAt } = await buildParsedData(mergedJob);
 
         const updatePayload: Record<string, unknown> = {
           external_id:
@@ -313,7 +313,7 @@ export async function POST(request: Request) {
         description_text: cleanedJob.description_text,
       };
       const contentHash = computeDiscoveredJobContentHash(insertedJob);
-      const { parsedData, parsedAt } = buildParsedData(insertedJob);
+      const { parsedData, parsedAt } = await buildParsedData(insertedJob);
 
       // Insert new job
       const { data: insertedPost, error: insertError } = await supabaseServer

@@ -3,7 +3,7 @@ import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import {
   computeMatchScore,
-  parseJobPost,
+  parseJobPostSmart,
   type JobSeekerProfile,
   type JobPost,
 } from "@/lib/matching";
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
   for (const post of jobPosts) {
     if ((!post.parsed_at || payload.reparse_jobs) && post.description_text) {
       try {
-        const parsed = parseJobPost(
+        const parsed = await parseJobPostSmart(
           post.title,
           post.company,
           post.location,

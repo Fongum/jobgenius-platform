@@ -1,7 +1,7 @@
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { enforceBackgroundRateLimit } from "@/lib/rate-limit-presets";
 import { supabaseServer } from "@/lib/supabase/server";
-import { computeMatchScore, parseJobPost } from "@/lib/matching";
+import { computeMatchScore, parseJobPostSmart } from "@/lib/matching";
 import { tailorResume } from "@/lib/resume-tailor";
 import {
   tailorResumeStructured,
@@ -458,7 +458,7 @@ async function ensureParsedJobPost(jobPost: JobPostRow) {
     return jobPost;
   }
 
-  const parsed = parseJobPost(
+  const parsed = await parseJobPostSmart(
     jobPost.title ?? "",
     jobPost.company ?? null,
     jobPost.location ?? null,
@@ -481,6 +481,9 @@ async function ensureParsedJobPost(jobPost: JobPostRow) {
       company_size: parsed.company_size,
       offers_visa_sponsorship: parsed.offers_visa_sponsorship,
       employment_type: parsed.employment_type,
+      parse_source: parsed.parse_source,
+      responsibilities: parsed.responsibilities,
+      screening_questions: parsed.screening_questions,
       parsed_at: parsedAt,
     })
     .eq("id", jobPost.id);

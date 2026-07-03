@@ -2,7 +2,7 @@ import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { supabaseAdmin } from "@/lib/auth";
 import { isAdminRole } from "@/lib/auth/roles";
 import { requireOpsAuth } from "@/lib/ops-auth";
-import { parseJobPost } from "@/lib/matching";
+import { parseJobPostSmart } from "@/lib/matching";
 
 // When auto-promoting, cap how many staged jobs we drain per invocation so a
 // single serverless call stays within the function time limit. Steady-state
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
 
       // Parse structured data from description if available
       const parsed = ej.description_text
-        ? parseJobPost(ej.title, ej.company_name, ej.location, ej.description_text)
+        ? await parseJobPostSmart(ej.title, ej.company_name, ej.location, ej.description_text)
         : null;
 
       // Insert into job_posts
@@ -161,6 +161,9 @@ export async function POST(request: Request) {
             company_size: parsed.company_size,
             offers_visa_sponsorship: parsed.offers_visa_sponsorship,
             employment_type: parsed.employment_type,
+            parse_source: parsed.parse_source,
+            responsibilities: parsed.responsibilities,
+            screening_questions: parsed.screening_questions,
             parsed_at: new Date().toISOString(),
           } : {}),
         })

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { verifyExtensionSession } from "@/lib/extension-auth";
 import { isActiveClient } from "@/lib/intake";
-import { parseJobPost } from "@/lib/matching";
+import { parseJobPostSmart } from "@/lib/matching";
 import { normalizeJobUrl } from "@/lib/job-url";
 
 type CaptureJobPayload = {
@@ -102,14 +102,14 @@ export async function POST(request: Request) {
     // Backfill + parse the description only if we now have one and didn't before.
     if (!existingPost.description_text && rawText) {
       patch.description_text = rawText;
-      Object.assign(patch, parseJobPost(title, company, location, rawText), {
+      Object.assign(patch, await parseJobPostSmart(title, company, location, rawText), {
         parsed_at: nowIso,
       });
     }
 
     await supabaseAdmin.from("job_posts").update(patch).eq("id", existingPost.id);
   } else {
-    const parsed = rawText ? parseJobPost(title, company, location, rawText) : null;
+    const parsed = rawText ? await parseJobPostSmart(title, company, location, rawText) : null;
 
     const { data: insertedPost, error: insertError } = await supabaseAdmin
       .from("job_posts")
