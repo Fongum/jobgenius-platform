@@ -238,9 +238,13 @@
       }
 
       otpInput.focus();
-      otpInput.value = otp.code;
-      otpInput.dispatchEvent(new Event("input", { bubbles: true }));
-      otpInput.dispatchEvent(new Event("change", { bubbles: true }));
+      if (dom.setValueOnElement) {
+        dom.setValueOnElement(otpInput, otp.code);
+      } else {
+        otpInput.value = otp.code;
+        otpInput.dispatchEvent(new Event("input", { bubbles: true }));
+        otpInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
       await markOtpUsed(ctx, otp.id);
       setSidebarAction("Filled email OTP");
       sidebarLog("Filled email OTP automatically.", "success");

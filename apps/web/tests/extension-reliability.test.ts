@@ -135,6 +135,99 @@ describe("dom.js — isConfirmationVisible (confined confirmation)", () => {
   });
 });
 
+describe("dom.js — findButtonByText / findClickableByText (scored selection)", () => {
+  const labelOf = (el: HTMLElement | null) =>
+    el ? (el.textContent || el.getAttribute("aria-label") || "").trim() : null;
+
+  it("prefers an exact match over a looser substring match", () => {
+    win.document.body.innerHTML = `
+      <button>Submit feedback form</button>
+      <button>Submit</button>`;
+    const el = JG.findButtonByText(["submit application", "submit"]);
+    expect(labelOf(el)).toBe("Submit");
+  });
+
+  it("respects target priority order (Next chosen over Submit)", () => {
+    // Submit appears first in the DOM; the old first-match logic would pick it.
+    win.document.body.innerHTML = `
+      <button>Submit</button>
+      <button>Next</button>`;
+    const el = JG.findButtonByText(["next", "continue", "submit"]);
+    expect(labelOf(el)).toBe("Next");
+  });
+
+  it("does not click a negative 'Apply filters' control over the real Apply", () => {
+    win.document.body.innerHTML = `
+      <button>Apply filters</button>
+      <button>Apply now</button>`;
+    const el = JG.findButtonByText(["easy apply", "apply now", "apply"]);
+    expect(labelOf(el)).toBe("Apply now");
+  });
+
+  it("returns null when the only match is a negative-label control", () => {
+    win.document.body.innerHTML = `<button>Clear form</button>`;
+    expect(JG.findButtonByText(["next", "continue", "submit"])).toBeNull();
+  });
+
+  it("matches an exact 'save and continue' over its 'continue' substring", () => {
+    win.document.body.innerHTML = `<button>Save and continue</button>`;
+    const el = JG.findButtonByText(["next", "continue", "save and continue"]);
+    expect(labelOf(el)).toBe("Save and continue");
+  });
+
+  it("findClickableByText also considers anchors acting as buttons", () => {
+    win.document.body.innerHTML = `<a href="/apply" role="button">Apply now</a>`;
+    const el = JG.findClickableByText(["apply now", "apply"]);
+    expect(labelOf(el)).toBe("Apply now");
+  });
+
+  it("skips disabled controls", () => {
+    win.document.body.innerHTML = `
+      <button disabled>Submit</button>
+      <button>Submit application</button>`;
+    const el = JG.findButtonByText(["submit application", "submit"]);
+    expect(labelOf(el)).toBe("Submit application");
+  });
+});
+
+describe("dom.js — setValueOnElement (React-safe fill) + clickElement", () => {
+  it("sets an input value via the native setter and fires input+change", () => {
+    win.document.body.innerHTML = `<input aria-label="Email" type="text">`;
+    const input = win.document.querySelector("input") as HTMLInputElement;
+    const events: string[] = [];
+    input.addEventListener("input", () => events.push("input"));
+    input.addEventListener("change", () => events.push("change"));
+
+    const ok = JG.setValueOnElement(input, "ada@analytical.dev");
+    expect(ok).toBe(true);
+    expect(input.value).toBe("ada@analytical.dev");
+    expect(events).toEqual(["input", "change"]);
+  });
+
+  it("selects a matching <select> option by visible text", () => {
+    win.document.body.innerHTML = `
+      <select aria-label="Country">
+        <option value="">Select</option>
+        <option value="us">United States</option>
+        <option value="ca">Canada</option>
+      </select>`;
+    const select = win.document.querySelector("select") as HTMLSelectElement;
+    const ok = JG.setValueOnElement(select, "United States");
+    expect(ok).toBe(true);
+    expect(select.value).toBe("us");
+  });
+
+  it("clickElement dispatches a real click on the target", async () => {
+    win.document.body.innerHTML = `<button>Submit</button>`;
+    const button = win.document.querySelector("button") as HTMLButtonElement;
+    let clicked = 0;
+    button.addEventListener("click", () => (clicked += 1));
+    const dispatched = await JG.clickElement(button);
+    expect(dispatched).toBe(true);
+    expect(clicked).toBe(1);
+  });
+});
+
 describe("dom.js — captureFlowFingerprint (no-progress detection)", () => {
   it("changes when the page advances and is stable for identical DOM", () => {
     const stateA = `<h1>Personal details</h1><input aria-label="Email" required>`;

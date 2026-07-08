@@ -36,7 +36,8 @@
       }
 
       const beforeUrl = window.location.href;
-      applyButton.click();
+      if (dom.clickElement) await dom.clickElement(applyButton);
+      else applyButton.click();
       await dom.sleep(1500);
 
       if (window.location.href !== beforeUrl) return { ok: true };
@@ -83,7 +84,8 @@
         submitButton.textContent?.trim() ||
         submitButton.getAttribute("aria-label") ||
         "Continue";
-      submitButton.click();
+      if (dom.clickElement) await dom.clickElement(submitButton);
+      else submitButton.click();
       await dom.sleep(1500);
       return { ok: true, clickedLabel };
     },

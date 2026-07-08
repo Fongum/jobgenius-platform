@@ -44,56 +44,159 @@
       .trim();
   }
 
-  function isHidden(button) {
-    const style = window.getComputedStyle(button);
-    if (!style) return false;
-    return (
-      style.display === "none" ||
-      style.visibility === "hidden" ||
-      style.opacity === "0"
-    );
-  }
-
   function isDisabled(button) {
     if (button.hasAttribute("disabled")) return true;
     const ariaDisabled = (button.getAttribute("aria-disabled") ?? "").toLowerCase();
     return ariaDisabled === "true";
   }
 
-  function findButtonByText(texts) {
+  function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // Whole-word test so "clear" doesn't match "clearance" and "submit" doesn't
+  // match "resubmit". Falls back to a plain includes for multi-word phrases.
+  function containsWord(label, word) {
+    if (word.includes(" ")) return label.includes(word);
+    try {
+      return new RegExp(`\\b${escapeRegExp(word)}\\b`).test(label);
+    } catch {
+      return label.includes(word);
+    }
+  }
+
+  // Labels that almost never belong to a genuine apply/advance/submit control.
+  // A candidate whose label contains one of these is only accepted when it
+  // exactly equals a requested target — this stops "Apply filters", "Clear
+  // form", "Cancel", "Sign in", etc. from being clicked instead of the real
+  // action button.
+  const NEGATIVE_LABEL_WORDS = [
+    "filter", "filters", "sort", "search", "clear", "reset",
+    "cancel", "previous", "logout", "log out", "sign out",
+    "forgot", "coupon", "promo", "delete", "remove",
+  ];
+
+  // Score how well `label` satisfies the priority-ordered `targets`. Higher is
+  // better. Encodes match quality (exact > starts-with > word-boundary >
+  // loose substring) in the high digits and the target's priority (earlier =
+  // stronger) in the low digits, so an exact match always beats a substring
+  // match and, among equal-quality matches, the earlier-listed target wins.
+  // Returns null when nothing matches (or a negative-label control fails the
+  // exact-match guard).
+  function scoreLabelMatch(label, targets) {
+    let best = null;
+    const hasNegative = NEGATIVE_LABEL_WORDS.some((w) => containsWord(label, w));
+
+    targets.forEach((text, index) => {
+      if (!label.includes(text)) return;
+
+      let quality;
+      if (label === text) quality = 4;
+      else if (label.startsWith(text)) quality = 3;
+      else if (containsWord(label, text)) quality = 2;
+      else quality = 1;
+
+      // A control that also carries a negative word (e.g. "apply filters") is
+      // only trustworthy when the label IS exactly the target we want.
+      if (hasNegative && quality < 4) return;
+
+      const priorityWeight = targets.length - index;
+      const score = quality * 1000 + priorityWeight;
+      if (!best || score > best.score) {
+        best = { score, quality, length: label.length };
+      }
+    });
+
+    return best;
+  }
+
+  function pickBestByText(selector, texts) {
     const targets = normalizeButtonTexts(texts);
     if (targets.length === 0) return null;
 
-    const buttons = Array.from(
-      queryAllDeep(
-        "button, input[type='submit'], input[type='button'], [role='button']"
-      )
-    );
+    const candidates = Array.from(queryAllDeep(selector));
+    let winner = null;
 
-    return buttons.find((button) => {
-      if (isDisabled(button) || isHidden(button)) return false;
-      const label = getButtonLabel(button);
-      if (!label) return false;
-      return targets.some((text) => label.includes(text));
+    candidates.forEach((el) => {
+      if (isDisabled(el) || !isElementVisible(el)) return;
+      const label = getButtonLabel(el);
+      if (!label) return;
+      const match = scoreLabelMatch(label, targets);
+      if (!match) return;
+      if (
+        !winner ||
+        match.score > winner.match.score ||
+        // Tie-break: prefer the more specific (shorter) label.
+        (match.score === winner.match.score && match.length < winner.match.length)
+      ) {
+        winner = { el, match };
+      }
     });
+
+    return winner?.el ?? null;
+  }
+
+  function findButtonByText(texts) {
+    return pickBestByText(
+      "button, input[type='submit'], input[type='button'], [role='button']",
+      texts
+    );
   }
 
   function findClickableByText(texts) {
-    const targets = normalizeButtonTexts(texts);
-    if (targets.length === 0) return null;
-
-    const controls = Array.from(
-      queryAllDeep(
-        "button, input[type='submit'], input[type='button'], [role='button'], a[href], a[role='button']"
-      )
+    return pickBestByText(
+      "button, input[type='submit'], input[type='button'], [role='button'], a[href], a[role='button']",
+      texts
     );
+  }
 
-    return controls.find((control) => {
-      if (isDisabled(control) || isHidden(control)) return false;
-      const label = getButtonLabel(control);
-      if (!label) return false;
-      return targets.some((text) => label.includes(text));
-    });
+  // Robust click: bring the control into view, then fire the full pointer/mouse
+  // sequence some frameworks require (React synthetic handlers, custom widgets
+  // that ignore a bare .click()), and finally call native click() as the
+  // canonical activation. Best-effort — a detached/odd node still falls back to
+  // whatever .click() it has. Returns true if a click was dispatched.
+  async function clickElement(el) {
+    if (!el) return false;
+    try {
+      el.scrollIntoView({ block: "center", inline: "center" });
+    } catch {
+      /* not scrollable / detached — ignore */
+    }
+    // Let any scroll-triggered lazy content settle a beat.
+    await sleep(60);
+
+    const rect = el.getBoundingClientRect?.();
+    const opts = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      ...(rect
+        ? {
+            clientX: Math.floor(rect.left + rect.width / 2),
+            clientY: Math.floor(rect.top + rect.height / 2),
+          }
+        : {}),
+    };
+
+    try {
+      el.dispatchEvent(new PointerEvent("pointerdown", opts));
+    } catch {
+      /* PointerEvent unsupported — mouse events below still cover it */
+    }
+    el.dispatchEvent(new MouseEvent("mousedown", opts));
+    try {
+      el.dispatchEvent(new PointerEvent("pointerup", opts));
+    } catch {
+      /* ignore */
+    }
+    el.dispatchEvent(new MouseEvent("mouseup", opts));
+
+    if (typeof el.click === "function") {
+      el.click();
+    } else {
+      el.dispatchEvent(new MouseEvent("click", opts));
+    }
+    return true;
   }
 
   function isElementVisible(element) {
@@ -457,8 +560,9 @@
       const fillValue = resolveFieldValue(hint, type, profile ?? {}, defaultEmail);
       if (!fillValue) return;
       input.focus();
-      input.value = fillValue;
+      setNativeValue(input, fillValue);
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
       filled += 1;
     });
 
@@ -580,7 +684,7 @@
 
       if (!fillValue) return;
       textarea.focus();
-      textarea.value = fillValue;
+      setNativeValue(textarea, fillValue);
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
       textarea.dispatchEvent(new Event("change", { bubbles: true }));
       filled += 1;
@@ -1239,6 +1343,8 @@
     sleep,
     findButtonByText,
     findClickableByText,
+    clickElement,
+    setValueOnElement,
     hasCaptcha,
     hasSmsOtp,
     hasEmailOtp,

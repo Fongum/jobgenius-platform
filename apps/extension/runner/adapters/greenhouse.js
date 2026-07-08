@@ -16,7 +16,8 @@
     async clickApplyEntry(ctx) {
       const applyButton = dom.findButtonByText(["apply", "apply now"]);
       if (applyButton) {
-        applyButton.click();
+        if (dom.clickElement) await dom.clickElement(applyButton);
+        else applyButton.click();
         await dom.sleep(1200);
       }
       return { ok: true };
@@ -51,7 +52,8 @@
         submitButton.getAttribute("aria-label") ||
         submitButton.getAttribute("value") ||
         "Continue";
-      submitButton.click();
+      if (dom.clickElement) await dom.clickElement(submitButton);
+      else submitButton.click();
       await dom.sleep(1500);
       return { ok: true, clickedLabel };
     },

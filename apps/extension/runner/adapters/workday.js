@@ -21,7 +21,8 @@
         "start application",
       ]);
       if (applyButton) {
-        applyButton.click();
+        if (dom.clickElement) await dom.clickElement(applyButton);
+        else applyButton.click();
         await dom.sleep(1500);
       }
       return { ok: true };
@@ -56,7 +57,8 @@
         nextButton.getAttribute("aria-label") ||
         nextButton.getAttribute("value") ||
         "Continue";
-      nextButton.click();
+      if (dom.clickElement) await dom.clickElement(nextButton);
+      else nextButton.click();
       await dom.sleep(1500);
       return { ok: true, clickedLabel };
     },
