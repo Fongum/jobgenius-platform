@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseAdmin } from "@/lib/auth";
+import { evaluateVelocityForSeekers } from "@/lib/apply/velocity";
 import { resolveJobTargetUrl } from "@/lib/job-url";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -110,6 +111,8 @@ export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
   // their runs and let other ATSes get worked instead.
   const atsAtCapacity = await getAtsAtCapacity();
 
+  // Fetch a batch of candidates (not just one) so a velocity-blocked seeker's
+  // run doesn't stall the whole queue — we skip to the next eligible seeker.
   let nextRunQuery = supabaseServer
     .from("application_runs")
     .select(
@@ -119,7 +122,7 @@ export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
     .is("locked_at", null)
     .order("priority", { ascending: true })   // 1 = highest priority
     .order("updated_at", { ascending: true }) // then oldest within priority
-    .limit(1);
+    .limit(25);
 
   if (!ctx.isRunner) {
     nextRunQuery = nextRunQuery.in("job_seeker_id", assignedIds);
@@ -133,12 +136,33 @@ export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
     nextRunQuery = nextRunQuery.not("ats_type", "in", `(${blocklist})`);
   }
 
-  const { data: nextRun, error: nextRunError } = await nextRunQuery.maybeSingle();
+  const { data: candidates, error: nextRunError } = await nextRunQuery;
   if (nextRunError) {
     return { kind: "error", status: 500, error: "Failed to load next run." };
   }
-  if (!nextRun) {
+  if (!candidates || candidates.length === 0) {
     return { kind: "idle" };
+  }
+
+  // Per-seeker velocity policy (daily cap / pacing / quiet hours, mig 104).
+  // Missing verdict = allowed (fail open — see evaluateVelocityForSeekers).
+  const velocity = await evaluateVelocityForSeekers(
+    candidates.map((c) => c.job_seeker_id as string)
+  );
+  const eligible = candidates.filter(
+    (c) => velocity.get(c.job_seeker_id as string)?.allowed !== false
+  );
+  if (eligible.length === 0) {
+    // Everything queued is throttled right now; report the first reason so
+    // pollers can distinguish "empty queue" from "paced".
+    const firstBlocked = velocity.get(candidates[0].job_seeker_id as string);
+    return {
+      kind: "blocked",
+      reason:
+        firstBlocked && !firstBlocked.allowed
+          ? firstBlocked.reason
+          : "VELOCITY_LIMITED",
+    };
   }
 
   const nowIso = new Date().toISOString();
@@ -146,26 +170,48 @@ export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
   const actor = getActorFromHeaders(ctx.request.headers);
   const lockedBy = `${actor}:${ctx.accountManagerEmail}`;
 
-  const { data: lockedRun, error: lockError } = await supabaseServer
-    .from("application_runs")
-    .update({
-      status: "RUNNING",
-      locked_at: nowIso,
-      locked_by: lockedBy,
-      claim_token: claimToken,
-      updated_at: nowIso,
-    })
-    .eq("id", nextRun.id)
-    .is("locked_at", null)
-    .in("status", ["READY", "RETRYING"])
-    .select(
-      "id, queue_id, ats_type, current_step, attempt_count, max_retries, job_post_id, job_seeker_id, resume_url_used, resume_source"
-    )
-    .single();
+  // Try candidates in order; a lost claim race moves on to the next one
+  // instead of returning idle (the old single-candidate behavior).
+  type LockedRun = {
+    id: string;
+    queue_id: string | null;
+    ats_type: string | null;
+    current_step: string | null;
+    attempt_count: number | null;
+    max_retries: number | null;
+    job_post_id: string;
+    job_seeker_id: string;
+    resume_url_used: string | null;
+    resume_source: string | null;
+  };
+  let lockedRun: LockedRun | null = null;
 
-  // If the conditional update lost the race, treat as idle so the runner
-  // simply polls again instead of double-running someone else's task.
-  if (lockError || !lockedRun) {
+  for (const candidate of eligible.slice(0, 5)) {
+    const { data: locked, error: lockError } = await supabaseServer
+      .from("application_runs")
+      .update({
+        status: "RUNNING",
+        locked_at: nowIso,
+        locked_by: lockedBy,
+        claim_token: claimToken,
+        updated_at: nowIso,
+      })
+      .eq("id", candidate.id)
+      .is("locked_at", null)
+      .in("status", ["READY", "RETRYING"])
+      .select(
+        "id, queue_id, ats_type, current_step, attempt_count, max_retries, job_post_id, job_seeker_id, resume_url_used, resume_source"
+      )
+      .maybeSingle();
+
+    if (!lockError && locked) {
+      lockedRun = locked as unknown as LockedRun;
+      break;
+    }
+  }
+
+  // Every attempted candidate lost its race; poller will simply come back.
+  if (!lockedRun) {
     return { kind: "idle" };
   }
 

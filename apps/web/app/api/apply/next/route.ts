@@ -3,6 +3,7 @@ import {
   getErrorCodeHint,
   getNextStep,
 } from "@/lib/apply";
+import { checkSeekerVelocity } from "@/lib/apply/velocity";
 import { resolveJobTargetUrl } from "@/lib/job-url";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { getActorFromHeaders } from "@/lib/actor";
@@ -321,6 +322,24 @@ export async function GET(request: Request) {
       reason: "MAX_CONCURRENCY",
       limit: 5,
     });
+  }
+
+  // Per-seeker velocity policy (daily cap / pacing / quiet hours, mig 104).
+  // Only on the automatic path: an AM explicitly requesting a specific run
+  // (preferredRunId, e.g. resuming a paused application) is a deliberate
+  // human action and bypasses the throttle.
+  if (!preferredRunId) {
+    const velocity = await checkSeekerVelocity(jobSeekerId);
+    if (!velocity.allowed) {
+      return Response.json({
+        success: false,
+        blocked: true,
+        reason: velocity.reason,
+        ...(velocity.retryAfterMs
+          ? { retry_after_seconds: Math.ceil(velocity.retryAfterMs / 1000) }
+          : {}),
+      });
+    }
   }
 
   let nextRunQuery = supabaseServer
