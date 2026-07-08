@@ -56,8 +56,19 @@ logins** — they can't be checked headlessly.
   running), a **Needs you** table with humanized blockers, and **By ATS** + **By
   seeker** breakdowns scoped to *your* assigned seekers.
 
+## 8. Proof / pause screenshots (v0.4.16+)
+- Run an apply to completion with the application tab **focused**.
+- **Expected:** sidebar logs "Captured page screenshot for the run timeline";
+  the AM seeker detail → screenshots section shows the confirmation page with
+  reason `SUBMIT_PROOF`; pauses (CAPTCHA/required fields) attach a screenshot
+  with the pause reason.
+- With the tab in the background, capture is skipped (sidebar: "Screenshot
+  skipped (TAB_NOT_ACTIVE)") — it must never photograph a different tab.
+
 ## What to watch for (regressions)
 - More than one frame running on a single apply (election bug).
 - Fields left blank on a Workday/web-component form (shadow-DOM regression).
 - A second submission on an already-applied job (dup-apply regression).
 - Instant, robotic fill with no scroll (pacing not applied).
+- A run that fails/hangs because screenshot upload failed (proof capture must
+  stay strictly best-effort).

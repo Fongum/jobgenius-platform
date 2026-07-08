@@ -228,6 +228,29 @@ describe("dom.js — setValueOnElement (React-safe fill) + clickElement", () => 
   });
 });
 
+describe("dom.js — dataUrlToBlob (proof screenshot upload)", () => {
+  it("decodes a base64 data URL preserving MIME type and bytes", () => {
+    // "SGVsbG8=" = "Hello" (5 bytes).
+    const blob = JG.dataUrlToBlob("data:image/png;base64,SGVsbG8=");
+    expect(blob).toBeTruthy();
+    expect(blob.type).toBe("image/png");
+    expect(blob.size).toBe(5);
+  });
+
+  it("handles non-base64 data URLs and defaults the MIME type", () => {
+    const blob = JG.dataUrlToBlob("data:,Hello%20world");
+    expect(blob).toBeTruthy();
+    expect(blob.size).toBe(11);
+    expect(blob.type).toBe("application/octet-stream");
+  });
+
+  it("returns null for malformed input instead of throwing", () => {
+    expect(JG.dataUrlToBlob("not-a-data-url")).toBeNull();
+    expect(JG.dataUrlToBlob("data:image/png;base64,%%%")).toBeNull();
+    expect(JG.dataUrlToBlob(null)).toBeNull();
+  });
+});
+
 describe("dom.js — captureFlowFingerprint (no-progress detection)", () => {
   it("changes when the page advances and is stable for identical DOM", () => {
     const stateA = `<h1>Personal details</h1><input aria-label="Email" required>`;

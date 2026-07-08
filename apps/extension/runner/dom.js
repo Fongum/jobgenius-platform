@@ -769,6 +769,28 @@
     return { ok: true };
   }
 
+  // Decode a data: URL (e.g. from chrome.tabs.captureVisibleTab) into a Blob
+  // suitable for multipart upload. Returns null on malformed input instead of
+  // throwing — proof capture is always best-effort.
+  function dataUrlToBlob(dataUrl) {
+    try {
+      const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(String(dataUrl ?? ""));
+      if (!match) return null;
+      const mimeType = match[1] || "application/octet-stream";
+      if (!match[2]) {
+        return new Blob([decodeURIComponent(match[3])], { type: mimeType });
+      }
+      const binary = atob(match[3]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new Blob([bytes], { type: mimeType });
+    } catch {
+      return null;
+    }
+  }
+
   function cleanLabel(text) {
     return String(text || "").replace(/\s+/g, " ").trim().slice(0, 160);
   }
@@ -1360,6 +1382,7 @@
     uploadResume,
     uploadViaDragDrop,
     findOtpInput,
+    dataUrlToBlob,
     extractRequiredFields,
     requiredFieldsMissing,
     captureFlowFingerprint,

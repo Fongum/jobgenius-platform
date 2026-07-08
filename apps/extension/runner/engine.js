@@ -105,7 +105,70 @@
     );
   }
 
+  // Capture the current tab via the background worker (content scripts can't
+  // call captureVisibleTab) and upload it to /api/apply/screenshot, where it
+  // lands in apply_run_screenshots and shows up in the AM run timeline.
+  // Called with reason "SUBMIT_PROOF" on completion and with the pause reason
+  // on pauses. Strictly best-effort: never throws, never blocks the run
+  // outcome — a missing screenshot must not turn a submitted application
+  // into a failure.
+  async function captureProofScreenshot(ctx, step, reason) {
+    if (!ctx?.apiBaseUrl || !ctx?.runId) return false;
+    try {
+      const capture = await new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage(
+            { type: "CAPTURE_PROOF_SCREENSHOT" },
+            (response) => {
+              // Reading lastError keeps Chrome from logging an unchecked error.
+              if (chrome.runtime.lastError) resolve(null);
+              else resolve(response);
+            }
+          );
+        } catch {
+          resolve(null);
+        }
+      });
+
+      if (!capture?.success || !capture.dataUrl) {
+        if (capture?.reason) {
+          sidebarLog(`Screenshot skipped (${capture.reason}).`, "info");
+        }
+        return false;
+      }
+
+      const blob = dom.dataUrlToBlob?.(capture.dataUrl);
+      if (!blob) return false;
+
+      const form = new FormData();
+      form.append("file", blob, "proof.png");
+      form.append("run_id", ctx.runId);
+      form.append("step", step ?? ctx.currentStep ?? "");
+      form.append("reason", reason ?? "SUBMIT_PROOF");
+      form.append("url", window.location.href);
+
+      const response = await fetch(`${ctx.apiBaseUrl}/api/apply/screenshot`, {
+        method: "POST",
+        headers: {
+          "x-runner": "extension",
+          Authorization: ctx.authToken ? `Bearer ${ctx.authToken}` : "",
+        },
+        body: form,
+      });
+      if (response.ok) {
+        sidebarLog("Captured page screenshot for the run timeline.", "success");
+      }
+      return response.ok;
+    } catch (error) {
+      console.warn("Proof screenshot failed:", error);
+      return false;
+    }
+  }
+
   async function pauseRun(ctx, reason, meta) {
+    // Photograph the page in its stuck state BEFORE reporting the pause, so
+    // the AM triages from a screenshot instead of reconstructing from logs.
+    await captureProofScreenshot(ctx, meta?.step ?? ctx.currentStep, reason);
     const result = await postJson(
       `${ctx.apiBaseUrl}/api/apply/pause`,
       {
@@ -125,6 +188,9 @@
   }
 
   async function completeRun(ctx, note) {
+    // Capture the confirmation page as submission proof while it's still
+    // showing (the tab may navigate away after the run finishes).
+    await captureProofScreenshot(ctx, ctx.currentStep, "SUBMIT_PROOF");
     return postJson(
       `${ctx.apiBaseUrl}/api/apply/complete`,
       {

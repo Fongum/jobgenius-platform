@@ -1409,5 +1409,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  // Proof-of-submission / pause-state screenshot for the runner engine.
+  // captureVisibleTab only exists in the background worker (content scripts
+  // can't call it) and only captures the ACTIVE tab of a window — capturing
+  // an inactive tab would silently photograph whatever tab the user is
+  // looking at instead, so we refuse rather than upload a wrong-page "proof".
+  if (message?.type === "CAPTURE_PROOF_SCREENSHOT") {
+    if (!sender?.tab?.active) {
+      sendResponse({ success: false, reason: "TAB_NOT_ACTIVE" });
+      return false;
+    }
+    try {
+      chrome.tabs.captureVisibleTab(
+        sender.tab.windowId,
+        { format: "png" },
+        (dataUrl) => {
+          if (chrome.runtime.lastError || !dataUrl) {
+            sendResponse({
+              success: false,
+              reason: chrome.runtime.lastError?.message ?? "CAPTURE_FAILED",
+            });
+            return;
+          }
+          sendResponse({ success: true, dataUrl });
+        }
+      );
+      return true; // async sendResponse
+    } catch (error) {
+      sendResponse({ success: false, reason: error?.message ?? "CAPTURE_FAILED" });
+      return false;
+    }
+  }
+
   return false;
 });
