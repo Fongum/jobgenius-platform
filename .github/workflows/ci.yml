@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "codex/**"]
+  workflow_dispatch:
 
 # Cancel superseded runs on the same ref.
 concurrency:
@@ -34,3 +35,78 @@ jobs:
 
       - name: Tests
         run: npm run test
+
+  runners:
+    # The extension and cloud runner ship plain JS with no build step, so a
+    # syntax error in a file the vitest jsdom suites don't load (background.js,
+    # popup.js, worker.js, adapters) would otherwise reach users silently.
+    name: Extension & cloud runner — syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax-check extension + runner JS
+        run: |
+          set -e
+          count=0
+          while IFS= read -r f; do
+            node --check "$f"
+            count=$((count + 1))
+          done < <(find apps/extension apps/runner -name "*.js" -not -path "*/node_modules/*")
+          echo "Checked $count files."
+
+      - name: Validate extension manifest
+        run: node -e "JSON.parse(require('fs').readFileSync('apps/extension/manifest.json', 'utf8')); console.log('manifest.json OK')"
+
+  # Production deploy, gated on the test jobs above. Replaces running
+  # `vercel --prod` from a laptop, which deploys whatever the local working
+  # tree happens to contain with no guarantee tests ever ran.
+  #
+  # Skips (with a notice) until these repo secrets are configured:
+  #   VERCEL_TOKEN       — vercel.com/account/tokens
+  #   VERCEL_ORG_ID      — apps/web/.vercel/project.json after `vercel link`
+  #   VERCEL_PROJECT_ID  — same file
+  deploy:
+    name: Deploy web to Vercel (production)
+    needs: [web, runners]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Vercel secrets
+        id: vercel
+        run: |
+          if [ -n "${{ secrets.VERCEL_TOKEN }}" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Vercel secrets not configured — deploy skipped. Set VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID repo secrets to enable CI deploys and retire local 'vercel --prod'."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.vercel.outputs.configured == 'true'
+        with:
+          node-version: 22
+
+      - name: Pull Vercel production environment
+        if: steps.vercel.outputs.configured == 'true'
+        run: npx vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build
+        if: steps.vercel.outputs.configured == 'true'
+        run: npx vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy
+        if: steps.vercel.outputs.configured == 'true'
+        run: npx vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
