@@ -65,6 +65,16 @@ logins** — they can't be checked headlessly.
 - With the tab in the background, capture is skipped (sidebar: "Screenshot
   skipped (TAB_NOT_ACTIVE)") — it must never photograph a different tab.
 
+## 9. ARIA combobox / typeahead fills (v0.4.17+)
+- Run an autofill on a form with a react-select/Workday-style dropdown
+  (e.g. Greenhouse "Country" typeahead, Ashby select, Workday listbox button).
+- **Expected:** the widget visibly opens, the value is typed, and the matching
+  option is clicked — the selection survives form validation/submit (the old
+  blind `.value` set looked filled but never committed).
+- With a value that matches no option, the field is left EMPTY (popup closed
+  via Escape) and surfaces as a required field for the AM — the driver must
+  never click a wrong option.
+
 ## What to watch for (regressions)
 - More than one frame running on a single apply (election bug).
 - Fields left blank on a Workday/web-component form (shadow-DOM regression).

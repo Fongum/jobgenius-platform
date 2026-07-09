@@ -555,6 +555,11 @@
     inputs.forEach((input) => {
       if (input.value) return;
       if (input.disabled) return;
+      // Never blind-set an ARIA combobox/typeahead: the value LOOKS filled but
+      // the widget never commits it, hiding the miss from extractRequiredFields.
+      // Left empty, it flows to the classify step, whose fillFieldsByLabel
+      // drives it properly via fillComboboxByValue.
+      if (isComboboxControl(input)) return;
       const type = input.getAttribute("type") || "text";
       const hint = getInputHint(input);
       const fillValue = resolveFieldValue(hint, type, profile ?? {}, defaultEmail);
@@ -1219,6 +1224,173 @@
     return true;
   }
 
+  // ─── ARIA combobox / typeahead driver ───────────────────────────────────
+  //
+  // Workday, Ashby, Greenhouse-React, and react-select render dropdowns as
+  // ARIA comboboxes, not native <select>s. Setting .value on their input
+  // *looks* filled but never commits — the widget's internal state (and the
+  // hidden field the ATS actually submits) stays empty. The only reliable
+  // path is to drive them like a user: open, type, wait for the option list
+  // (usually portal-rendered at document root), and click the best match.
+
+  function poll(predicate, timeoutMs = 2500, intervalMs = 120) {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        let result = null;
+        try {
+          result = predicate();
+        } catch {
+          /* predicate errors count as "not yet" */
+        }
+        if (result) return resolve(result);
+        if (Date.now() - startedAt >= timeoutMs) return resolve(null);
+        setTimeout(tick, intervalMs);
+      };
+      tick();
+    });
+  }
+
+  function isComboboxControl(el) {
+    if (!el || typeof el.getAttribute !== "function") return false;
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "select") return false; // native select — handled directly
+    const role = normalizeHint(el.getAttribute("role"));
+    if (role === "combobox") return true; // ARIA 1.2 (role on the input)
+    if (el.getAttribute("aria-autocomplete")) return true;
+    if (normalizeHint(el.getAttribute("aria-haspopup")) === "listbox") return true;
+    // ARIA 1.1: container carries role=combobox, input sits inside it.
+    if (el.closest && el.closest("[role='combobox']")) return true;
+    return false;
+  }
+
+  function getVisibleComboOptions() {
+    return queryAllDeep("[role='option']").filter(
+      (option) => isElementVisible(option) && !isDisabled(option)
+    );
+  }
+
+  const COMBO_PLACEHOLDER_TEXTS = new Set([
+    "select", "choose", "please select", "select an option", "select one",
+    "no results", "no results found", "no options", "loading", "loading...",
+  ]);
+
+  // Match quality between an option's text and the wanted value:
+  //   4 exact | 3 starts-with | 2 contains | 1 option is a whole token of the
+  //   value (e.g. option "senior" for value "senior engineer"). Token-level
+  //   only for the reverse test — substring would make option "US" match
+  //   value "aUStria". 0 = no match; the driver never clicks a 0.
+  function scoreComboOption(optionText, wanted) {
+    const option = normLabel(optionText);
+    const target = normLabel(wanted);
+    if (!option || !target) return 0;
+    if (COMBO_PLACEHOLDER_TEXTS.has(option)) return 0;
+    if (option === target) return 4;
+    if (option.startsWith(target)) return 3;
+    if (option.includes(target)) return 2;
+    if (target.split(" ").includes(option)) return 1;
+    return 0;
+  }
+
+  function pickBestComboOption(options, wanted) {
+    let best = null;
+    options.forEach((option) => {
+      const text = option.textContent || option.getAttribute("aria-label") || "";
+      const score = scoreComboOption(text, wanted);
+      if (score === 0) return;
+      if (
+        !best ||
+        score > best.score ||
+        (score === best.score && text.trim().length < best.length)
+      ) {
+        best = { option, score, length: text.trim().length };
+      }
+    });
+    return best;
+  }
+
+  function dispatchKey(el, key) {
+    const opts = { key, bubbles: true, cancelable: true };
+    try {
+      el.dispatchEvent(new KeyboardEvent("keydown", opts));
+      el.dispatchEvent(new KeyboardEvent("keyup", opts));
+    } catch {
+      /* KeyboardEvent unsupported — skip */
+    }
+  }
+
+  /**
+   * Drive an ARIA combobox/typeahead to `value`. `el` is the combobox input
+   * (or a Workday-style aria-haspopup="listbox" trigger button). Returns true
+   * only when a confidently-matching option was clicked — a wrong dropdown
+   * answer is worse than leaving the field for the AM, so weak matches close
+   * the popup (Escape) and return false.
+   */
+  async function fillComboboxByValue(el, value, opts = {}) {
+    const wanted = String(value ?? "").trim();
+    if (!el || !wanted) return false;
+    const waitMs = Number.isFinite(opts.waitMs) ? opts.waitMs : 2500;
+
+    try {
+      el.scrollIntoView({ block: "center" });
+    } catch {
+      /* ignore */
+    }
+
+    // Open the widget. clickElement fires the full pointer sequence, which
+    // is what react-select/Workday listen for.
+    await clickElement(el);
+    if (typeof el.focus === "function") el.focus();
+
+    // Typeahead path: type the value so the widget filters its options.
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const typeable =
+      (tag === "input" || tag === "textarea") &&
+      !el.readOnly &&
+      normalizeHint(el.getAttribute("type") || "text") === "text";
+    if (typeable) {
+      setNativeValue(el, wanted);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    let options = await poll(() => {
+      const visible = getVisibleComboOptions();
+      return visible.length > 0 ? visible : null;
+    }, waitMs);
+
+    // Some widgets only open on ArrowDown (not click/typing).
+    if (!options) {
+      dispatchKey(el, "ArrowDown");
+      options = await poll(() => {
+        const visible = getVisibleComboOptions();
+        return visible.length > 0 ? visible : null;
+      }, Math.max(300, waitMs / 2));
+    }
+
+    // Typed filter may be too narrow ("United States of Amer…" truncations);
+    // loosen to a prefix and let scoring pick from the wider list.
+    if (!options && typeable && wanted.length > 3) {
+      setNativeValue(el, wanted.slice(0, 3));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      options = await poll(() => {
+        const visible = getVisibleComboOptions();
+        return visible.length > 0 ? visible : null;
+      }, Math.max(300, waitMs / 2));
+    }
+
+    if (!options) return false;
+
+    const best = pickBestComboOption(options, wanted);
+    if (!best) {
+      dispatchKey(el, "Escape");
+      return false;
+    }
+
+    await clickElement(best.option);
+    await sleep(120); // let the widget commit its selection
+    return true;
+  }
+
   function fillRadioByLabel(target, value) {
     const radios = Array.from(queryAllDeep("input[type='radio']"));
     const groups = new Map();
@@ -1246,7 +1418,7 @@
     return false;
   }
 
-  function fillFieldsByLabel(values) {
+  async function fillFieldsByLabel(values) {
     if (!values || typeof values !== "object") return 0;
     const entries = Object.entries(values).filter(
       ([, v]) => v !== null && v !== undefined && String(v).trim()
@@ -1267,9 +1439,19 @@
         return normLabel(getLabelText(i)) === target;
       });
 
-      if (el && setValueOnElement(el, value)) {
-        filled += 1;
-        continue;
+      if (el) {
+        // ARIA comboboxes must be driven (open/type/click option) — a plain
+        // value set never commits to the widget's real state. Fall through to
+        // the plain set only if driving fails (some "comboboxes" are really
+        // free-text inputs with suggestions).
+        if (isComboboxControl(el) && (await fillComboboxByValue(el, value))) {
+          filled += 1;
+          continue;
+        }
+        if (setValueOnElement(el, value)) {
+          filled += 1;
+          continue;
+        }
       }
 
       if (fillRadioByLabel(target, value)) {
@@ -1308,7 +1490,7 @@
       });
       if (!response.ok) return 0;
       const data = await response.json();
-      const filled = fillFieldsByLabel(data?.map ?? {});
+      const filled = await fillFieldsByLabel(data?.map ?? {});
       // Jittered pause so the follow-up submit doesn't fire instantly after a
       // burst of fills (less bot-like, lets validation/JS settle).
       if (filled > 0) await sleep(200 + Math.floor(Math.random() * 350));
@@ -1367,6 +1549,8 @@
     findClickableByText,
     clickElement,
     setValueOnElement,
+    isComboboxControl,
+    fillComboboxByValue,
     hasCaptcha,
     hasSmsOtp,
     hasEmailOtp,

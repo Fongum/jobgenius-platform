@@ -228,6 +228,130 @@ describe("dom.js — setValueOnElement (React-safe fill) + clickElement", () => 
   });
 });
 
+describe("dom.js — ARIA combobox driver", () => {
+  // Minimal react-select-style widget: options render into a portal on
+  // input/click, filtered by the typed value; clicking an option commits it.
+  function mountTypeahead(optionsList: string[]) {
+    win.document.body.innerHTML = `
+      <label for="cb">Country</label>
+      <input id="cb" type="text" role="combobox" aria-autocomplete="list">
+      <div id="portal"></div>`;
+    const input = win.document.getElementById("cb") as HTMLInputElement;
+    const portal = win.document.getElementById("portal") as HTMLElement;
+    let committed = "";
+    const render = () => {
+      const filter = (input.value || "").toLowerCase();
+      portal.innerHTML = "";
+      const listbox = win.document.createElement("div");
+      listbox.setAttribute("role", "listbox");
+      optionsList
+        .filter((o: string) => o.toLowerCase().includes(filter))
+        .forEach((o: string) => {
+          const opt = win.document.createElement("div");
+          opt.setAttribute("role", "option");
+          opt.textContent = o;
+          opt.addEventListener("click", () => {
+            committed = o;
+            input.value = o;
+            portal.innerHTML = "";
+          });
+          listbox.appendChild(opt);
+        });
+      portal.appendChild(listbox);
+    };
+    input.addEventListener("input", render);
+    input.addEventListener("click", render);
+    return { input, getCommitted: () => committed };
+  }
+
+  it("drives a typeahead: open, type, click the matching option", async () => {
+    const { input, getCommitted } = mountTypeahead([
+      "United States",
+      "Canada",
+      "Mexico",
+    ]);
+    const ok = await JG.fillComboboxByValue(input, "Canada", { waitMs: 400 });
+    expect(ok).toBe(true);
+    expect(getCommitted()).toBe("Canada");
+  });
+
+  it("prefers the exact option over a longer partial match", async () => {
+    const { input, getCommitted } = mountTypeahead([
+      "United States Minor Outlying Islands",
+      "United States",
+    ]);
+    const ok = await JG.fillComboboxByValue(input, "United States", { waitMs: 400 });
+    expect(ok).toBe(true);
+    expect(getCommitted()).toBe("United States");
+  });
+
+  it("refuses to click anything when no option matches", async () => {
+    const { getCommitted, input } = mountTypeahead([
+      "United States",
+      "Canada",
+    ]);
+    const ok = await JG.fillComboboxByValue(input, "Wakanda", { waitMs: 150 });
+    expect(ok).toBe(false);
+    expect(getCommitted()).toBe("");
+  });
+
+  it("drives a Workday-style non-typeable listbox trigger", async () => {
+    win.document.body.innerHTML = `
+      <button id="trigger" aria-haspopup="listbox">Select one</button>
+      <div id="portal"></div>`;
+    const trigger = win.document.getElementById("trigger") as HTMLElement;
+    const portal = win.document.getElementById("portal") as HTMLElement;
+    let committed = "";
+    trigger.addEventListener("click", () => {
+      portal.innerHTML = "";
+      ["Yes", "No"].forEach((o) => {
+        const opt = win.document.createElement("div");
+        opt.setAttribute("role", "option");
+        opt.textContent = o;
+        opt.addEventListener("click", () => {
+          committed = o;
+          portal.innerHTML = "";
+        });
+        portal.appendChild(opt);
+      });
+    });
+    const ok = await JG.fillComboboxByValue(trigger, "Yes", { waitMs: 400 });
+    expect(ok).toBe(true);
+    expect(committed).toBe("Yes");
+  });
+
+  it("detects combobox controls (ARIA 1.1 + 1.2) and not plain fields", () => {
+    win.document.body.innerHTML = `
+      <input id="a" role="combobox">
+      <button id="b" aria-haspopup="listbox">Open</button>
+      <div role="combobox"><input id="c"></div>
+      <input id="d" type="text">
+      <select id="e"><option>x</option></select>`;
+    const byId = (id: string) => win.document.getElementById(id);
+    expect(JG.isComboboxControl(byId("a"))).toBe(true);
+    expect(JG.isComboboxControl(byId("b"))).toBe(true);
+    expect(JG.isComboboxControl(byId("c"))).toBe(true);
+    expect(JG.isComboboxControl(byId("d"))).toBe(false);
+    expect(JG.isComboboxControl(byId("e"))).toBe(false);
+  });
+
+  it("fillFieldsByLabel routes labeled comboboxes through the driver", async () => {
+    const { getCommitted } = mountTypeahead(["United States", "Canada"]);
+    const filled = await JG.fillFieldsByLabel({ Country: "Canada" });
+    expect(filled).toBe(1);
+    expect(getCommitted()).toBe("Canada");
+  });
+
+  it("fillTextInputs never blind-sets a combobox input", () => {
+    win.document.body.innerHTML = `
+      <label for="city">City</label>
+      <input id="city" type="text" aria-autocomplete="list">`;
+    const input = win.document.getElementById("city") as HTMLInputElement;
+    JG.fillTextInputs("x@y.com", { location: "Austin, TX" });
+    expect(input.value).toBe(""); // left for the classify → driver path
+  });
+});
+
 describe("dom.js — dataUrlToBlob (proof screenshot upload)", () => {
   it("decodes a base64 data URL preserving MIME type and bytes", () => {
     // "SGVsbG8=" = "Hello" (5 bytes).

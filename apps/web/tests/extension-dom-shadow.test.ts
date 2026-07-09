@@ -62,8 +62,9 @@ describe("extension dom.js — shadow-DOM piercing", () => {
     expect(labels).toContain("Gender");
   });
 
-  it("fillFieldsByLabel fills shadow inputs and matches select options", () => {
-    const filled = JG.fillFieldsByLabel({
+  it("fillFieldsByLabel fills shadow inputs and matches select options", async () => {
+    // fillFieldsByLabel became async in v0.4.17 (combobox driving awaits).
+    const filled = await JG.fillFieldsByLabel({
       Email: "tester@example.com",
       Gender: "Prefer not to answer",
     });

@@ -796,7 +796,9 @@
     mode3Sidebar.setProvideHandler(async (field, value, outcome) => {
       if (!field?.label) return false;
       try {
-        if (dom.fillFieldsByLabel) dom.fillFieldsByLabel({ [field.label]: value });
+        // Await: combobox fields are driven asynchronously (open → type →
+        // click option) and would otherwise race the persist below.
+        if (dom.fillFieldsByLabel) await dom.fillFieldsByLabel({ [field.label]: value });
       } catch (error) {
         console.warn("[JobGenius] manual fill failed:", error);
       }
