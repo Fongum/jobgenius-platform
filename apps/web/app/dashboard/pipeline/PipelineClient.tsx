@@ -918,6 +918,14 @@ function QueueTab({
       const data = await res.json();
       if (!res.ok) {
         setMsg({ type: "error", text: data.error || "Action failed." });
+      } else if (data?.blocked) {
+        // 200 + blocked: the API refused for a policy reason (duplicate,
+        // concurrency, velocity) — not a success.
+        const text =
+          data.reason === "DUPLICATE_APPLICATION"
+            ? `Skipped: already applied to ${data.duplicate_job?.company ?? "this company"} — ${data.duplicate_job?.title ?? "same role"} recently.`
+            : `Blocked: ${data.reason ?? "policy limit"}.`;
+        setMsg({ type: "error", text });
       } else {
         setMsg({ type: "success", text: "Action completed." });
       }

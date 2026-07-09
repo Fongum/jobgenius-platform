@@ -1,6 +1,10 @@
 import { randomUUID } from "crypto";
 import { getActorFromHeaders } from "@/lib/actor";
 import { supabaseAdmin } from "@/lib/auth";
+import {
+  cancelDuplicateRun,
+  findRecentDuplicateRun,
+} from "@/lib/apply/duplicate-check";
 import { evaluateVelocityForSeekers } from "@/lib/apply/velocity";
 import { resolveJobTargetUrl } from "@/lib/job-url";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -204,10 +208,29 @@ export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
       )
       .maybeSingle();
 
-    if (!lockError && locked) {
-      lockedRun = locked as unknown as LockedRun;
-      break;
+    if (lockError || !locked) {
+      continue; // lost the race — next candidate
     }
+
+    // Fuzzy duplicate gate: reposted jobs get a fresh job_post_id, so the
+    // exact /start guard misses them. If this seeker already applied (or is
+    // applying) to the same normalized (company, title) in the last 30 days
+    // — on any channel — cancel this run instead of double-applying.
+    const duplicate = await findRecentDuplicateRun(
+      locked.job_seeker_id as string,
+      locked.job_post_id as string
+    );
+    if (duplicate) {
+      await cancelDuplicateRun(
+        { id: locked.id as string, queue_id: locked.queue_id as string | null },
+        duplicate,
+        actor
+      );
+      continue; // next candidate
+    }
+
+    lockedRun = locked as unknown as LockedRun;
+    break;
   }
 
   // Every attempted candidate lost its race; poller will simply come back.

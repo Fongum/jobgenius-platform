@@ -1,4 +1,5 @@
 import { detectAtsType, getInitialStep } from "@/lib/apply";
+import { findRecentDuplicateRun } from "@/lib/apply/duplicate-check";
 import { getActorFromHeaders } from "@/lib/actor";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -136,6 +137,24 @@ export async function POST(request: Request) {
       { success: false, error: "Job post not found." },
       { status: 404 }
     );
+  }
+
+  // Fuzzy duplicate gate: the seeker may already have applied to this same
+  // opening under a different job_post_id (repost / cross-source dupe). The
+  // queue-item existingRun check above only catches the exact same item.
+  const duplicate = await findRecentDuplicateRun(
+    queueItem.job_seeker_id,
+    queueItem.job_post_id
+  );
+  if (duplicate) {
+    return Response.json({
+      success: false,
+      blocked: true,
+      reason: "DUPLICATE_APPLICATION",
+      duplicate_run_id: duplicate.duplicate_run_id,
+      duplicate_status: duplicate.duplicate_status,
+      duplicate_job: { company: duplicate.company, title: duplicate.title },
+    });
   }
 
   const atsType = detectAtsType(jobPost.source, jobPost.url);

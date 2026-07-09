@@ -898,6 +898,17 @@ async function startRunForQueue(queueId) {
     if (data?.blocked && data?.reason === "MAX_CONCURRENCY") {
       throw new Error("Runner is at max concurrency. Try again in a moment.");
     }
+    if (data?.blocked && data?.reason === "DUPLICATE_APPLICATION") {
+      const job = data.duplicate_job;
+      throw new Error(
+        job?.company
+          ? `Already applied to ${job.company} — ${job.title ?? "same role"} recently. Skipped to avoid a duplicate.`
+          : "Already applied to this job recently. Skipped to avoid a duplicate."
+      );
+    }
+    if (data?.blocked) {
+      throw new Error(`Blocked: ${data.reason ?? "policy limit"}.`);
+    }
     throw new Error(data?.error || "Failed to start run.");
   }
 

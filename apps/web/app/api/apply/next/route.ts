@@ -3,6 +3,10 @@ import {
   getErrorCodeHint,
   getNextStep,
 } from "@/lib/apply";
+import {
+  cancelDuplicateRun,
+  findRecentDuplicateRun,
+} from "@/lib/apply/duplicate-check";
 import { checkSeekerVelocity } from "@/lib/apply/velocity";
 import { resolveJobTargetUrl } from "@/lib/job-url";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
@@ -399,6 +403,30 @@ export async function GET(request: Request) {
 
   if (lockError || !lockedRun) {
     return Response.json({ success: true, status: "IDLE" });
+  }
+
+  // Fuzzy duplicate gate (reposted job under a new job_post_id). Cancel the
+  // run and tell the poller why; the next poll simply claims the next run.
+  // Skipped for explicit preferredRunId requests — an AM resuming a specific
+  // run has already made the call.
+  if (!preferredRunId) {
+    const duplicate = await findRecentDuplicateRun(
+      jobSeekerId,
+      lockedRun.job_post_id as string
+    );
+    if (duplicate) {
+      await cancelDuplicateRun(
+        { id: lockedRun.id, queue_id: lockedRun.queue_id },
+        duplicate,
+        actor
+      );
+      return Response.json({
+        success: false,
+        blocked: true,
+        reason: "DUPLICATE_APPLICATION",
+        duplicate_run_id: duplicate.duplicate_run_id,
+      });
+    }
   }
 
   if (lockedRun.queue_id) {
