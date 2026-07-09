@@ -67,3 +67,49 @@ Notes:
 - The helper saves the job, queues it, and creates or retries a run.
 - Leave `PLAYWRIGHT_SUBMIT_ENABLED` unset or `false` for a safe pre-submit verification.
 - Set `PLAYWRIGHT_SUBMIT_ENABLED=true` only when you want the runner to attempt a real submission.
+
+## Two entrypoints (IMPORTANT)
+
+- `npm start` → `index.js` → **worker.js**: the legacy worker Fly currently
+  runs. Greenhouse only; any other ATS pauses `UNSUPPORTED_ATS`.
+- `npm run start:engine` → **src/index.js**: the full engine stack — all
+  adapters (LinkedIn, Greenhouse, Lever, SmartRecruiters, hosted ATSes,
+  deep Workday), storage-state reuse, screening-answer classify, captcha
+  service, failure screenshots, watchdog, circuit breakers, per-seeker
+  hourly caps.
+
+The Workday support below lives in the engine stack. To serve Workday runs
+in production, switch the Fly process to `npm run start:engine` (after a
+staging soak) or run a second machine with that command.
+
+## Workday deep adapter (src/adapters/workday.js)
+
+Workday requires an account per (seeker, tenant). The adapter:
+1. Clicks Apply → "Apply Manually" (deterministic; skips resume-parse).
+2. On the tenant auth wall, fetches per-tenant credentials from
+   `POST /api/apply/ats-account` (created on first use: email = seeker
+   email so Workday's verification codes flow through the existing
+   `/api/otp` pipeline; password generated + stored AES-256-GCM-encrypted
+   under `ATS_ACCOUNT_ENCRYPTION_KEY` — set it on BOTH the web app and
+   runner environments' API). Signs in, or creates the account, with one
+   crossover attempt; on hard failure marks the row LOGIN_FAILED and
+   pauses `REAUTH_REQUIRED`.
+3. Fills via stable `data-automation-id`s first (legalNameSection_*,
+   addressSection_*, phone-number), then the generic hint pass, then
+   deterministic listboxes (country/state/phone type) via the ARIA
+   combobox driver. Remaining dropdowns are reported by
+   `extractRequiredFields` as `combobox` fields and answered by the
+   classify step (fillClassifiedFields now drives ARIA widgets too).
+4. Advances the wizard via `bottom-navigation-next-button`, capturing a
+   per-page screenshot before each Next, and pauses with the exact
+   Workday error-banner text when validation rejects the page.
+5. Confirms only on Workday success copy with no wizard Next button left.
+
+### Staging verification (acceptance: 3 real postings E2E)
+1. Set `ATS_ACCOUNT_ENCRYPTION_KEY` (web + confirm `/api/apply/ats-account`
+   returns credentials for a test seeker) and run migration 105.
+2. Queue 3 public `*.myworkdayjobs.com` postings for a test seeker.
+3. `RUNNER_DRY_RUN=1 npm run start:engine` first — expect runs to pause
+   `DRY_RUN_CONFIRM_SUBMIT` on the Review page with per-step screenshots
+   in the run timeline; then rerun without dry-run to submit.
+4. Success rate appears per-ATS in /dashboard/admin/adapter-health.

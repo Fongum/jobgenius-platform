@@ -101,6 +101,44 @@ jobs:
       - name: Run fixture tests
         run: npx playwright test
 
+  # Cloud-runner Workday adapter driven through a fixture tenant flow
+  # (auth wall + account creation, automation-id fills, async listbox,
+  # error-banner validation, wizard traversal) in headless Chromium.
+  runner-browser:
+    name: Cloud runner — Workday fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    defaults:
+      run:
+        working-directory: apps/runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/runner/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -e "console.log(require('playwright/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-runner-chromium-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Workday fixture
+        run: npm run test:workday
+
   # Production deploy, gated on the test jobs above. Replaces running
   # `vercel --prod` from a laptop, which deploys whatever the local working
   # tree happens to contain with no guarantee tests ever ran.
@@ -111,7 +149,7 @@ jobs:
   #   VERCEL_PROJECT_ID  — same file
   deploy:
     name: Deploy web to Vercel (production)
-    needs: [web, runners, extension-browser]
+    needs: [web, runners, extension-browser, runner-browser]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     defaults:

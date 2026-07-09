@@ -181,6 +181,61 @@ async function fetchScreeningAnswers(jobSeekerId) {
   }
 }
 
+// Per-tenant ATS credentials for account-gated ATSes (Workday). The server
+// creates them on first use (email = seeker email, generated password) and
+// stores them encrypted; see /api/apply/ats-account. Returns null when the
+// endpoint is unavailable — the adapter then pauses REAUTH_REQUIRED instead
+// of guessing.
+async function fetchAtsAccount(jobSeekerId, targetUrl, atsType) {
+  if (!jobSeekerId || !targetUrl) return null;
+  let host = "";
+  try {
+    host = new URL(targetUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  try {
+    const result = await postJson(
+      `${API_BASE_URL}/api/apply/ats-account`,
+      { job_seeker_id: jobSeekerId, host, ats_type: atsType },
+      RUNNER_AUTH_TOKEN,
+      null,
+      RUNNER_ID
+    );
+    const account = result?.account;
+    if (!account?.email || !account?.password) return null;
+    return {
+      email: account.email,
+      password: account.password,
+      status: account.status ?? "ACTIVE",
+      created: Boolean(account.created),
+      host,
+      // Adapter callback: flag the stored credential as broken so the AM
+      // resets it rather than the runner retrying a dead password forever.
+      markFailed: async () => {
+        try {
+          await postJson(
+            `${API_BASE_URL}/api/apply/ats-account`,
+            { job_seeker_id: jobSeekerId, host, mark_failed: true },
+            RUNNER_AUTH_TOKEN,
+            null,
+            RUNNER_ID
+          );
+        } catch {
+          /* best effort */
+        }
+      },
+    };
+  } catch (error) {
+    logLine({
+      level: "WARN",
+      step: "ATS_ACCOUNT",
+      msg: `Failed to fetch ATS account: ${error?.message ?? "unknown"}`,
+    });
+    return null;
+  }
+}
+
 async function checkSessionHealth(jobSeekerId, atsType, storageState) {
   if (!storageState || atsType !== "LINKEDIN") return true;
   // Check that LinkedIn cookies haven't expired
@@ -676,6 +731,13 @@ async function executeRun(run) {
 
     await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
     const adapter = getAdapter(run.ats_type);
+
+    // Account-gated ATSes need per-tenant credentials before the wizard.
+    const atsAccount =
+      run.ats_type === "WORKDAY"
+        ? await fetchAtsAccount(run.job_seeker_id, targetUrl, run.ats_type)
+        : null;
+
     await runPlan({
       apiBaseUrl: API_BASE_URL,
       authToken: RUNNER_AUTH_TOKEN,
@@ -694,6 +756,7 @@ async function executeRun(run) {
       profile: run.profile ?? null,
       screeningAnswers,
       job: run.job ?? null,
+      atsAccount,
     });
 
     if (reauthOverride) {

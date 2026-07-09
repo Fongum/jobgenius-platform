@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
+    "start:engine": "node src/index.js",
+    "test:workday": "node tests/workday-fixture.mjs",
     "dev": "node --watch index.js",
     "check:auth": "node check-auth.js",
     "prepare:greenhouse": "node prepare-greenhouse-verification.js"

@@ -647,3 +647,184 @@ export async function clickElementHandle(handle, timeoutMs = 12000) {
     }
   }
 }
+
+// ─── data-automation-id helpers (Workday et al.) ──────────────────────────
+// Workday's DOM is riddled with stable data-automation-id attributes; they
+// survive tenant theming far better than text or CSS classes.
+
+export async function findByAutomationId(page, ids) {
+  for (const id of Array.isArray(ids) ? ids : [ids]) {
+    const handles = await page.$$(`[data-automation-id='${id}']`);
+    for (const handle of handles) {
+      const state = await readControlState(handle);
+      if (state.visible && !state.disabled) return handle;
+    }
+  }
+  return null;
+}
+
+// ─── ARIA combobox / listbox driver ────────────────────────────────────────
+// Playwright port of the extension's fillComboboxByValue (runner/dom.js):
+// Workday/Ashby/react-select dropdowns are ARIA widgets, not <select>s —
+// setting the input's value never commits; they must be driven like a user:
+// open, (type), wait for the portal-rendered [role='option'] list, click the
+// best-scoring match. Never clicks a weak match: a wrong dropdown answer is
+// worse than pausing for the AM.
+
+const COMBO_PLACEHOLDER_TEXTS = new Set([
+  "select", "choose", "please select", "select an option", "select one",
+  "no results", "no results found", "no options", "loading", "loading...",
+]);
+
+function normalizeComboText(value) {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// 4 exact | 3 starts-with | 2 contains | 1 option is a whole token of the
+// value. Token-level on the reverse test so option "US" can't match "aUStria".
+export function scoreComboOption(optionText, wanted) {
+  const option = normalizeComboText(optionText);
+  const target = normalizeComboText(wanted);
+  if (!option || !target) return 0;
+  if (COMBO_PLACEHOLDER_TEXTS.has(option)) return 0;
+  if (option === target) return 4;
+  if (option.startsWith(target)) return 3;
+  if (option.includes(target)) return 2;
+  if (target.split(" ").includes(option)) return 1;
+  return 0;
+}
+
+async function collectVisibleOptions(page) {
+  const handles = await page.$$("[role='option']");
+  const options = [];
+  for (const handle of handles) {
+    const state = await readControlState(handle);
+    if (state.visible && !state.disabled && state.label) {
+      options.push({ handle, label: state.label });
+    }
+  }
+  return options;
+}
+
+export async function fillComboboxByValue(page, handle, value, opts = {}) {
+  const wanted = String(value ?? "").trim();
+  if (!handle || !wanted) return false;
+  const waitMs = Number.isFinite(opts.waitMs) ? opts.waitMs : 5000;
+
+  await handle.scrollIntoViewIfNeeded().catch(() => {});
+  await clickElementHandle(handle, 5000);
+
+  const typeable = await handle
+    .evaluate((el) => {
+      const tag = el.tagName.toLowerCase();
+      const type = (el.getAttribute("type") || "text").toLowerCase();
+      return (tag === "input" || tag === "textarea") && !el.readOnly && type === "text";
+    })
+    .catch(() => false);
+  if (typeable) {
+    await handle.fill(wanted).catch(() => {});
+  }
+
+  const pollForOptions = async (deadlineMs) => {
+    const deadline = Date.now() + deadlineMs;
+    for (;;) {
+      const found = await collectVisibleOptions(page);
+      if (found.length > 0) return found;
+      if (Date.now() >= deadline) return [];
+      await page.waitForTimeout(150);
+    }
+  };
+
+  let options = await pollForOptions(waitMs);
+
+  // Some widgets only open on ArrowDown.
+  if (options.length === 0) {
+    await handle.press("ArrowDown").catch(() => {});
+    options = await pollForOptions(Math.max(500, waitMs / 2));
+  }
+
+  // Typed filter may be too narrow — loosen to a prefix, let scoring decide.
+  if (options.length === 0 && typeable && wanted.length > 3) {
+    await handle.fill(wanted.slice(0, 3)).catch(() => {});
+    options = await pollForOptions(Math.max(500, waitMs / 2));
+  }
+
+  if (options.length === 0) {
+    await page.keyboard.press("Escape").catch(() => {});
+    return false;
+  }
+
+  let best = null;
+  for (const option of options) {
+    const score = scoreComboOption(option.label, wanted);
+    if (score === 0) continue;
+    if (
+      !best ||
+      score > best.score ||
+      (score === best.score && option.label.length < best.label.length)
+    ) {
+      best = { ...option, score };
+    }
+  }
+
+  if (!best) {
+    await page.keyboard.press("Escape").catch(() => {});
+    return false;
+  }
+
+  await clickElementHandle(best.handle, 5000);
+  await page.waitForTimeout(200); // let the widget commit
+  return true;
+}
+
+/**
+ * Find an unfilled ARIA combobox / listbox trigger whose resolved label
+ * matches `label` (both-way includes). Used by the engine's classified-fill
+ * fallback so LLM/screening answers can land on widget dropdowns, not just
+ * native inputs/selects.
+ */
+export async function findComboboxByLabel(page, label) {
+  const target = normalizeComboText(label);
+  if (!target) return null;
+
+  const handles = await page.$$(
+    "[role='combobox'], [aria-haspopup='listbox'], input[aria-autocomplete]"
+  );
+  for (const handle of handles) {
+    const state = await readControlState(handle);
+    if (!state.visible || state.disabled) continue;
+    const resolved = await handle
+      .evaluate((el) => {
+        const norm = (v) => (v ?? "").toString().toLowerCase().replace(/\s+/g, " ").trim();
+        const labelledBy = el.getAttribute("aria-labelledby");
+        if (labelledBy) {
+          const parts = labelledBy
+            .split(/\s+/)
+            .map((ref) => document.getElementById(ref)?.textContent ?? "")
+            .filter(Boolean);
+          if (parts.length) return norm(parts.join(" "));
+        }
+        const aria = el.getAttribute("aria-label");
+        if (aria) return norm(aria);
+        const id = el.getAttribute("id");
+        if (id) {
+          const forLabel = document.querySelector(`label[for='${id}']`);
+          if (forLabel?.textContent) return norm(forLabel.textContent);
+        }
+        const wrapped = el.closest("label");
+        if (wrapped?.textContent) return norm(wrapped.textContent);
+        // Workday: the field container carries the automation id; a sibling
+        // label usually precedes the trigger inside it.
+        const container = el.closest("[data-automation-id]");
+        const sibling = container?.querySelector("label");
+        if (sibling?.textContent) return norm(sibling.textContent);
+        return "";
+      })
+      .catch(() => "");
+    if (!resolved) continue;
+    if (resolved === target || resolved.includes(target) || target.includes(resolved)) {
+      return handle;
+    }
+  }
+  return null;
+}

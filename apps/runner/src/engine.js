@@ -1,5 +1,10 @@
 import { hasCaptcha, hasEmailOtp, hasSmsOtp } from "./signals.js";
-import { extractRequiredFields, uploadResume } from "./adapters/base.js";
+import {
+  extractRequiredFields,
+  uploadResume,
+  fillComboboxByValue,
+  findComboboxByLabel,
+} from "./adapters/base.js";
 import { logLine } from "./logger.js";
 import {
   sendEvent,
@@ -429,7 +434,30 @@ async function fillClassifiedFields(page, classifiedValues) {
       );
 
       const element = input.asElement();
-      if (!element) continue;
+      if (!element) {
+        // No native input/select matched — the field may be an ARIA
+        // combobox/listbox widget (Workday, Ashby, react-select), which must
+        // be driven open→option-click rather than value-set.
+        const combo = await findComboboxByLabel(page, label);
+        if (combo) await fillComboboxByValue(page, combo, value);
+        continue;
+      }
+
+      const isComboInput = await element
+        .evaluate((el) => {
+          const role = (el.getAttribute("role") || "").toLowerCase();
+          return (
+            role === "combobox" ||
+            Boolean(el.getAttribute("aria-autocomplete")) ||
+            (el.getAttribute("aria-haspopup") || "").toLowerCase() === "listbox" ||
+            Boolean(el.closest("[role='combobox']"))
+          );
+        })
+        .catch(() => false);
+      if (isComboInput) {
+        // fill() alone LOOKS filled but never commits to the widget's state.
+        if (await fillComboboxByValue(page, element, value)) continue;
+      }
 
       const tagName = await element.evaluate((el) => el.tagName.toLowerCase());
       if (tagName === "select") {
@@ -463,6 +491,7 @@ export async function runPlan({
   profile,
   screeningAnswers,
   job,
+  atsAccount,
 }) {
   void context;
 
@@ -479,6 +508,20 @@ export async function runPlan({
     profile: profile ?? null,
     screeningAnswers: screeningAnswers ?? [],
     job: job ?? run.job ?? null,
+    // Per-tenant ATS credentials (Workday): { email, password, created,
+    // markFailed() }. Fetched by the worker from /api/apply/ats-account.
+    atsAccount: atsAccount ?? null,
+    // Bound snapshot helper so adapters can capture per-wizard-page evidence
+    // (Workday's multi-step flow) without holding API credentials themselves.
+    captureSnapshot: (step, reason) =>
+      captureFailureScreenshot(page, {
+        runId: run.run_id,
+        step: step ?? "SNAPSHOT",
+        reason: reason ?? "STEP_SNAPSHOT",
+        apiBaseUrl,
+        authToken,
+        runnerId,
+      }).catch(() => null),
     automation: {
       maxAutoAdvanceSteps: toBoundedInt(
         automation.max_auto_advance_steps,
