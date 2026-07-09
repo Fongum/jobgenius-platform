@@ -86,6 +86,17 @@ logins** — they can't be checked headlessly.
 - A Workday "Create Account" step must NOT trigger SESSION_EXPIRED (account
   creation is part of the normal flow).
 
+## 11. Indeed adapter (v0.4.19+)
+- Launch a run on an indeed.com job with **Indeed Apply** (native).
+- **Expected:** the extension clicks "Apply now", the tab navigates to
+  smartapply.indeed.com, and the runner AUTOMATICALLY resumes there
+  (same-tab rearm) — fills the contact step, advances with Continue, and
+  pauses at DRY_RUN_CONFIRM_SUBMIT (dry run) or submits.
+- On an "Apply on company site" job, the employer's ATS opens in a new tab
+  and the run hands off to that tab (sidebar: "Transferred").
+- "Apply on company site" must never be clicked as if it were the native
+  button (it starts with "apply" — the adapter reroutes it).
+
 ## What to watch for (regressions)
 - More than one frame running on a single apply (election bug).
 - Fields left blank on a Workday/web-component form (shadow-DOM regression).

@@ -104,6 +104,7 @@ const RUNNER_SCRIPT_FILES = [
   "runner/adapters/workday.js",
   "runner/adapters/lever.js",
   "runner/adapters/smartrecruiters.js",
+  "runner/adapters/indeed.js",
   "runner/adapters/hosted-ats.js",
   "runner/adapters/generic.js",
   "runner/engine.js",
@@ -477,6 +478,38 @@ async function waitForTabComplete(tabId, timeoutMs = 20000) {
     await sleep(200);
   }
   return chrome.tabs.get(tabId);
+}
+
+// Wait for `tabId` to navigate away from `startUrl` (the arming page), then
+// restart the runner in the new document. If no navigation happens within the
+// window, the original content-script instance is still alive and driving —
+// re-injecting would double-run the plan, so we do nothing.
+async function rearmRunnerAfterNavigation(tabId, startUrl, message) {
+  const deadline = Date.now() + 20000;
+  let navigated = false;
+  while (Date.now() < deadline) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) return; // tab closed (child-tab flow or user action)
+    if (tab.url && tab.url !== startUrl) {
+      navigated = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (!navigated) return;
+
+  await startRunnerInExistingTab(tabId, {
+    job: message.job ?? null,
+    runId: message.runId,
+    apiBaseUrl: message.apiBaseUrl,
+    authToken: message.authToken,
+    resumeUrl: message.resumeUrl ?? null,
+    claimToken: message.claimToken ?? null,
+    jobSeekerId: message.jobSeekerId ?? message.activeSeekerId ?? null,
+    activeSeekerId: message.activeSeekerId ?? null,
+    dryRun: Boolean(message.dryRun),
+    profile: message.profile ?? null,
+  });
 }
 
 async function startRunnerInExistingTab(tabId, payload) {
@@ -1372,6 +1405,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         })
       );
     return true;
+  }
+
+  // Same-tab navigation rearm (Indeed native apply → smartapply.indeed.com):
+  // the content script arms us BEFORE clicking a button whose navigation will
+  // destroy it; we watch the tab, and once it lands on the new page we
+  // re-inject the runner so the plan continues there.
+  if (message?.type === "RUNNER_REARM_SAME_TAB") {
+    const sourceTabId = sender?.tab?.id;
+    const startUrl = sender?.tab?.url ?? "";
+    if (!sourceTabId) {
+      sendResponse({ success: false, error: "Missing source tab." });
+      return false;
+    }
+    // Ack immediately — the caller is about to click and may die.
+    sendResponse({ success: true });
+    rearmRunnerAfterNavigation(sourceTabId, startUrl, message).catch((error) =>
+      console.warn("Same-tab runner rearm failed:", error)
+    );
+    return false;
   }
 
   if (message?.type === "RUNNER_HANDOFF_TO_CHILD_TAB") {

@@ -11,6 +11,9 @@ const {
   LEVER_FIXTURE,
   WORKDAY_FIXTURE,
   LINKEDIN_FIXTURE,
+  INDEED_JOB_FIXTURE,
+  INDEED_EXTERNAL_ONLY_FIXTURE,
+  INDEED_SMARTAPPLY_FIXTURE,
   PROFILE,
 } = require("./helpers");
 
@@ -156,6 +159,104 @@ test.describe("Workday-style widgets", () => {
       window.JobGeniusDom.hasLoginWall("https://acme.wd5.myworkdayjobs.com/careers/job/123")
     );
     expect(wall).toBe(false);
+  });
+});
+
+test.describe("Indeed adapter", () => {
+  test("native Indeed Apply wins over decoys, arming the rearm BEFORE the click", async ({ page }) => {
+    await page.setContent(INDEED_JOB_FIXTURE);
+    await loadRunner(page, ["generic", "indeed"]);
+
+    const result = await page.evaluate(async () => {
+      window.__armedAt = 0;
+      const adapter = window.JobGeniusAdapterRegistry.getAdapter("INDEED");
+      const outcome = await adapter.clickApplyEntry({
+        rearmAfterNavigation: async () => {
+          window.__armedAt = Date.now();
+        },
+      });
+      return {
+        ok: outcome.ok,
+        armedAt: window.__armedAt,
+        nativeClickedAt: window.__nativeClickedAt,
+        externalClickedAt: window.__externalClickedAt,
+      };
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.nativeClickedAt).toBeGreaterThan(0);
+    expect(result.externalClickedAt).toBe(0); // external is the fallback, not a co-click
+    // The background must be armed before the navigation-triggering click.
+    expect(result.armedAt).toBeGreaterThan(0);
+    expect(result.armedAt).toBeLessThanOrEqual(result.nativeClickedAt);
+  });
+
+  test("falls back to the external company-site branch with tab handoff", async ({ page }) => {
+    await page.setContent(INDEED_EXTERNAL_ONLY_FIXTURE);
+    await loadRunner(page, ["generic", "indeed"]);
+
+    const result = await page.evaluate(async () => {
+      let handoffRequested = false;
+      const adapter = window.JobGeniusAdapterRegistry.getAdapter("INDEED");
+      const outcome = await adapter.clickApplyEntry({
+        handoffToNewTab: async () => {
+          handoffRequested = true;
+          return true;
+        },
+      });
+      return {
+        ok: outcome.ok,
+        handoff: Boolean(outcome.handoff),
+        handoffRequested,
+        externalClickedAt: window.__externalClickedAt,
+      };
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.externalClickedAt).toBeGreaterThan(0);
+    expect(result.handoffRequested).toBe(true);
+    expect(result.handoff).toBe(true);
+  });
+
+  test("SmartApply stepper on the real hostname: detect → fill → continue → submit → confirm", async ({ page }) => {
+    await page.route("https://smartapply.indeed.com/**", (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: INDEED_SMARTAPPLY_FIXTURE })
+    );
+    await page.goto("https://smartapply.indeed.com/beta/indeedapply/form/contact-info");
+    await loadRunner(page, ["generic", "indeed"]);
+
+    const step1 = await page.evaluate(async (profile) => {
+      const adapter = window.JobGeniusAdapterRegistry.getAdapter("INDEED");
+      const detected = adapter.detect();
+      const entry = await adapter.clickApplyEntry({}); // already in the form
+      const fill = await adapter.fillKnownFields({
+        defaultEmail: "fallback@x.com",
+        profile,
+      });
+      const missing = adapter.extractRequiredFields().length;
+      const advance = await adapter.submit({ dryRun: false, buttonHints: [] });
+      return { detected, entryOk: entry.ok, fillOk: fill.ok, missing, advance };
+    }, PROFILE);
+
+    expect(step1.detected).toBe(true);
+    expect(step1.entryOk).toBe(true);
+    expect(step1.fillOk).toBe(true);
+    expect(step1.missing).toBe(0);
+    expect(step1.advance.ok).toBe(true);
+    expect(step1.advance.clickedLabel).toBe("Continue");
+
+    await expect(page.locator("#step-review")).toBeVisible();
+
+    const step2 = await page.evaluate(async () => {
+      const adapter = window.JobGeniusAdapterRegistry.getAdapter("INDEED");
+      const submit = await adapter.submit({ dryRun: false, buttonHints: [] });
+      const confirmed = adapter.confirm();
+      return { submitOk: submit.ok, clickedLabel: submit.clickedLabel, confirmed };
+    });
+
+    expect(step2.submitOk).toBe(true);
+    expect(step2.clickedLabel).toBe("Submit your application");
+    expect(step2.confirmed).toBe(true);
   });
 });
 

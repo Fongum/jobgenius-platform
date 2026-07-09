@@ -282,6 +282,32 @@
             (response) => resolve(Boolean(response?.success))
           );
         }),
+      // Arm the background to restart the runner in THIS tab after a
+      // full-page navigation the adapter is about to trigger (e.g. Indeed's
+      // native apply → smartapply.indeed.com). Must be awaited BEFORE the
+      // click — this content-script instance dies with the navigation.
+      rearmAfterNavigation: () =>
+        new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            {
+              type: "RUNNER_REARM_SAME_TAB",
+              runId: message.runId,
+              claimToken: message.claimToken,
+              apiBaseUrl: message.apiBaseUrl,
+              authToken: message.authToken,
+              jobSeekerId: message.jobSeekerId ?? message.activeSeekerId ?? null,
+              activeSeekerId: message.activeSeekerId,
+              job: message.job ?? null,
+              resumeUrl: message.resumeUrl ?? null,
+              profile: message.profile ?? null,
+              dryRun: Boolean(message.dryRun),
+            },
+            (response) => {
+              if (chrome.runtime.lastError) resolve(false);
+              else resolve(Boolean(response?.success));
+            }
+          );
+        }),
     };
 
     sidebar?.show?.({

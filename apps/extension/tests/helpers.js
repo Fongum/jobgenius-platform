@@ -174,6 +174,75 @@ const LINKEDIN_FIXTURE = `
   });
 </script>`;
 
+/**
+ * Indeed job page: native Indeed Apply button (stable id), an external
+ * "Apply on company site" alternative, and decoys. Clicking the native
+ * button records a timestamp so tests can assert the background was armed
+ * BEFORE the navigation-triggering click.
+ */
+const INDEED_JOB_FIXTURE = `
+<div id="jobsearch">
+  <button id="save-job" type="button">Save job</button>
+  <button id="indeedApplyButton" type="button"><span>Apply now</span></button>
+  <a id="external-apply" href="#external" role="button">Apply on company site</a>
+</div>
+<script>
+  window.__nativeClickedAt = 0;
+  window.__externalClickedAt = 0;
+  document.getElementById("indeedApplyButton").addEventListener("click", () => {
+    window.__nativeClickedAt = Date.now();
+  });
+  document.getElementById("external-apply").addEventListener("click", (e) => {
+    e.preventDefault();
+    window.__externalClickedAt = Date.now();
+  });
+</script>`;
+
+/** Same page but external-only (employer disabled Indeed Apply). */
+const INDEED_EXTERNAL_ONLY_FIXTURE = `
+<div id="jobsearch">
+  <button id="save-job" type="button">Save job</button>
+  <a id="external-apply" href="#external" role="button">Apply on company site</a>
+</div>
+<script>
+  window.__externalClickedAt = 0;
+  document.getElementById("external-apply").addEventListener("click", (e) => {
+    e.preventDefault();
+    window.__externalClickedAt = Date.now();
+  });
+</script>`;
+
+/**
+ * SmartApply-style stepper (served via page.route on the REAL
+ * smartapply.indeed.com hostname so detect()/isSmartApply run truthfully):
+ * contact step → Continue → review step → "Submit your application" →
+ * confirmation.
+ */
+const INDEED_SMARTAPPLY_FIXTURE = `<!doctype html><html><body>
+<div id="step-contact">
+  <label for="ia-email">Email address *</label>
+  <input id="ia-email" type="email" required>
+  <label for="ia-phone">Phone number *</label>
+  <input id="ia-phone" type="tel" required>
+  <button id="continue-btn" type="button">Continue</button>
+</div>
+<div id="step-review" style="display:none">
+  <h2>Review your application</h2>
+  <button id="submit-btn" type="button">Submit your application</button>
+</div>
+<script>
+  document.getElementById("continue-btn").addEventListener("click", () => {
+    if (!document.getElementById("ia-email").value.trim()) return;
+    document.getElementById("step-contact").style.display = "none";
+    document.getElementById("step-review").style.display = "block";
+  });
+  document.getElementById("submit-btn").addEventListener("click", () => {
+    document.body.innerHTML =
+      '<div role="alert"><h2>Your application has been submitted!</h2></div>';
+  });
+</script>
+</body></html>`;
+
 const PROFILE = {
   full_name: "Ada Lovelace",
   email: "ada@analytical.dev",
@@ -187,5 +256,8 @@ module.exports = {
   LEVER_FIXTURE,
   WORKDAY_FIXTURE,
   LINKEDIN_FIXTURE,
+  INDEED_JOB_FIXTURE,
+  INDEED_EXTERNAL_ONLY_FIXTURE,
+  INDEED_SMARTAPPLY_FIXTURE,
   PROFILE,
 };

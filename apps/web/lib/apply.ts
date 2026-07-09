@@ -1,6 +1,13 @@
 import { resolveJobTargetUrl } from "@/lib/job-url";
 
-type AtsType = "LINKEDIN" | "GREENHOUSE" | "WORKDAY" | "LEVER" | "SMARTRECRUITERS" | "GENERIC";
+type AtsType =
+  | "LINKEDIN"
+  | "GREENHOUSE"
+  | "WORKDAY"
+  | "LEVER"
+  | "SMARTRECRUITERS"
+  | "INDEED"
+  | "GENERIC";
 
 const STEP_SETS: Record<AtsType, string[]> = {
   LINKEDIN: [
@@ -37,6 +44,14 @@ const STEP_SETS: Record<AtsType, string[]> = {
     "CONFIRMATION",
   ],
   SMARTRECRUITERS: [
+    "OPEN_JOB",
+    "TRY_APPLY_ENTRY",
+    "FILL_FORM",
+    "UPLOAD_RESUME",
+    "SUBMIT",
+    "CONFIRMATION",
+  ],
+  INDEED: [
     "OPEN_JOB",
     "TRY_APPLY_ENTRY",
     "FILL_FORM",
@@ -117,6 +132,13 @@ export function detectAtsType(source?: string | null, url?: string | null): AtsT
     combined.includes("glassdoor.com")
   ) {
     return "GENERIC";
+  }
+
+  // Indeed LAST among named boards: an Indeed link that resolves (via
+  // resolveJobTargetUrl) to a real ATS keeps the more specific type above —
+  // INDEED means "the application actually happens on Indeed/SmartApply".
+  if (combined.includes("indeed.com")) {
+    return "INDEED";
   }
 
   return "GENERIC";
