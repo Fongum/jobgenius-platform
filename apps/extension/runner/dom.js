@@ -302,6 +302,60 @@
     return phrases.some((phrase) => text.includes(phrase));
   }
 
+  // Detect a login wall (expired/absent session) so the runner pauses with a
+  // crisp SESSION_EXPIRED instead of floundering into NO_PROGRESS or
+  // APPLY_BUTTON_MISSING. Two signals, most reliable first:
+  //   1. URL path segments boards use for auth walls (linkedin.com/authwall,
+  //      /checkpoint/…, secure.indeed.com/…/login, generic /login|/signin).
+  //   2. A visible password field plus sign-in copy — DISQUALIFIED by
+  //      account-creation copy, because ATSes like Workday ask new applicants
+  //      to create an account mid-apply (that's the flow, not a lost session).
+  function hasLoginWall(href = window.location.href) {
+    let path = "";
+    try {
+      path = new URL(href).pathname.toLowerCase();
+    } catch {
+      path = "";
+    }
+    if (path) {
+      const AUTH_SEGMENTS = new Set([
+        "login", "signin", "sign-in", "sign_in", "authwall", "checkpoint",
+        "authenticate", "session-expired",
+      ]);
+      const segments = path.split("/").filter(Boolean);
+      if (segments.some((s) => AUTH_SEGMENTS.has(s))) return true;
+    }
+
+    const passwordFields = queryAllDeep("input[type='password']").filter(
+      (input) => isElementVisible(input) && !input.disabled
+    );
+    if (passwordFields.length === 0) return false;
+
+    // innerText for fidelity in real browsers; textContent fallback for
+    // environments without layout (jsdom tests).
+    const text = normalizeHint(
+      document.body?.innerText ?? document.body?.textContent ?? ""
+    );
+    const negatives = window.JobGeniusPhrases?.loginWallNegative ?? [
+      "create account",
+      "create an account",
+      "create your account",
+      "sign up",
+      "register",
+    ];
+    if (hasAnyPhrase(text, negatives)) return false;
+
+    const phrases = window.JobGeniusPhrases?.loginWall ?? [
+      "sign in to",
+      "log in to",
+      "welcome back",
+      "session expired",
+      "please sign in",
+      "please log in",
+    ];
+    return hasAnyPhrase(text, phrases);
+  }
+
   function looksLikeOtpInput(input) {
     if (!input || input.disabled || !isElementVisible(input)) {
       return false;
@@ -1552,6 +1606,7 @@
     isComboboxControl,
     fillComboboxByValue,
     hasCaptcha,
+    hasLoginWall,
     hasSmsOtp,
     hasEmailOtp,
     fillTextInputs,

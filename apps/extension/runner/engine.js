@@ -319,6 +319,32 @@
     return true;
   }
 
+  // Login wall = the board's session died. Tell the background immediately
+  // (badge + popup banner for the seeker, without waiting for the hourly
+  // cookie check). The run itself pauses with SESSION_EXPIRED — which is in
+  // AUTO_RESUME_REASONS, so it picks back up once the seeker logs in.
+  function notifySessionExpired() {
+    setSidebarStatus("Session expired");
+    sidebarLog("Login wall detected — the board session has expired.", "warn");
+    try {
+      chrome.runtime.sendMessage({
+        type: "SESSION_EXPIRED_DETECTED",
+        host: window.location.hostname,
+      });
+    } catch {
+      /* background unavailable — the hourly check will still catch it */
+    }
+  }
+
+  async function pauseForSessionExpired(ctx, step) {
+    notifySessionExpired();
+    await pauseRun(ctx, "SESSION_EXPIRED", {
+      step,
+      ats: ctx.atsType,
+      message: "Login required — the board session has expired.",
+    });
+  }
+
   async function handleMissingFields(ctx, adapter, stepName) {
     let missingFields = adapter.extractRequiredFields
       ? adapter.extractRequiredFields()
@@ -406,6 +432,17 @@
       setSidebarStatus(`Auto-advancing (${attempt}/${maxIterations})`);
       if (adapter.confirm ? adapter.confirm(ctx) : false) {
         return { status: "APPLIED" };
+      }
+
+      // A step click can land on a login wall mid-flow (session timed out
+      // while applying) — stop cleanly instead of grinding to NO_PROGRESS.
+      if (dom.hasLoginWall?.()) {
+        notifySessionExpired();
+        return {
+          status: "NEEDS_ATTENTION",
+          reason: "SESSION_EXPIRED",
+          meta: { attempt, message: "Login required — the board session has expired." },
+        };
       }
 
       if (dom.hasCaptcha()) {
@@ -561,6 +598,14 @@
       message: `Runner started on ${ctx.atsType}.`,
       last_seen_url: window.location.href,
     });
+
+    // A dead session shows a login wall instead of the job page — detect it
+    // up front so the run pauses as SESSION_EXPIRED, not UNKNOWN_ATS.
+    if (dom.hasLoginWall?.()) {
+      await pauseForSessionExpired(ctx, "DETECT_ATS");
+      sidebar?.finish?.("Needs Attention", "Board session expired — log in to resume.");
+      return;
+    }
 
     if (!adapter || !adapter.detect || !adapter.detect()) {
       await pauseRun(ctx, "UNKNOWN_ATS", {

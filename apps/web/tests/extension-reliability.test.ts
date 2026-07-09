@@ -228,6 +228,46 @@ describe("dom.js — setValueOnElement (React-safe fill) + clickElement", () => 
   });
 });
 
+describe("dom.js — hasLoginWall (SESSION_EXPIRED detection)", () => {
+  const JOB_URL = "https://boards.greenhouse.io/acme/jobs/123";
+
+  it("detects auth-wall URLs by path segment", () => {
+    expect(JG.hasLoginWall("https://www.linkedin.com/authwall?return=x")).toBe(true);
+    expect(JG.hasLoginWall("https://www.linkedin.com/checkpoint/lg/login-submit")).toBe(true);
+    expect(JG.hasLoginWall("https://secure.indeed.com/account/login")).toBe(true);
+    expect(JG.hasLoginWall("https://acme.wd5.myworkdayjobs.com/careers/login")).toBe(true);
+  });
+
+  it("does not match job pages whose slugs merely contain auth words", () => {
+    expect(JG.hasLoginWall("https://boards.greenhouse.io/acme/jobs/signin-specialist")).toBe(false);
+    expect(JG.hasLoginWall(JOB_URL)).toBe(false);
+  });
+
+  it("detects a password field + sign-in copy", () => {
+    win.document.body.innerHTML = `
+      <h1>Sign in to your account</h1>
+      <input type="email"><input type="password">
+      <button>Sign in</button>`;
+    expect(JG.hasLoginWall(JOB_URL)).toBe(true);
+  });
+
+  it("does NOT flag an ATS account-creation step (Workday-style)", () => {
+    win.document.body.innerHTML = `
+      <h1>Create Account</h1>
+      <p>Create your account to continue applying.</p>
+      <input type="email"><input type="password">
+      <button>Create Account</button>`;
+    expect(JG.hasLoginWall(JOB_URL)).toBe(false);
+  });
+
+  it("ignores pages without a password field", () => {
+    win.document.body.innerHTML = `
+      <p>Please sign in to see salary details.</p>
+      <form><input aria-label="Email" type="email"></form>`;
+    expect(JG.hasLoginWall(JOB_URL)).toBe(false);
+  });
+});
+
 describe("dom.js — ARIA combobox driver", () => {
   // Minimal react-select-style widget: options render into a portal on
   // input/click, filtered by the typed value; clicking an option commits it.

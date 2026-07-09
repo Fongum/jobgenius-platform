@@ -75,6 +75,17 @@ logins** — they can't be checked headlessly.
   via Escape) and surfaces as a required field for the AM — the driver must
   never click a wrong option.
 
+## 10. Session health & SESSION_EXPIRED (v0.4.18+)
+- Log out of LinkedIn, then launch a run on a LinkedIn job.
+- **Expected:** the run pauses immediately with reason `SESSION_EXPIRED`
+  (not NO_PROGRESS/UNKNOWN_ATS), the toolbar badge shows "!", and the popup
+  banner names the board. After logging back in, auto-resume picks the run
+  back up.
+- Indeed session checks (PPID cookie) only warn when the seeker has actually
+  used Indeed before — no nagging about boards the seeker doesn't use.
+- A Workday "Create Account" step must NOT trigger SESSION_EXPIRED (account
+  creation is part of the normal flow).
+
 ## What to watch for (regressions)
 - More than one frame running on a single apply (election bug).
 - Fields left blank on a Workday/web-component form (shadow-DOM regression).

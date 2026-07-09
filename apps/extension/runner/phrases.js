@@ -138,5 +138,52 @@
 
     // Used to disqualify an email-OTP match when the page is clearly SMS-based.
     otpSmsNegative: ["sms", "text message", "texted you", "phone"],
+
+    // Login-wall copy (paired with a visible password field — see
+    // dom.hasLoginWall). Kept narrow: generic words like "password" alone
+    // would match account-creation steps.
+    loginWall: [
+      "sign in to",
+      "log in to",
+      "sign in with",
+      "log in with",
+      "welcome back",
+      "member login",
+      "session expired",
+      "session has expired",
+      "please sign in",
+      "please log in",
+      // es
+      "iniciar sesión",
+      "inicia sesión",
+      // fr
+      "se connecter",
+      "connectez-vous",
+      // de
+      "anmelden",
+      "einloggen",
+    ],
+
+    // Account-CREATION copy that disqualifies a login-wall match — ATSes like
+    // Workday ask new applicants to create an account mid-apply, which also
+    // shows a password field but is part of the normal flow, not a lost session.
+    loginWallNegative: [
+      "create account",
+      "create an account",
+      "create your account",
+      "sign up",
+      "register",
+      "new user",
+      // es
+      "crear cuenta",
+      "crear una cuenta",
+      "regístrate",
+      // fr
+      "créer un compte",
+      "inscrivez-vous",
+      // de
+      "konto erstellen",
+      "registrieren",
+    ],
   };
 })();

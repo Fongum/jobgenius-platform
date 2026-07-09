@@ -16,6 +16,7 @@ const AUTO_RESUME_REASONS = new Set([
   "CAPTCHA",
   "LOGIN_REQUIRED",
   "REAUTH_REQUIRED",
+  "SESSION_EXPIRED",
   "OTP_SMS",
   "OTP_EMAIL",
 ]);
@@ -24,6 +25,9 @@ const SESSION_SYNC_THROTTLE_MS = 2 * 60 * 1000;
 const SESSION_SYNC_HOST_HINTS = [
   "linkedin.com",
   "indeed.com",
+  "dice.com",
+  "ziprecruiter.com",
+  "glassdoor.com",
   "greenhouse.io",
   "workday.com",
   "myworkdayjobs.com",
@@ -64,6 +68,9 @@ const SESSION_SYNC_EXCLUDED_HOST_HINTS = [
 const SESSION_HOST_LABELS = {
   "linkedin.com": "LinkedIn",
   "indeed.com": "Indeed",
+  "dice.com": "Dice",
+  "ziprecruiter.com": "ZipRecruiter",
+  "glassdoor.com": "Glassdoor",
   "greenhouse.io": "Greenhouse",
   "workday.com": "Workday",
   "myworkdayjobs.com": "Workday",
@@ -946,6 +953,7 @@ function shouldOpenInteractiveTab(reason) {
     normalized === "CAPTCHA" ||
     normalized === "LOGIN_REQUIRED" ||
     normalized === "REAUTH_REQUIRED" ||
+    normalized === "SESSION_EXPIRED" ||
     normalized === "OTP_SMS" ||
     normalized === "OTP_EMAIL"
   );
@@ -1202,31 +1210,67 @@ function warnIfExpiringSoon(label, expiresAtSeconds) {
   );
 }
 
+// Boards with a known, stable auth cookie we can check directly (no tab visit
+// needed). `warnWhenNeverSeen`: LinkedIn is the primary board, so a missing
+// cookie is always worth a warning; for the others we only nag when the seeker
+// has actually used the board (a recorded session-sync entry exists) —
+// otherwise "please log in to Indeed" is noise for a seeker who never uses it.
+const AUTH_COOKIE_CHECKS = [
+  {
+    hint: "linkedin.com",
+    label: "LinkedIn",
+    url: "https://www.linkedin.com",
+    cookieName: "li_at",
+    warnWhenNeverSeen: true,
+  },
+  {
+    hint: "indeed.com",
+    label: "Indeed",
+    url: "https://www.indeed.com",
+    cookieName: "PPID",
+    warnWhenNeverSeen: false,
+  },
+];
+
 async function checkSessionExpiry() {
-  // LinkedIn is the primary target and is checked explicitly against its known
-  // auth cookie (li_at), including a warning when the seeker isn't logged in.
+  let sessionExpiryByHost = {};
   try {
-    const cookie = await chrome.cookies.get({
-      url: "https://www.linkedin.com",
-      name: "li_at",
-    });
-    if (!cookie) {
-      showSessionWarning("LinkedIn", "not found — please log in to LinkedIn");
-    } else if (typeof cookie.expirationDate === "number") {
-      warnIfExpiringSoon("LinkedIn", cookie.expirationDate);
+    ({ sessionExpiryByHost = {} } = await getStorage("sessionExpiryByHost"));
+  } catch {
+    sessionExpiryByHost = {};
+  }
+
+  // Boards with a known auth cookie: check it directly.
+  for (const check of AUTH_COOKIE_CHECKS) {
+    try {
+      const cookie = await chrome.cookies.get({
+        url: check.url,
+        name: check.cookieName,
+      });
+      if (!cookie) {
+        const seekerUsesBoard = Boolean(sessionExpiryByHost[check.hint]);
+        if (check.warnWhenNeverSeen || seekerUsesBoard) {
+          showSessionWarning(
+            check.label,
+            `session expired — please log in to ${check.label}`
+          );
+        }
+      } else if (typeof cookie.expirationDate === "number") {
+        warnIfExpiringSoon(check.label, cookie.expirationDate);
+      }
+    } catch (err) {
+      console.warn(`Session expiry check failed for ${check.label}:`, err);
     }
-  } catch (err) {
-    console.warn("Session expiry check failed for LinkedIn:", err);
   }
 
   // Every other ATS the seeker actually logs into is covered by the expiry we
   // recorded during session-state sync (recordSessionExpiry). Absence is silent
   // — we never nag about a platform the seeker doesn't use.
   try {
-    const { sessionExpiryByHost = {} } = await getStorage("sessionExpiryByHost");
+    const directlyChecked = new Set(AUTH_COOKIE_CHECKS.map((c) => c.hint));
     const now = Date.now();
     for (const [key, entry] of Object.entries(sessionExpiryByHost)) {
-      if (key === "linkedin.com") continue; // handled explicitly above
+      if (directlyChecked.has(key)) continue; // handled explicitly above
       if (!entry || typeof entry.expiresAt !== "number") continue;
       if (now - (entry.updatedAt ?? 0) > SESSION_EXPIRY_STALE_MS) continue; // stale record
       warnIfExpiringSoon(entry.label || key, entry.expiresAt);
@@ -1406,6 +1450,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "RUN_COMPLETE" && message.runId) {
     activeRuns.delete(message.runId);
     attentionResumeHistory.delete(message.runId);
+    return false;
+  }
+
+  // Runner hit a login wall mid-apply: badge + popup banner immediately
+  // instead of waiting for the hourly cookie check.
+  if (message?.type === "SESSION_EXPIRED_DETECTED") {
+    const label = sessionHostLabel(String(message.host ?? ""));
+    showSessionWarning(
+      label,
+      "session expired — log back in to resume applications"
+    );
     return false;
   }
 
