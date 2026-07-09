@@ -148,3 +148,7 @@ apps/runner/.runner-*.out
 apps/web/.tmp-match-test/
 nul
 [{]console.log(0)
+
+# Playwright (apps/extension browser tests)
+test-results/
+playwright-report/

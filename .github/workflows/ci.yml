@@ -62,6 +62,45 @@ jobs:
       - name: Validate extension manifest
         run: node -e "JSON.parse(require('fs').readFileSync('apps/extension/manifest.json', 'utf8')); console.log('manifest.json OK')"
 
+  # Real-browser fixture tests: the ACTUAL runner files driven in headless
+  # Chromium against pages cloning Greenhouse/Lever/Workday/LinkedIn
+  # structures (apps/extension/tests). Catches selector/scoring/visibility
+  # regressions that the jsdom suites in apps/web can only approximate.
+  extension-browser:
+    name: Extension — Playwright fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: apps/extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run fixture tests
+        run: npx playwright test
+
   # Production deploy, gated on the test jobs above. Replaces running
   # `vercel --prod` from a laptop, which deploys whatever the local working
   # tree happens to contain with no guarantee tests ever ran.
@@ -72,7 +111,7 @@ jobs:
   #   VERCEL_PROJECT_ID  — same file
   deploy:
     name: Deploy web to Vercel (production)
-    needs: [web, runners]
+    needs: [web, runners, extension-browser]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     defaults:
