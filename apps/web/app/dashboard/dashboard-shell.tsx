@@ -67,6 +67,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     title: "Messaging",
     items: [
       { href: "/dashboard/inbox", label: "Inbox", icon: "inbox" },
+      { href: "/dashboard/client-reports", label: "Client Reports", icon: "document" },
     ],
   },
   {
