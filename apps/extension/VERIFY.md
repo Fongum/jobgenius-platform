@@ -97,6 +97,19 @@ logins** — they can't be checked headlessly.
 - "Apply on company site" must never be clicked as if it were the native
   button (it starts with "apply" — the adapter reroutes it).
 
+## 12. Embedded application iframes (v0.4.20+)
+- Run an autofill on a company career page that EMBEDS its application form
+  in an iframe (Greenhouse `embed/job_app`, Lever embed, etc.).
+- **Same-origin embed:** fields inside the iframe are detected, labeled, and
+  filled directly (no navigation) — the run proceeds as if the form were on
+  the page.
+- **Cross-origin embed on a known ATS host:** unchanged — the iframe's own
+  runner instance self-elects and drives (sidebar appears inside the frame).
+- **Cross-origin embed on an unknown host with an apply-ish path:** the tab
+  navigates to the iframe's URL and the runner re-arms there automatically.
+- Widget-sized iframes (chat bubbles, badges) must never trigger navigation —
+  a page with only those pauses APPLY_BUTTON_MISSING as before.
+
 ## What to watch for (regressions)
 - More than one frame running on a single apply (election bug).
 - Fields left blank on a Workday/web-component form (shadow-DOM regression).

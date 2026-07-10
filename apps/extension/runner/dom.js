@@ -3,9 +3,13 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  // Collects matches across the document AND all open shadow roots, so inputs
-  // and controls inside web components (Workday, some Ashby boards, etc.) are
-  // detected and fillable. Falls back to a plain query on closed/odd nodes.
+  // Collects matches across the document, all open shadow roots, AND all
+  // same-origin iframes, so inputs/controls inside web components (Workday,
+  // some Ashby boards) and embedded application frames (Greenhouse
+  // embed/job_app on a company career page served same-origin) are detected
+  // and fillable. Cross-origin iframes are untouchable by design — known ATS
+  // hosts are handled by the frame election in runner/index.js, unknown ones
+  // by findApplicationIframeSrc() + tab navigation.
   function queryAllDeep(selector, root = document) {
     const out = [];
     const seen = new Set();
@@ -16,6 +20,14 @@
       node.querySelectorAll(selector).forEach((el) => out.push(el));
       node.querySelectorAll("*").forEach((el) => {
         if (el.shadowRoot) visit(el.shadowRoot);
+      });
+      node.querySelectorAll("iframe, frame").forEach((frame) => {
+        try {
+          // contentDocument is null/throws for cross-origin frames.
+          if (frame.contentDocument) visit(frame.contentDocument);
+        } catch {
+          /* cross-origin — handled by election or navigation instead */
+        }
       });
     };
     visit(root);
@@ -201,7 +213,10 @@
 
   function isElementVisible(element) {
     if (!element) return false;
-    const style = window.getComputedStyle(element);
+    // Use the element's OWN window: for fields inside same-origin iframes the
+    // top window's getComputedStyle may return empty styles.
+    const win = element.ownerDocument?.defaultView ?? window;
+    const style = win.getComputedStyle(element);
     if (!style) return false;
     if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
       return false;
@@ -477,10 +492,13 @@
   }
 
   function getInputHint(input) {
+    // Label lookups must run in the input's OWN document (it may live inside
+    // a same-origin iframe queryAllDeep descended into).
+    const doc = input.ownerDocument ?? document;
     const id = input.getAttribute("id");
     if (id) {
       try {
-        const label = document.querySelector(`label[for='${CSS.escape(id)}']`);
+        const label = doc.querySelector(`label[for='${CSS.escape(id)}']`);
         if (label?.textContent) return normalizeHint(label.textContent);
       } catch (_) {
         /* invalid selector (id with special chars) — fall through */
@@ -507,7 +525,7 @@
     if (group) {
       const labelId = group.getAttribute("aria-labelledby");
       if (labelId) {
-        const labelEl = document.getElementById(labelId);
+        const labelEl = (el.ownerDocument ?? document).getElementById(labelId);
         if (labelEl?.textContent) return normalizeHint(labelEl.textContent);
       }
       const ariaLabel = group.getAttribute("aria-label");
@@ -855,10 +873,13 @@
   }
 
   function getLabelText(input) {
+    // Resolve against the input's OWN document — it may live inside a
+    // same-origin iframe that queryAllDeep descended into.
+    const doc = input.ownerDocument ?? document;
     const id = input.getAttribute("id");
     if (id) {
       try {
-        const label = document.querySelector(`label[for='${CSS.escape(id)}']`);
+        const label = doc.querySelector(`label[for='${CSS.escape(id)}']`);
         if (label?.textContent?.trim()) return cleanLabel(label.textContent);
       } catch (_) {
         /* invalid selector */
@@ -873,7 +894,7 @@
     if (labelledBy) {
       const parts = labelledBy
         .split(/\s+/)
-        .map((ref) => document.getElementById(ref)?.textContent?.trim())
+        .map((ref) => doc.getElementById(ref)?.textContent?.trim())
         .filter(Boolean);
       if (parts.length) return cleanLabel(parts.join(" "));
     }
@@ -1184,6 +1205,73 @@
     }
 
     return dismissed;
+  }
+
+  /**
+   * Deep check for "we're already on/inside an application form" — unlike a
+   * plain document.querySelector this sees into shadow roots and same-origin
+   * iframes (embedded Greenhouse/Lever forms on company career pages).
+   */
+  function hasApplicationFormFields() {
+    return (
+      queryAllDeep(
+        "form input, form textarea, form select, input[required], textarea[required], select[required], input[aria-required='true'], textarea[aria-required='true'], select[aria-required='true']"
+      ).length > 0
+    );
+  }
+
+  /**
+   * Find a CROSS-ORIGIN iframe that likely hosts the application form, and
+   * return its absolute src. Used by the generic adapter as a last resort:
+   * same-origin frames are reachable via queryAllDeep's descend, and
+   * known-ATS-host frames are handled by the frame election in
+   * runner/index.js — this covers the remainder (unknown ATS, apply-ish
+   * path) by letting the adapter NAVIGATE the tab to the iframe's src and
+   * continue there (via ctx.rearmAfterNavigation).
+   */
+  function findApplicationIframeSrc() {
+    const HOST_HINTS = [
+      "greenhouse.io", "lever.co", "ashbyhq.com", "myworkdayjobs.com",
+      "workday.com", "smartrecruiters.com", "icims.com", "jobvite.com",
+      "workable.com", "breezy.hr", "bamboohr.com", "recruitee.com",
+      "personio.com", "applytojob.com",
+    ];
+    const PATH_HINTS = ["job_app", "embed/job", "/apply", "/application"];
+
+    for (const frame of queryAllDeep("iframe[src]")) {
+      if (!isElementVisible(frame)) continue;
+
+      // Same-origin frames are already reachable — never navigate for those.
+      let reachable = false;
+      try {
+        reachable = Boolean(frame.contentDocument);
+      } catch {
+        reachable = false;
+      }
+      if (reachable) continue;
+
+      let url;
+      try {
+        url = new URL(frame.getAttribute("src") ?? "", window.location.href);
+      } catch {
+        continue;
+      }
+      if (!/^https?:$/.test(url.protocol)) continue;
+
+      const host = url.hostname.toLowerCase();
+      const path = url.pathname.toLowerCase();
+      const looksLikeApplication =
+        HOST_HINTS.some((h) => host.includes(h)) ||
+        PATH_HINTS.some((h) => path.includes(h));
+      if (!looksLikeApplication) continue;
+
+      // Skip widget-sized frames (chat bubbles, badges, trackers).
+      const rect = frame.getBoundingClientRect();
+      if (rect.width < 400 || rect.height < 300) continue;
+
+      return url.href;
+    }
+    return null;
   }
 
   /**
@@ -1630,5 +1718,7 @@
     deriveResumeFileMeta,
     waitForDomStable,
     dismissOverlays,
+    findApplicationIframeSrc,
+    hasApplicationFormFields,
   };
 })();

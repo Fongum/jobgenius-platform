@@ -46,14 +46,36 @@
         ? dom.findClickableByText(entryHints)
         : dom.findButtonByText(entryHints);
       if (!applyButton) {
-        const alreadyInApplication = Boolean(
-          document.querySelector(
-            "form input, form textarea, form select, form input[type='file'], input[required], textarea[required], select[required], input[aria-required='true'], textarea[aria-required='true'], select[aria-required='true']"
-          )
-        );
+        // Deep check: sees into shadow roots and same-origin iframes, so an
+        // embedded Greenhouse/Lever form on a company career page counts as
+        // "already in the application".
+        const alreadyInApplication = dom.hasApplicationFormFields
+          ? dom.hasApplicationFormFields()
+          : Boolean(
+              document.querySelector(
+                "form input, form textarea, form select, form input[type='file'], input[required], textarea[required], select[required], input[aria-required='true'], textarea[aria-required='true'], select[aria-required='true']"
+              )
+            );
         if (alreadyInApplication) {
           return { ok: true };
         }
+
+        // Last resort: the application may live in a CROSS-ORIGIN iframe on
+        // an unknown host (same-origin frames are reachable via
+        // queryAllDeep's descend; known-ATS frames self-elect their own
+        // runner). Navigate the tab to the iframe's src and continue there —
+        // rearmAfterNavigation restarts the runner after the navigation
+        // destroys this instance.
+        const iframeSrc = dom.findApplicationIframeSrc?.();
+        if (iframeSrc) {
+          if (ctx?.rearmAfterNavigation) {
+            await ctx.rearmAfterNavigation();
+          }
+          window.location.href = iframeSrc;
+          await dom.sleep(3000); // navigation kills this instance
+          return { ok: true };
+        }
+
         return { ok: false, reason: "APPLY_BUTTON_MISSING" };
       }
 

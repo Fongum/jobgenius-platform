@@ -260,6 +260,128 @@ test.describe("Indeed adapter", () => {
   });
 });
 
+test.describe("Iframe handoff", () => {
+  const EMBEDDED_FORM = `
+    <div><label for='efn'>First Name *</label>
+      <input id='efn' type='text' required></div>
+    <div><label for='eem'>Email *</label>
+      <input id='eem' type='email' required></div>
+    <button type='button'>Submit application</button>`;
+
+  test("same-origin embedded form: queryAllDeep descends into the iframe", async ({ page }) => {
+    await page.setContent(`
+      <h1>Careers at Acme</h1>
+      <iframe id="gh-embed" srcdoc="${EMBEDDED_FORM.replace(/"/g, "&quot;")}"
+              style="width:700px;height:500px"></iframe>`);
+    // srcdoc loads asynchronously — wait for the inner form to exist.
+    await page.waitForFunction(() =>
+      document.querySelector("#gh-embed")?.contentDocument?.querySelector("#efn")
+    );
+    await loadRunner(page);
+
+    const result = await page.evaluate(async (profile) => {
+      const dom = window.JobGeniusDom;
+      const adapter = window.JobGeniusAdapterRegistry.getAdapter("GENERIC");
+
+      // No apply button on the top page, but the embedded form counts as
+      // "already in the application".
+      const entry = await adapter.clickApplyEntry({});
+
+      const fillSummary = dom.fillAllFields("fallback@x.com", profile, null);
+      const iframeDoc = document.querySelector("#gh-embed").contentDocument;
+      const submit = dom.findButtonByText(["submit application", "submit"]);
+      const missingLabels = dom.extractRequiredFields().map((f) => f.label);
+
+      return {
+        entryOk: entry.ok,
+        filled: fillSummary.text,
+        firstName: iframeDoc.getElementById("efn").value,
+        email: iframeDoc.getElementById("eem").value,
+        submitFound: Boolean(submit),
+        submitInIframe: submit ? submit.ownerDocument === iframeDoc : false,
+        missingLabels,
+      };
+    }, PROFILE);
+
+    expect(result.entryOk).toBe(true);
+    expect(result.filled).toBeGreaterThanOrEqual(2);
+    expect(result.firstName).toBe("Ada"); // label[for] resolved inside the iframe doc
+    expect(result.email).toBe("ada@analytical.dev");
+    expect(result.submitFound).toBe(true);
+    expect(result.submitInIframe).toBe(true);
+    expect(result.missingLabels).toEqual([]); // required fields satisfied
+  });
+
+  test("cross-origin application iframe: adapter arms rearm and navigates to its src", async ({ page }) => {
+    const IFRAME_SRC = "https://apply-vendor.test/application/123";
+    await page.route("https://company.test/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: `<!doctype html><html><body>
+          <h1>Careers at Acme</h1>
+          <iframe src="${IFRAME_SRC}" style="width:800px;height:600px"></iframe>
+        </body></html>`,
+      })
+    );
+    await page.route("https://apply-vendor.test/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: `<!doctype html><html><body><form><input aria-label="Email" required></form></body></html>`,
+      })
+    );
+
+    await page.goto("https://company.test/careers/role");
+    await loadRunner(page);
+
+    const consoleMessages = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+
+    // The navigation destroys the evaluate context — that's expected.
+    await page
+      .evaluate(async () => {
+        const adapter = window.JobGeniusAdapterRegistry.getAdapter("GENERIC");
+        await adapter.clickApplyEntry({
+          rearmAfterNavigation: async () => {
+            console.log("JG_REARM_ARMED");
+          },
+        });
+      })
+      .catch(() => {});
+
+    await page.waitForURL("https://apply-vendor.test/**", { timeout: 10000 });
+    expect(page.url()).toBe(IFRAME_SRC);
+    expect(consoleMessages).toContain("JG_REARM_ARMED"); // armed BEFORE navigating
+  });
+
+  test("widget-sized cross-origin iframes never trigger navigation", async ({ page }) => {
+    await page.route("https://company.test/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: `<!doctype html><html><body>
+          <h1>Careers</h1>
+          <iframe src="https://apply-vendor.test/application/chat-widget"
+                  style="width:120px;height:80px"></iframe>
+        </body></html>`,
+      })
+    );
+    await page.goto("https://company.test/careers");
+    await loadRunner(page);
+
+    const result = await page.evaluate(async () => {
+      const adapter = window.JobGeniusAdapterRegistry.getAdapter("GENERIC");
+      return adapter.clickApplyEntry({});
+    });
+
+    // Too small to be an application — correct outcome is a clean pause.
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("APPLY_BUTTON_MISSING");
+    expect(page.url()).toContain("company.test");
+  });
+});
+
 test.describe("LinkedIn Easy Apply-style modal", () => {
   test.beforeEach(async ({ page }) => {
     await page.setContent(LINKEDIN_FIXTURE);
