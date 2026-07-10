@@ -1,5 +1,6 @@
 import { detectAtsType, getInitialStep } from "@/lib/apply";
 import { findRecentDuplicateRun } from "@/lib/apply/duplicate-check";
+import { checkAutomationHalt } from "@/lib/apply/kill-switch";
 import { getActorFromHeaders } from "@/lib/actor";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -158,6 +159,18 @@ export async function POST(request: Request) {
   }
 
   const atsType = detectAtsType(jobPost.source, jobPost.url);
+
+  // Kill switches (mig 108): refuse new run creation while halted.
+  const halt = await checkAutomationHalt(atsType);
+  if (halt.halted) {
+    return Response.json({
+      success: false,
+      blocked: true,
+      reason: halt.reason,
+      policy_key: halt.key,
+    });
+  }
+
   const initialStep = getInitialStep(atsType);
   const nowIso = new Date().toISOString();
 

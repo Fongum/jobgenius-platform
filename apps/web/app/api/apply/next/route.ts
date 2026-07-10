@@ -7,6 +7,11 @@ import {
   cancelDuplicateRun,
   findRecentDuplicateRun,
 } from "@/lib/apply/duplicate-check";
+import {
+  GLOBAL_APPLY_KEY,
+  atsPolicyKey,
+  getDisabledPolicyKeys,
+} from "@/lib/apply/kill-switch";
 import { checkSeekerVelocity } from "@/lib/apply/velocity";
 import { resolveJobTargetUrl } from "@/lib/job-url";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
@@ -328,6 +333,18 @@ export async function GET(request: Request) {
     });
   }
 
+  // Kill switches (mig 108): stop handing out runs the moment a switch is
+  // flipped. Applies even to explicit resumes — a halt is a halt.
+  const disabledPolicies = await getDisabledPolicyKeys();
+  if (disabledPolicies.has(GLOBAL_APPLY_KEY)) {
+    return Response.json({
+      success: false,
+      blocked: true,
+      reason: "AUTOMATION_HALTED",
+      policy_key: GLOBAL_APPLY_KEY,
+    });
+  }
+
   // Per-seeker velocity policy (daily cap / pacing / quiet hours, mig 104).
   // Only on the automatic path: an AM explicitly requesting a specific run
   // (preferredRunId, e.g. resuming a paused application) is a deliberate
@@ -379,6 +396,17 @@ export async function GET(request: Request) {
       );
     }
     return Response.json({ success: true, status: "IDLE" });
+  }
+
+  // ATS-level kill switch: refuse before locking so the run stays claimable
+  // by nothing until the switch is re-enabled.
+  if (disabledPolicies.has(atsPolicyKey(nextRun.ats_type))) {
+    return Response.json({
+      success: false,
+      blocked: true,
+      reason: "ATS_HALTED",
+      policy_key: atsPolicyKey(nextRun.ats_type),
+    });
   }
 
   const nowIso = new Date().toISOString();

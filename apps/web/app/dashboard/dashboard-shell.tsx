@@ -124,6 +124,7 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/application-analytics", label: "App Analytics", icon: "analytics" },
     { href: "/dashboard/admin/adapter-health", label: "Adapter Health", icon: "analytics" },
     { href: "/dashboard/admin/qa", label: "QA Review", icon: "check" },
+    { href: "/dashboard/admin/automation", label: "Kill Switches", icon: "alert" },
     { href: "/dashboard/admin/ai-usage", label: "AI Usage", icon: "analytics" },
     { href: "/dashboard/admin/ai-outputs", label: "AI Outputs", icon: "check" },
     { href: "/dashboard/admin/audit", label: "Audit Log", icon: "document" },

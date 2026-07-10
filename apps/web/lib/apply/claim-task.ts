@@ -5,6 +5,11 @@ import {
   cancelDuplicateRun,
   findRecentDuplicateRun,
 } from "@/lib/apply/duplicate-check";
+import {
+  GLOBAL_APPLY_KEY,
+  atsPolicyKey,
+  getDisabledPolicyKeys,
+} from "@/lib/apply/kill-switch";
 import { evaluateVelocityForSeekers } from "@/lib/apply/velocity";
 import { resolveJobTargetUrl } from "@/lib/job-url";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -71,6 +76,14 @@ async function getAtsAtCapacity(): Promise<Set<string>> {
 }
 
 export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
+  // Kill switches (mig 108): a flipped switch stops NEW claims on the next
+  // poll; in-flight runs finish (stopping mid-wizard risks half-submitted
+  // applications). ATS-level switches filter candidates below.
+  const disabledPolicies = await getDisabledPolicyKeys();
+  if (disabledPolicies.has(GLOBAL_APPLY_KEY)) {
+    return { kind: "blocked", reason: "AUTOMATION_HALTED" };
+  }
+
   let assignedIds: string[] = [];
 
   if (!ctx.isRunner) {
@@ -148,18 +161,26 @@ export async function claimNextRun(ctx: ClaimContext): Promise<ClaimResult> {
     return { kind: "idle" };
   }
 
+  // ATS-level kill switches: drop candidates on halted ATSes.
+  const policyEligible = candidates.filter(
+    (c) => !disabledPolicies.has(atsPolicyKey(c.ats_type))
+  );
+  if (policyEligible.length === 0) {
+    return { kind: "blocked", reason: "ATS_HALTED" };
+  }
+
   // Per-seeker velocity policy (daily cap / pacing / quiet hours, mig 104).
   // Missing verdict = allowed (fail open — see evaluateVelocityForSeekers).
   const velocity = await evaluateVelocityForSeekers(
-    candidates.map((c) => c.job_seeker_id as string)
+    policyEligible.map((c) => c.job_seeker_id as string)
   );
-  const eligible = candidates.filter(
+  const eligible = policyEligible.filter(
     (c) => velocity.get(c.job_seeker_id as string)?.allowed !== false
   );
   if (eligible.length === 0) {
     // Everything queued is throttled right now; report the first reason so
     // pollers can distinguish "empty queue" from "paced".
-    const firstBlocked = velocity.get(candidates[0].job_seeker_id as string);
+    const firstBlocked = velocity.get(policyEligible[0].job_seeker_id as string);
     return {
       kind: "blocked",
       reason:
