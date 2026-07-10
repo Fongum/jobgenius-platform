@@ -12,6 +12,8 @@ on:
     - cron: "0 5 * * *"
     # Daily client match cleaner — removes matches older than 1 week (04:00 UTC)
     - cron: "0 4 * * *"
+    # Daily QA sampling — first-3-per-seeker + 5% of completed runs (06:30 UTC)
+    - cron: "30 6 * * *"
   # Manual trigger for testing
   workflow_dispatch:
 
@@ -112,3 +114,15 @@ jobs:
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
           curl -fsSL -X POST -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/clean-matches?max_age_days=7"
+
+  qa-sample:
+    name: QA Sampling
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 6 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sample completed runs into the QA review queue
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsSL -X POST -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/qa-sample"
