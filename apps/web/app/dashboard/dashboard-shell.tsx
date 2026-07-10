@@ -68,6 +68,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/inbox", label: "Inbox", icon: "inbox" },
       { href: "/dashboard/client-reports", label: "Client Reports", icon: "document" },
+      { href: "/dashboard/follow-ups", label: "Follow-ups", icon: "mail" },
     ],
   },
   {

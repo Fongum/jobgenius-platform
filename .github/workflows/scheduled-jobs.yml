@@ -16,6 +16,8 @@ on:
     - cron: "30 6 * * *"
     # Weekly client report drafts — Fridays 14:00 UTC, ready for AM review
     - cron: "0 14 * * 5"
+    # Daily follow-up drafts — day-3/7 bumps for applied-no-response (07:00 UTC)
+    - cron: "0 7 * * *"
   # Manual trigger for testing
   workflow_dispatch:
 
@@ -140,3 +142,15 @@ jobs:
           OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
         run: |
           curl -fsSL -X POST -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/client-reports"
+
+  follow-up-drafts:
+    name: Follow-up Drafts
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 7 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Draft day-3/7 follow-ups for applied-no-response runs
+        env:
+          WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
+          OPS_API_KEY: ${{ secrets.OPS_API_KEY }}
+        run: |
+          curl -fsSL -X POST -H "x-ops-key: ${OPS_API_KEY}" "${WEB_BASE_URL}/api/ops/follow-ups"
