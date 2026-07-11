@@ -187,7 +187,7 @@ export async function buildWeeklyStats(
       .from("outreach_messages")
       .select("id")
       .in("recruiter_thread_id", threadIds)
-      .eq("direction", "INBOUND")
+      .eq("direction", "inbound") // outreach_messages.direction is lowercase (see reply-draft/route.ts, outreach-reply-classifier.ts) — distinct from recruiter_threads.last_message_direction, which is uppercase
       .gte("created_at", weekStartIso)
       .lt("created_at", weekEndIso);
     recruiterReplies = inbound?.length ?? 0;
