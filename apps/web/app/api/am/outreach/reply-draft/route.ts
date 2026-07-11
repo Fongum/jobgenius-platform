@@ -15,13 +15,16 @@ export async function GET(request: Request) {
   const seekerId = searchParams.get("job_seeker_id");
   const status = searchParams.get("status") ?? "generated";
 
+  // NOTE: previously joined non-existent tables (outreach_threads /
+  // outreach_recruiters) — the real tables are recruiter_threads / recruiters
+  // (migration 019). This route also has zero UI callers today.
   let query = supabaseAdmin
     .from("outreach_messages")
     .select(`
       id, subject, body, direction, reply_classification, ai_draft_reply, ai_draft_status, created_at,
-      outreach_threads (
+      recruiter_threads (
         id, job_seeker_id,
-        outreach_recruiters (id, name, company, email)
+        recruiters (id, name, company, email)
       )
     `)
     .eq("direction", "inbound")
@@ -30,7 +33,7 @@ export async function GET(request: Request) {
     .limit(50);
 
   if (seekerId) {
-    query = query.eq("outreach_threads.job_seeker_id", seekerId);
+    query = query.eq("recruiter_threads.job_seeker_id", seekerId);
   }
 
   const { data, error } = await query;
@@ -73,10 +76,14 @@ export async function POST(request: Request) {
   }
 
   if (action === "send") {
-    // Get the draft
+    // KNOWN GAP: outreach_messages.from_email/to_email are NOT NULL and are
+    // not resolved here (would need the seeker's outreach from-address and
+    // the recruiter's email). This route has zero UI callers today — do not
+    // wire it up without resolving those first; a wrong from/to address on
+    // a real send is worse than the route staying dead.
     const { data: msg } = await supabaseAdmin
       .from("outreach_messages")
-      .select("id, ai_draft_reply, outreach_thread_id")
+      .select("id, ai_draft_reply")
       .eq("id", message_id)
       .single();
 
@@ -89,32 +96,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No draft to send" }, { status: 400 });
     }
 
-    // Create outbound reply message
-    const { error: insertErr } = await supabaseAdmin
-      .from("outreach_messages")
-      .insert({
-        outreach_thread_id: msg.outreach_thread_id,
-        direction: "outbound",
-        subject: "Re: (reply)",
-        body: replyText,
-        sent_at: new Date().toISOString(),
-      });
-
-    if (insertErr) {
-      return NextResponse.json({ error: insertErr.message }, { status: 500 });
-    }
-
-    // Mark draft as sent
-    const { error: markSentError } = await supabaseAdmin
-      .from("outreach_messages")
-      .update({ ai_draft_status: "sent" })
-      .eq("id", message_id);
-
-    if (markSentError) {
-      console.error("[outreach:reply-draft] failed to mark draft as sent:", markSentError);
-    }
-
-    return NextResponse.json({ ok: true, sent: true });
+    return NextResponse.json(
+      {
+        error:
+          "Sending is not implemented yet: from_email/to_email resolution is required before this action can insert a real outbound message.",
+      },
+      { status: 501 }
+    );
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

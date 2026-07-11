@@ -131,14 +131,19 @@ export function generateDraftReply(input: {
  * Process a new outreach reply: classify + generate draft
  */
 export async function processOutreachReply(messageId: string) {
+  // NOTE: this select previously joined non-existent tables
+  // (outreach_threads/outreach_recruiters — the real tables are
+  // recruiter_threads/recruiters, see migration 019) and an impossible
+  // job_posts embed (recruiter_threads has no job_post_id at all). Fixed to
+  // match the real schema; roleTitle is consequently never available from
+  // this join (recruiter_threads isn't scoped to a specific job post).
   const { data: msg } = await supabaseServer
     .from("outreach_messages")
     .select(`
       id, subject, body, direction, from_email,
-      outreach_threads (
+      recruiter_threads (
         id, job_seeker_id,
-        outreach_recruiters (id, name, company),
-        job_posts (id, title, company)
+        recruiters (id, name, company)
       )
     `)
     .eq("id", messageId)
@@ -146,11 +151,10 @@ export async function processOutreachReply(messageId: string) {
 
   if (!msg || msg.direction !== "inbound") return null;
 
-  const thread = msg.outreach_threads as unknown as {
+  const thread = msg.recruiter_threads as unknown as {
     id: string;
     job_seeker_id: string;
-    outreach_recruiters: { id: string; name: string; company: string } | null;
-    job_posts: { id: string; title: string; company: string } | null;
+    recruiters: { id: string; name: string; company: string } | null;
   };
 
   // Get seeker name
@@ -161,10 +165,9 @@ export async function processOutreachReply(messageId: string) {
     .single();
 
   const seekerName = seeker?.full_name ?? "the candidate";
-  const recruiterName = thread.outreach_recruiters?.name ?? "there";
-  const company =
-    thread.outreach_recruiters?.company ?? thread.job_posts?.company ?? "the company";
-  const roleTitle = thread.job_posts?.title;
+  const recruiterName = thread.recruiters?.name ?? "there";
+  const company = thread.recruiters?.company ?? "the company";
+  const roleTitle: string | undefined = undefined;
 
   // Try LLM first; regex is the safety net.
   const aiResult = await classifyReplyWithAi({
