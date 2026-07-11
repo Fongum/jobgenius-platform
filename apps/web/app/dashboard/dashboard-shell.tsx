@@ -53,6 +53,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/network", label: "Network Hub", icon: "network" },
       { href: "/dashboard/outreach", label: "Outreach CRM", icon: "mail" },
+      { href: "/dashboard/outreach/scheduling", label: "Scheduling Links", icon: "calendar" },
     ],
   },
   {

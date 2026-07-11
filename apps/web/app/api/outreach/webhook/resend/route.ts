@@ -2,6 +2,7 @@ import { recordRecruiterOptOut } from "@/lib/outreach-consent";
 import { scoreReplySentiment, sentimentLabel } from "@/lib/outreach-intelligence";
 import { canTransitionOutreachState, type OutreachMessageState } from "@/lib/outreach-state";
 import { classifyReply, generateDraftReply } from "@/lib/outreach-reply-classifier";
+import { detectSchedulingLink } from "@/lib/interview-link-detector";
 import { supabaseServer } from "@/lib/supabase/server";
 import { verifySvixSignature } from "@/lib/webhooks/svix-signature";
 
@@ -239,6 +240,7 @@ export async function POST(request: Request) {
 
     // Classify reply and generate AI draft response
     const replyClassification = classifyReply(message.subject ?? "", replyText ?? "");
+    const schedulingLink = detectSchedulingLink(replyText ?? "");
     const { data: seeker } = await supabaseServer
       .from("job_seekers")
       .select("full_name")
@@ -265,6 +267,9 @@ export async function POST(request: Request) {
         reply_classification: replyClassification,
         ai_draft_reply: aiDraft,
         ai_draft_status: aiDraft ? "generated" : "none",
+        detected_scheduling_link: schedulingLink?.url ?? null,
+        detected_scheduling_provider: schedulingLink?.provider ?? null,
+        scheduling_link_status: schedulingLink ? "PENDING" : null,
       })
       .eq("id", message.id);
 
