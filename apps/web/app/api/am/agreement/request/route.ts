@@ -27,6 +27,19 @@ export async function POST(request: Request) {
   const access = await requireAMAccessToSeeker(request.headers, jobSeekerId);
   if (!access.ok) return access.response;
 
+  const { data: seeker } = await supabaseAdmin
+    .from("job_seekers")
+    .select("campaign_tier")
+    .eq("id", jobSeekerId)
+    .maybeSingle();
+
+  if (!seeker?.campaign_tier) {
+    return NextResponse.json(
+      { error: "Select a campaign tier (Essentials or Premium) before sending the agreement." },
+      { status: 400 }
+    );
+  }
+
   const requestedAt = new Date().toISOString();
   const { error } = await supabaseAdmin
     .from("job_seekers")

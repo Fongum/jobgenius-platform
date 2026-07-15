@@ -71,9 +71,9 @@ export default function AgreementClient({
           <div className="text-sm text-violet-800">
             <p className="font-semibold">Preview only.</p>
             <p className="mt-0.5 text-violet-700">
-              This is how JobGenius is paid — a 5% placement fee only when you accept a job we help
-              you land, with no upfront cost. Your account manager will share this agreement for
-              signature when the time is right.
+              This is how JobGenius is paid — a one-time Campaign Setup &amp; Execution Fee due at
+              campaign activation, plus a 5% placement fee only when you accept a job we help you land.
+              Your account manager will share this agreement for signature when the time is right.
             </p>
           </div>
         </div>
@@ -131,8 +131,9 @@ export default function AgreementClient({
               className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
             />
             <span>
-              I have read, understood, and agree to the terms of this Agreement, including the 5%
-              placement fee on an accepted placement.
+              I have read, understood, and agree to the terms of this Agreement, including the
+              Campaign Setup &amp; Execution Fee due at activation and the 5% placement fee on an
+              accepted placement.
             </span>
           </label>
 

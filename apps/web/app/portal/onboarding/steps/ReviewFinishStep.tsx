@@ -253,11 +253,16 @@ export default function ReviewFinishStep({
           <div>
             <p className="text-sm font-semibold text-gray-900">How JobGenius is paid</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-600">
-              There&apos;s no upfront cost. We charge a 5% placement fee only when you accept a job we
-              help you land, due within two months of your start date. Your account manager will share
+              A one-time Campaign Setup &amp; Execution Fee ($300 Essentials / $600 Premium) is due when
+              you activate a paid Job Search Campaign, plus a 5% placement fee only when you accept a job
+              we help you land, due within two months of your start date. Your account manager will share
               the full service agreement for signature when the time is right.{" "}
               <a href="/portal/agreement" className="font-medium text-violet-700 hover:text-violet-900">
                 Preview the agreement
+              </a>{" "}
+              or{" "}
+              <a href="/pricing" className="font-medium text-violet-700 hover:text-violet-900">
+                see plan details
               </a>
               .
             </p>

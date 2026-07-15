@@ -16,7 +16,7 @@ import {
 async function loadSeeker(id: string) {
   const { data } = await supabaseAdmin
     .from("job_seekers")
-    .select("full_name, email")
+    .select("full_name, email, campaign_tier")
     .eq("id", id)
     .maybeSingle();
   return data;
@@ -45,6 +45,7 @@ export async function GET(request: Request) {
       clientName,
       clientEmail,
       commissionRatePercent: DEFAULT_COMMISSION_RATE * 100,
+      campaignTier: seeker?.campaign_tier ?? null,
     });
 
   return NextResponse.json({
@@ -88,7 +89,9 @@ export async function POST(request: Request) {
 
   const { data: gate } = await supabaseAdmin
     .from("job_seekers")
-    .select("full_name, email, collaboration_agreement_requested_at, collaboration_agreement_signed_at")
+    .select(
+      "full_name, email, collaboration_agreement_requested_at, collaboration_agreement_signed_at, campaign_tier, setup_fee_usd"
+    )
     .eq("id", auth.user.id)
     .maybeSingle();
 
@@ -116,6 +119,7 @@ export async function POST(request: Request) {
     commissionRatePercent: DEFAULT_COMMISSION_RATE * 100,
     signatureName,
     agreedDate: agreedAt,
+    campaignTier: gate?.campaign_tier ?? null,
   });
 
   const { data: agreement, error } = await supabaseAdmin
@@ -128,6 +132,8 @@ export async function POST(request: Request) {
         signature_name: signatureName,
         client_email: clientEmail,
         commission_rate: DEFAULT_COMMISSION_RATE,
+        campaign_tier: gate?.campaign_tier ?? null,
+        setup_fee_usd: gate?.setup_fee_usd ?? null,
         effective_date: agreedAt.split("T")[0],
         agreed_at: agreedAt,
         agreed_ip: ip,

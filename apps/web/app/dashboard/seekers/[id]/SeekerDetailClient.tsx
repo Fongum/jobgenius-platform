@@ -13,6 +13,7 @@ import {
   type JobGeniusReport,
 } from "@/lib/jobgenius/report";
 import { RESUME_TEMPLATES, type ResumeTemplateId } from "@/lib/resume-templates/types";
+import { PRICING_PLANS } from "@/app/components/homepage/marketingContent";
 import type { ClientDeliveryCaseBundle } from "@/lib/client-delivery";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
 
@@ -63,6 +64,9 @@ interface SeekerData {
   email: string;
   collaboration_agreement_requested_at?: string | null;
   collaboration_agreement_signed_at?: string | null;
+  campaign_tier?: "essentials" | "premium" | null;
+  setup_fee_usd?: number | null;
+  setup_fee_paid_at?: string | null;
   resume_template_id?: ResumeTemplateId | null;
   phone: string | null;
   location: string | null;
@@ -853,10 +857,128 @@ function ResumeTemplateCard({ seeker }: { seeker: SeekerData }) {
   );
 }
 
+function CampaignTierCard({
+  seeker,
+  tier,
+  onTierChange,
+}: {
+  seeker: SeekerData;
+  tier: "essentials" | "premium" | null;
+  onTierChange: (tier: "essentials" | "premium", setupFeeUsd: number) => void;
+}) {
+  const [setupFeeUsd, setSetupFeeUsd] = useState<number | null>(seeker.setup_fee_usd ?? null);
+  const [paidAt, setPaidAt] = useState<string | null>(seeker.setup_fee_paid_at ?? null);
+  const [saving, setSaving] = useState<"tier" | "paid" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectTier = async (value: "essentials" | "premium") => {
+    setError(null);
+    setSaving("tier");
+    try {
+      const res = await fetch("/api/am/campaign-tier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_seeker_id: seeker.id, tier: value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Failed to set the campaign tier.");
+        return;
+      }
+      setSetupFeeUsd(data.setup_fee_usd);
+      setPaidAt(null);
+      onTierChange(data.campaign_tier, data.setup_fee_usd);
+    } catch {
+      setError("Failed to set the campaign tier.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const markPaid = async () => {
+    setError(null);
+    setSaving("paid");
+    try {
+      const res = await fetch("/api/am/campaign-tier", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_seeker_id: seeker.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Failed to mark the setup fee as paid.");
+        return;
+      }
+      setPaidAt(data.setup_fee_paid_at);
+    } catch {
+      setError("Failed to mark the setup fee as paid.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <Section title="Campaign Plan & Setup Fee">
+      <div className="flex gap-2">
+        {PRICING_PLANS.map((plan) => {
+          const value = plan.name.toLowerCase() as "essentials" | "premium";
+          const isActive = tier === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => selectTier(value)}
+              disabled={saving === "tier"}
+              className={`flex-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50 ${
+                isActive
+                  ? "border-violet-400 bg-violet-50 text-violet-800"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              <span className="font-medium">{plan.name}</span>
+              <span className="block text-xs text-gray-400">
+                ${plan.setupFeeUsd.toLocaleString()} setup fee
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {tier && (
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+          <div className="text-sm text-gray-600">
+            Setup fee:{" "}
+            <span className="font-medium text-gray-900">${setupFeeUsd?.toLocaleString()}</span>
+            {paidAt ? (
+              <span className="ml-2 text-xs text-green-600">
+                Paid {new Date(paidAt).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="ml-2 text-xs text-amber-600">Not yet paid</span>
+            )}
+          </div>
+          {!paidAt && (
+            <button
+              type="button"
+              onClick={markPaid}
+              disabled={saving === "paid"}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg disabled:opacity-50"
+            >
+              {saving === "paid" ? "Saving…" : "Mark fee as paid"}
+            </button>
+          )}
+        </div>
+      )}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </Section>
+  );
+}
+
 function AgreementPushCard({ seeker }: { seeker: SeekerData }) {
   const [requestedAt, setRequestedAt] = useState<string | null>(
     seeker.collaboration_agreement_requested_at ?? null
   );
+  const [tier, setTier] = useState<"essentials" | "premium" | null>(seeker.campaign_tier ?? null);
   const signedAt = seeker.collaboration_agreement_signed_at ?? null;
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -884,30 +1006,36 @@ function AgreementPushCard({ seeker }: { seeker: SeekerData }) {
   };
 
   return (
-    <Section title="Service Agreement">
-      {signedAt ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-          Signed by client on {new Date(signedAt).toLocaleDateString()}.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            {requestedAt
-              ? `Sent ${new Date(requestedAt).toLocaleDateString()} — awaiting the client's signature.`
-              : "The client can preview the agreement in their portal, but can only sign once you send it."}
-          </p>
-          <button
-            type="button"
-            onClick={send}
-            disabled={sending}
-            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-lg disabled:opacity-50"
-          >
-            {sending ? "Sending…" : requestedAt ? "Resend agreement" : "Send agreement to client"}
-          </button>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
-      )}
-    </Section>
+    <div className="space-y-6">
+      <CampaignTierCard seeker={seeker} tier={tier} onTierChange={(t) => setTier(t)} />
+
+      <Section title="Service Agreement">
+        {signedAt ? (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+            Signed by client on {new Date(signedAt).toLocaleDateString()}.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600">
+              {!tier
+                ? "Select a campaign plan above before sending the agreement."
+                : requestedAt
+                  ? `Sent ${new Date(requestedAt).toLocaleDateString()} — awaiting the client's signature.`
+                  : "The client can preview the agreement in their portal, but can only sign once you send it."}
+            </p>
+            <button
+              type="button"
+              onClick={send}
+              disabled={sending || !tier}
+              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-lg disabled:opacity-50"
+            >
+              {sending ? "Sending…" : requestedAt ? "Resend agreement" : "Send agreement to client"}
+            </button>
+            {error && <p className="text-xs text-red-600">{error}</p>}
+          </div>
+        )}
+      </Section>
+    </div>
   );
 }
 
