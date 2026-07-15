@@ -1,8 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import LocationMultiSelect from "../../components/LocationMultiSelect";
 import BooleanToggle from "../../components/BooleanToggle";
 import type { ProfileData } from "../OnboardingWizard";
+
+interface WorkStyleDistribution {
+  remote: number;
+  hybrid: number;
+  onsite: number;
+  sampleSize: number;
+}
 
 interface LocationPreference {
   work_type: "remote" | "hybrid" | "onsite";
@@ -59,7 +67,26 @@ const WORK_TYPES: {
   },
 ];
 
-function MarketInsightChart() {
+function MarketInsightChart({ distribution }: { distribution: WorkStyleDistribution | null }) {
+  if (!distribution || distribution.sampleSize === 0) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 mb-6 animate-pulse">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Current Job Market Distribution</h3>
+        <div className="space-y-2">
+          {["Remote", "Hybrid", "On-site"].map((label) => (
+            <div key={label} className="flex items-center gap-3">
+              <span className="text-xs text-gray-600 w-14">{label}</span>
+              <div className="flex-1 bg-gray-200 rounded-full h-3" />
+              <span className="text-xs font-medium text-gray-400 w-8">--</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const { remote, hybrid, onsite, sampleSize } = distribution;
+
   return (
     <div className="bg-gray-50 rounded-lg p-4 mb-6">
       <h3 className="text-sm font-medium text-gray-700 mb-3">Current Job Market Distribution</h3>
@@ -67,33 +94,41 @@ function MarketInsightChart() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-600 w-14">Remote</span>
           <div className="flex-1 bg-gray-200 rounded-full h-3">
-            <div className="bg-violet-500 h-3 rounded-full" style={{ width: "35%" }} />
+            <div className="bg-violet-500 h-3 rounded-full" style={{ width: `${remote}%` }} />
           </div>
-          <span className="text-xs font-medium text-gray-700 w-8">35%</span>
+          <span className="text-xs font-medium text-gray-700 w-8">{remote}%</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-600 w-14">Hybrid</span>
           <div className="flex-1 bg-gray-200 rounded-full h-3">
-            <div className="bg-green-500 h-3 rounded-full" style={{ width: "42%" }} />
+            <div className="bg-green-500 h-3 rounded-full" style={{ width: `${hybrid}%` }} />
           </div>
-          <span className="text-xs font-medium text-gray-700 w-8">42%</span>
+          <span className="text-xs font-medium text-gray-700 w-8">{hybrid}%</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-600 w-14">On-site</span>
           <div className="flex-1 bg-gray-200 rounded-full h-3">
-            <div className="bg-amber-500 h-3 rounded-full" style={{ width: "23%" }} />
+            <div className="bg-amber-500 h-3 rounded-full" style={{ width: `${onsite}%` }} />
           </div>
-          <span className="text-xs font-medium text-gray-700 w-8">23%</span>
+          <span className="text-xs font-medium text-gray-700 w-8">{onsite}%</span>
         </div>
       </div>
       <p className="text-xs text-gray-500 mt-3">
-        Candidates open to multiple work styles receive 2.5x more matches.
+        Based on {sampleSize.toLocaleString()} active job listings on the platform.
       </p>
     </div>
   );
 }
 
-function SmartGuidance({ activeTypes, openToRelocation }: { activeTypes: string[]; openToRelocation?: boolean }) {
+function SmartGuidance({
+  activeTypes,
+  openToRelocation,
+  hybridPercentage,
+}: {
+  activeTypes: string[];
+  openToRelocation?: boolean;
+  hybridPercentage: number | null;
+}) {
   if (activeTypes.length === 0) return null;
 
   let message = "";
@@ -103,7 +138,10 @@ function SmartGuidance({ activeTypes, openToRelocation }: { activeTypes: string[
     message = "Great choice! You'll have maximum opportunities across all work styles.";
     type = "success";
   } else if (activeTypes.length === 1 && activeTypes[0] === "remote") {
-    message = "Consider also adding Hybrid — it makes up 42% of the job market and could significantly increase your matches.";
+    message =
+      hybridPercentage !== null
+        ? `Consider also adding Hybrid — it makes up ${hybridPercentage}% of active listings and could significantly increase your matches.`
+        : "Consider also adding Hybrid to significantly increase your matches.";
     type = "info";
   } else if (activeTypes.length === 1 && activeTypes[0] === "onsite" && !openToRelocation) {
     message = "Make sure to add locations near where you currently live, since you're not open to relocation.";
@@ -150,6 +188,23 @@ export default function WorkStyleLocationStep({
   const prefs: LocationPreference[] = profile.location_preferences || [];
   const activeTypes = prefs.map((p) => p.work_type);
 
+  const [distribution, setDistribution] = useState<WorkStyleDistribution | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/portal/job-market-stats")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.stats) setDistribution(data.stats);
+      })
+      .catch(() => {
+        // Leave distribution null; MarketInsightChart falls back to a loading state.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const toggleWorkType = (wt: "remote" | "hybrid" | "onsite") => {
     if (activeTypes.includes(wt)) {
       // Remove this work type
@@ -190,7 +245,7 @@ export default function WorkStyleLocationStep({
         Choose how and where you want to work. This is one of the most important factors for matching.
       </p>
 
-      <MarketInsightChart />
+      <MarketInsightChart distribution={distribution} />
 
       {/* Work Type Cards */}
       <div className="space-y-3">
@@ -238,7 +293,11 @@ export default function WorkStyleLocationStep({
         })}
       </div>
 
-      <SmartGuidance activeTypes={activeTypes} openToRelocation={profile.open_to_relocation} />
+      <SmartGuidance
+        activeTypes={activeTypes}
+        openToRelocation={profile.open_to_relocation}
+        hybridPercentage={distribution?.sampleSize ? distribution.hybrid : null}
+      />
 
       {/* Relocation Toggle */}
       <div className="mt-6 border-t pt-4">
