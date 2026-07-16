@@ -600,7 +600,6 @@ function DiscoverTab({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_seeker_ids: targetSeekerIds,
-          only_unscored: true,
         }),
       });
       const data = await res.json().catch(() => ({}));

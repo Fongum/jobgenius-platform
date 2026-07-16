@@ -52,8 +52,15 @@ async function runRetention(request: Request) {
 
   // Job Hub lifecycle: archive a job 2 weeks after it was discovered, keep it
   // archived for 2 more weeks, then permanently delete (~1 month total). Jobs
-  // referenced by a queue item or run are never deleted (see blockedIds below),
-  // so application history is preserved.
+  // with an unresolved queue/run item are never deleted (see blockedIds
+  // below); terminal statuses (completed/failed/cancelled/rejected/applied)
+  // no longer block archival — otherwise any job ever touched by the
+  // pipeline stays "active" forever, regardless of outcome. Union of both
+  // tables' non-terminal vocabularies (application_queue and
+  // application_runs use overlapping but not identical status strings —
+  // see lib/runState.ts for the application_runs state machine); errs
+  // toward NOT archiving when a status is ambiguous.
+  const ACTIVE_STATUSES = ["QUEUED", "PENDING", "READY", "RUNNING", "RETRYING", "NEEDS_ATTENTION"];
   const now = Date.now();
   const archiveCutoff = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
   const deleteCutoff = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -97,11 +104,13 @@ async function runRetention(request: Request) {
         supabaseServer
           .from("application_queue")
           .select("job_post_id")
-          .in("job_post_id", candidateIds),
+          .in("job_post_id", candidateIds)
+          .in("status", ACTIVE_STATUSES),
         supabaseServer
           .from("application_runs")
           .select("job_post_id")
-          .in("job_post_id", candidateIds),
+          .in("job_post_id", candidateIds)
+          .in("status", ACTIVE_STATUSES),
       ]);
 
     if (queueError || runError) {

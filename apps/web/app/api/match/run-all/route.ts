@@ -269,6 +269,11 @@ export async function POST(request: Request) {
             score: finalScore,
             confidence: matchResult.confidence,
             recommendation: matchResult.recommendation,
+            // A rescore always reflects current data — clear any prior
+            // soft-archive (see api/ops/clean-matches) so it's not hidden
+            // from the Job Hub despite being freshly computed.
+            archived_at: null,
+            archive_reason: null,
             reasons: {
               ...matchResult.reasons,
               component_scores: matchResult.component_scores,
