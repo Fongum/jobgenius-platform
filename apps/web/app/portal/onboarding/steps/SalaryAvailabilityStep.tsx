@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import BooleanToggle from "../../components/BooleanToggle";
 import type { ProfileData } from "../OnboardingWizard";
 
@@ -52,7 +53,10 @@ export default function SalaryAvailabilityStep({
   onContinue: () => void;
   onBack: () => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
+
   const handleContinue = async () => {
+    setError(null);
     const ok = await saveFields({
       salary_min: profile.salary_min,
       salary_max: profile.salary_max,
@@ -64,6 +68,7 @@ export default function SalaryAvailabilityStep({
       non_compete_subject: profile.non_compete_subject,
     });
     if (ok) onContinue();
+    else setError("Couldn't save your changes. Please check your connection and try again.");
   };
 
   return (
@@ -171,6 +176,10 @@ export default function SalaryAvailabilityStep({
           </div>
         </div>
       </div>
+
+      {error && (
+        <p className="mt-6 text-sm text-red-600" role="alert">{error}</p>
+      )}
 
       <div className="flex justify-between mt-8">
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200">

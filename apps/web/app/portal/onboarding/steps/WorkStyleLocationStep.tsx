@@ -223,7 +223,10 @@ export default function WorkStyleLocationStep({
     );
   };
 
+  const [error, setError] = useState<string | null>(null);
+
   const handleContinue = async () => {
+    setError(null);
     // Derive flat fields for backward compatibility
     const derivedWorkTypes = Array.from(new Set(prefs.map((p) => p.work_type)));
     const derivedLocations = Array.from(new Set(prefs.flatMap((p) => p.locations)));
@@ -236,6 +239,7 @@ export default function WorkStyleLocationStep({
       open_to_relocation: profile.open_to_relocation,
     });
     if (ok) onContinue();
+    else setError("Couldn't save your changes. Please check your connection and try again.");
   };
 
   return (
@@ -312,6 +316,10 @@ export default function WorkStyleLocationStep({
           </p>
         )}
       </div>
+
+      {error && (
+        <p className="mt-6 text-sm text-red-600" role="alert">{error}</p>
+      )}
 
       <div className="flex justify-between mt-8">
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">

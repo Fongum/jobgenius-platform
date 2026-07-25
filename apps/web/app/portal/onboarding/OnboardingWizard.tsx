@@ -15,7 +15,6 @@ interface LocationPreference {
 }
 
 type PlanType = "essentials" | "premium";
-type OfferPath = "discount" | "strategy_preview";
 type StepId =
   | "welcome"
   | "about"
@@ -63,52 +62,13 @@ export interface DocRecord {
   uploaded_at: string;
 }
 
-interface OfferQuote {
-  planType: PlanType;
-  code: string | null;
-  source: "promo_code" | "seeker_referral" | null;
-  applied: boolean;
-  invalidCode: boolean;
-  baseFee: number;
-  discountPercent: number;
-  discountAmount: number;
-  finalFee: number;
-  message?: string;
-}
-
 interface StepDefinition {
   id: StepId;
   label: string;
   hidden?: boolean;
 }
 
-interface InitialIntakeState {
-  selectedPlan?: PlanType | null;
-  offerPath?: OfferPath | null;
-  submittedCode?: string | null;
-  previewAgreedAt?: string | null;
-}
-
-const PLAN_BASE_FEES: Record<PlanType, number> = {
-  essentials: 500,
-  premium: 1000,
-};
-
-function buildBaseQuote(planType: PlanType): OfferQuote {
-  return {
-    planType,
-    code: null,
-    source: null,
-    applied: false,
-    invalidCode: false,
-    baseFee: PLAN_BASE_FEES[planType],
-    discountPercent: 0,
-    discountAmount: 0,
-    finalFee: PLAN_BASE_FEES[planType],
-  };
-}
-
-function buildSteps(offerPath: OfferPath): StepDefinition[] {
+function buildSteps(): StepDefinition[] {
   return [
     { id: "welcome", label: "Welcome" },
     { id: "about", label: "About You" },
@@ -205,14 +165,10 @@ export default function OnboardingWizard({
   profile: initial,
   documents: initialDocs,
   userEmail,
-  initialOfferCode,
-  initialIntakeState,
 }: {
   profile: ProfileData;
   documents: DocRecord[];
   userEmail: string;
-  initialOfferCode?: string | null;
-  initialIntakeState?: InitialIntakeState | null;
 }) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
@@ -222,7 +178,7 @@ export default function OnboardingWizard({
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
 
-  const steps = useMemo(() => buildSteps("discount"), []);
+  const steps = useMemo(() => buildSteps(), []);
   const currentStepId = steps[currentStep]?.id ?? steps[0].id;
 
   const summaryStepIndexes = useMemo(() => {
@@ -249,12 +205,21 @@ export default function OnboardingWizard({
   }, []);
 
   const saveFields = useCallback(async (fields: Partial<ProfileData>): Promise<boolean> => {
+    // Drop undefined values: JSON.stringify omits them anyway, and a payload of
+    // only-undefined fields (e.g. a step left blank) would serialize to {} and
+    // be rejected by the API with 400. Nothing to save → treat as success so the
+    // step can advance instead of dead-ending.
+    const payload = Object.fromEntries(
+      Object.entries(fields).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(payload).length === 0) return true;
+
     setSaving(true);
     try {
       const response = await fetch("/api/portal/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) return false;
       const { profile: updated } = await response.json();

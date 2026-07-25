@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Field from "../../components/Field";
 import type { ProfileData } from "../OnboardingWizard";
+
+const SAVE_ERROR = "Couldn't save your changes. Please check your connection and try again.";
 
 export default function AboutYouStep({
   profile,
@@ -18,7 +21,10 @@ export default function AboutYouStep({
   onContinue: () => void;
   onBack: () => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
+
   const handleContinue = async () => {
+    setError(null);
     const ok = await saveFields({
       full_name: profile.full_name,
       phone: profile.phone,
@@ -28,6 +34,7 @@ export default function AboutYouStep({
       years_experience: profile.years_experience,
     });
     if (ok) onContinue();
+    else setError(SAVE_ERROR);
   };
 
   return (
@@ -68,6 +75,10 @@ export default function AboutYouStep({
           className="w-full px-3 py-2 border border-gray-400 bg-white text-gray-900 placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
         />
       </div>
+
+      {error && (
+        <p className="mt-6 text-sm text-red-600" role="alert">{error}</p>
+      )}
 
       <div className="flex justify-between mt-8">
         <button onClick={onBack} className="px-6 py-2 text-sm font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200">
