@@ -4,10 +4,14 @@ const STORAGE_KEYS = {
   activeSeekerId: "activeSeekerId",
   runnerEnabled: "runnerEnabled",
   dryRun: "dryRun",
+  orchestrateAllSeekers: "orchestrateAllSeekers",
 };
 
 const RUNNER_ALARM = "jobgenius-runner";
 const activeRuns = new Set();
+// Round-robin pointer for cross-seeker orchestration (persists across polls so
+// no seeker is starved).
+let orchestrationCursor = 0;
 const ATTENTION_RESUME_COOLDOWN_MS = 10 * 60 * 1000;
 const attentionResumeHistory = new Map();
 const sessionSyncHistory = new Map();
@@ -373,6 +377,49 @@ async function saveSpyAppliedJob(apiBaseUrl, authToken, activeSeekerId, job) {
   return data;
 }
 
+// Job Intelligence overlay: live-score the job the AM is viewing against the
+// active seeker. Keeps the auth token in the background — the content script
+// only sends the scraped JD and renders the result.
+async function scoreCurrentJob(job) {
+  const { apiBaseUrl, authToken, activeSeekerId } = await getStorage([
+    STORAGE_KEYS.apiBaseUrl,
+    STORAGE_KEYS.authToken,
+    STORAGE_KEYS.activeSeekerId,
+  ]);
+
+  if (!apiBaseUrl || !authToken || !activeSeekerId) {
+    return { success: false, error: "Not connected to an active job seeker." };
+  }
+  if (!job || !job.title) {
+    return { success: false, error: "No job on this page to score." };
+  }
+
+  const response = await fetch(`${apiBaseUrl}/api/extension/score-job`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+      "x-runner": "extension",
+    },
+    body: JSON.stringify({
+      title: job.title,
+      company: job.company ?? null,
+      location: job.location ?? null,
+      description_text: job.raw_text ?? job.description ?? null,
+      url: job.url ?? null,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      success: false,
+      error: data?.error || `Scoring failed (${response.status}).`,
+    };
+  }
+  return { success: true, ...data };
+}
+
 async function maybeInjectJobSpyForTab(tabId, url) {
   if (activeRuns.size > 0) {
     return false;
@@ -697,6 +744,28 @@ async function submitFieldLearning(message) {
   });
 }
 
+// Outcome tracking: record how many of this application's fields were answered
+// from AI / memory / saved answers / defaults, for the conversion analytics.
+// Fire-and-forget; keyed to the active seeker server-side.
+async function submitAnswerStats(message) {
+  const { apiBaseUrl, authToken } = await getStorage(Object.values(STORAGE_KEYS));
+  if (!apiBaseUrl || !authToken || !message?.job_post_id) return;
+  await fetch(`${apiBaseUrl}/api/extension/answer-stats`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      job_post_id: message.job_post_id,
+      ai_count: message.ai ?? 0,
+      memory_count: message.memory ?? 0,
+      screening_count: message.screening ?? 0,
+      default_count: message.default ?? 0,
+    }),
+  });
+}
+
 // Mode 3: launch interactive "Autofill this page" in the given tab.
 // Fetches the run-less profile bundle, captures the job (link + description),
 // optionally tailors the resume to the job, injects the runner, and sends
@@ -830,6 +899,11 @@ async function autofillActiveTab(tabId, options = {}) {
     activeSeekerId,
     profile: context.profile ?? null,
     resumeUrl,
+    // Base résumé URL + tailoring result so the content script can render the
+    // AI Review card (changes/coverage/safety) and offer "Use base instead".
+    baseResumeUrl: context.resume?.url ?? null,
+    resumeSource: options.tailor && tailoring?.ok ? "tailored" : "base",
+    tailoring: tailoring ?? null,
     job: {
       title: scraped?.title ?? tab?.title ?? null,
       company: scraped?.company ?? null,
@@ -1097,6 +1171,56 @@ async function tryResumeNeedsAttention(context) {
   );
 }
 
+async function fetchAssignedSeekerIds(apiBaseUrl, authToken) {
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/extension/seekers`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.seekers || []).map((s) => s.id).filter(Boolean);
+  } catch (error) {
+    console.warn("Failed to load seekers for orchestration:", error);
+    return [];
+  }
+}
+
+// Cross-seeker orchestration: round-robin the AM's whole book, claiming runs
+// across seekers until the shared concurrency cap fills. Each claim goes
+// through the normal per-seeker /api/apply/next, so every gate (velocity,
+// dedup, kill-switch, quiet hours) still applies per seeker; the server also
+// enforces the shared cap, so this can never over-launch.
+async function pollRunnerAcrossSeekers(context) {
+  const { apiBaseUrl, authToken } = context;
+  const seekerIds = await fetchAssignedSeekerIds(apiBaseUrl, authToken);
+  const n = seekerIds.length;
+  if (n === 0) return;
+
+  const maxIterations = n * 2;
+  for (let iter = 0; iter < maxIterations && activeRuns.size < 5; iter += 1) {
+    const seekerId = seekerIds[orchestrationCursor % n];
+    orchestrationCursor = (orchestrationCursor + 1) % n;
+
+    let payload;
+    try {
+      payload = await fetchNextJob(apiBaseUrl, authToken, seekerId);
+    } catch (error) {
+      console.warn("Orchestration claim failed:", error);
+      continue;
+    }
+
+    if (!payload?.success) continue;
+    if (payload.blocked) {
+      // Shared cap reached → stop the pass; per-seeker blocks → try the next.
+      if (payload.reason === "MAX_CONCURRENCY") break;
+      continue;
+    }
+    if (payload.status === "IDLE") continue;
+
+    await launchPayloadRun(payload, context, false);
+  }
+}
+
 async function pollRunner() {
   const {
     apiBaseUrl,
@@ -1104,13 +1228,14 @@ async function pollRunner() {
     activeSeekerId,
     runnerEnabled,
     dryRun,
+    orchestrateAllSeekers,
   } = await getStorage(Object.values(STORAGE_KEYS));
 
   if (!runnerEnabled) {
     return;
   }
 
-  if (!apiBaseUrl || !authToken || !activeSeekerId) {
+  if (!apiBaseUrl || !authToken) {
     return;
   }
 
@@ -1124,6 +1249,17 @@ async function pollRunner() {
     activeSeekerId,
     dryRun,
   };
+
+  // Cross-seeker mode drives throughput across the whole book instead of the
+  // one active seeker.
+  if (orchestrateAllSeekers) {
+    await pollRunnerAcrossSeekers(context);
+    return;
+  }
+
+  if (!activeSeekerId) {
+    return;
+  }
 
   let payload;
   try {
@@ -1372,6 +1508,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "ANSWER_STATS") {
+    submitAnswerStats(message).catch((error) =>
+      console.warn("answer-stats submit failed:", error)
+    );
+    return false;
+  }
+
   if (message?.type === "PROFILE_UPDATE") {
     updateSeekerProfile(message)
       .then((result) => sendResponse(result))
@@ -1464,6 +1607,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         })
       );
 
+    return true;
+  }
+
+  if (message?.type === "SCORE_JOB") {
+    scoreCurrentJob(message.job || null)
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          success: false,
+          error: error?.message || "Failed to score this job.",
+        })
+      );
     return true;
   }
 

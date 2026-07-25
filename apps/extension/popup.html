@@ -353,6 +353,74 @@
       .scrape-options { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gray-200); }
       .scrape-options-title { font-size: 11px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
 
+      /* ─── Admin oversight ───────────────────────────── */
+      .ks-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 0; border-bottom: 1px solid var(--gray-100);
+      }
+      .ks-row:last-child { border-bottom: 0; }
+      .ks-label { font-size: 12px; color: var(--gray-700); font-weight: 500; }
+      .ks-toggle {
+        border: 0; border-radius: 999px; padding: 4px 12px;
+        font-size: 11px; font-weight: 700; cursor: pointer; min-width: 74px;
+      }
+      .ks-on { background: var(--green-100); color: var(--green-700); }
+      .ks-off { background: #fee2e2; color: var(--red-600); }
+      .ks-confirm { background: #fef3c7; color: #92400e; }
+      .health-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 8px; border-radius: 6px; background: var(--gray-50); margin-bottom: 4px;
+      }
+      .health-name { font-size: 11px; font-weight: 600; color: var(--gray-700); }
+      .health-rate { font-size: 11px; font-weight: 700; }
+      .h-healthy { color: var(--green-600); }
+      .h-degraded { color: #d97706; }
+      .h-down { color: var(--red-600); }
+
+      /* ─── Cockpit (AM triage board) ─────────────────── */
+      .cockpit-totals {
+        display: flex; gap: 6px; margin-bottom: 10px;
+      }
+      .cockpit-total {
+        flex: 1; text-align: center; padding: 7px 4px;
+        border-radius: 8px; background: var(--gray-50); border: 1px solid var(--gray-100);
+      }
+      .cockpit-total .num { font-size: 15px; font-weight: 800; line-height: 1; }
+      .cockpit-total .lbl {
+        font-size: 8px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .03em; color: var(--gray-500); margin-top: 3px;
+      }
+      .cockpit-total.attn .num { color: var(--red-600); }
+      .cockpit-total.queue .num { color: var(--indigo-600); }
+      .cockpit-total.matches .num { color: var(--green-600); }
+
+      .cockpit-row {
+        display: flex; align-items: center; gap: 8px;
+        background: var(--white); border-radius: 8px; padding: 9px 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        border-left: 3px solid var(--gray-200);
+      }
+      .cockpit-row.p-attn { border-left-color: var(--red-500); }
+      .cockpit-row.p-queue { border-left-color: var(--indigo-500); }
+      .cockpit-row.p-matches { border-left-color: var(--green-500); }
+      .cockpit-row.p-idle { opacity: 0.72; }
+      .cockpit-row-main { flex: 1; min-width: 0; }
+      .cockpit-name {
+        font-size: 12px; font-weight: 600; color: var(--gray-900);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .cockpit-chips { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+      .ck-chip {
+        font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+      }
+      .ck-chip.attn { background: var(--red-50); color: var(--red-600); }
+      .ck-chip.queue { background: var(--indigo-50); color: var(--indigo-600); }
+      .ck-chip.matches { background: var(--green-50); color: var(--green-700); }
+      .ck-chip.idle { background: var(--gray-100); color: var(--gray-500); }
+      .cockpit-work {
+        width: auto; flex: none; padding: 6px 12px; font-size: 11px;
+      }
+
       .hidden { display: none !important; }
 
       /* ─── Autofill Modal ─────────────────────────────── */
@@ -605,15 +673,36 @@
         </div>
 
         <div class="tabs">
-          <button class="tab active" data-tab="capture">Capture</button>
+          <button class="tab active" data-tab="cockpit">Cockpit</button>
+          <button class="tab" data-tab="capture">Capture</button>
           <button class="tab" data-tab="matched">Matches</button>
           <button class="tab" data-tab="apply">Apply</button>
           <button class="tab" data-tab="contacts">Contacts</button>
           <button class="tab" data-tab="settings">Settings</button>
+          <button class="tab hidden" data-tab="admin" id="adminTab">Admin</button>
+        </div>
+
+        <!-- Cockpit Panel (AM triage board across all assigned seekers) -->
+        <div class="panel active" id="panel-cockpit">
+          <div class="card">
+            <div class="card-title" style="justify-content:space-between">
+              <span>Today's Work</span>
+              <button class="btn btn-secondary btn-sm" id="refreshCockpit" style="width:auto;padding:3px 10px">Refresh</button>
+            </div>
+            <div id="cockpitTotals" class="cockpit-totals hidden"></div>
+            <div id="cockpitList" class="job-list">
+              <div class="empty-state" id="cockpitEmpty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <div>Loading your seekers…</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Capture Panel (scrape jobs from the current page) -->
-        <div class="panel active" id="panel-capture">
+        <div class="panel" id="panel-capture">
           <div class="page-info">
             <div class="page-info-label">Current Page</div>
             <div class="page-info-title" id="pageTitle">Loading...</div>
@@ -672,6 +761,10 @@
             <div class="checkbox-group" style="margin-bottom:10px">
               <input type="checkbox" id="dryRun" />
               <label for="dryRun">Dry run mode (no actual submissions)</label>
+            </div>
+            <div class="checkbox-group" style="margin-bottom:10px">
+              <input type="checkbox" id="orchestrateAll" />
+              <label for="orchestrateAll">Apply across all my seekers (cycle the whole book)</label>
             </div>
             <button class="btn btn-success" id="toggleRunner">Start Runner</button>
           </div>
@@ -740,6 +833,31 @@
           </div>
 
           <div id="settingsStatus" class="status"></div>
+        </div>
+
+        <!-- Admin Panel (oversight — only revealed for admin-role AMs) -->
+        <div class="panel" id="panel-admin">
+          <div class="card">
+            <div class="card-title" style="justify-content:space-between">
+              <span>Automation Control</span>
+              <button class="btn btn-secondary btn-sm" id="refreshAdmin" style="width:auto;padding:3px 10px">Refresh</button>
+            </div>
+            <p style="font-size:10px;color:var(--gray-500);margin-bottom:8px;line-height:1.4">
+              Halting stops new applications on the next poll. Runs already in flight finish.
+            </p>
+            <div id="killSwitches"></div>
+            <div id="adminStatus" class="status"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Adapter Health (7 days)</div>
+            <div id="adapterHealth" class="job-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">QA Reviews</div>
+            <div id="qaPending" style="font-size:12px;color:var(--gray-600)">—</div>
+          </div>
         </div>
       </div>
     </div>

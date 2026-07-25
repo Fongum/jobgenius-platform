@@ -1604,9 +1604,15 @@
     return filled;
   }
 
-  async function classifyAndFill(ctx, fields) {
-    if (!ctx?.apiBaseUrl || !ctx?.authToken || !ctx?.jobSeekerId) return 0;
-    if (!Array.isArray(fields) || fields.length === 0) return 0;
+  // Ask the server to classify a batch of fields (learned rules → screening →
+  // LLM). Returns { map, resolved } WITHOUT filling anything, so callers can
+  // review the AI's answers — and which layer produced each — before they land
+  // on the page. `resolved` is [{ label, value, source, confidence }], source ∈
+  // learned | screening | default | llm. Returns empty shapes on failure.
+  async function classifyFields(ctx, fields) {
+    const empty = { map: {}, resolved: [] };
+    if (!ctx?.apiBaseUrl || !ctx?.authToken || !ctx?.jobSeekerId) return empty;
+    if (!Array.isArray(fields) || fields.length === 0) return empty;
     try {
       const response = await fetch(`${ctx.apiBaseUrl}/api/apply/classify-fields`, {
         method: "POST",
@@ -1630,17 +1636,25 @@
             : null,
         }),
       });
-      if (!response.ok) return 0;
+      if (!response.ok) return empty;
       const data = await response.json();
-      const filled = await fillFieldsByLabel(data?.map ?? {});
-      // Jittered pause so the follow-up submit doesn't fire instantly after a
-      // burst of fills (less bot-like, lets validation/JS settle).
-      if (filled > 0) await sleep(200 + Math.floor(Math.random() * 350));
-      return filled;
+      return {
+        map: data?.map ?? {},
+        resolved: Array.isArray(data?.resolved) ? data.resolved : [],
+      };
     } catch (error) {
-      console.warn("classifyAndFill failed:", error);
-      return 0;
+      console.warn("classifyFields failed:", error);
+      return empty;
     }
+  }
+
+  async function classifyAndFill(ctx, fields) {
+    const { map } = await classifyFields(ctx, fields);
+    const filled = await fillFieldsByLabel(map);
+    // Jittered pause so the follow-up submit doesn't fire instantly after a
+    // burst of fills (less bot-like, lets validation/JS settle).
+    if (filled > 0) await sleep(200 + Math.floor(Math.random() * 350));
+    return filled;
   }
 
   // Robust "did the application actually submit?" check. The old approach —
@@ -1705,6 +1719,7 @@
     fillAllFields,
     fillFieldsByLabel,
     classifyAndFill,
+    classifyFields,
     enumerateFields,
     uploadResume,
     uploadViaDragDrop,

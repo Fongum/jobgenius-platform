@@ -695,7 +695,246 @@
       provideHandler = cb;
     }
 
-    return { mount, renderFields, setStatus, setRowValue, setHeader, setProvideHandler };
+    // Provenance badge styling per resolver layer, so the AM sees at a glance
+    // which answers to scrutinize (AI-generated) vs trust (profile / saved).
+    function sourceMeta(source) {
+      switch (source) {
+        case "learned":
+          return { label: "Memory", bg: "#eef2ff", fg: "#4338ca" };
+        case "screening":
+          return { label: "Saved", bg: "#eff6ff", fg: "#1d4ed8" };
+        case "default":
+          return { label: "Default", bg: "#f3f4f6", fg: "#6b7280" };
+        case "profile":
+          return { label: "Profile", bg: "#f0fdf4", fg: "#16a34a" };
+        case "llm":
+          return { label: "AI", bg: "#f5f3ff", fg: "#7c3aed" };
+        default:
+          return null;
+      }
+    }
+
+    // Attach/update a small provenance badge on a checklist row, inserted just
+    // before the status circle.
+    function setRowSource(sig, source) {
+      const entry = rows.get(sig);
+      if (!entry) return;
+      const top = entry.row.querySelector(".jg-rowtop");
+      if (!top) return;
+      const meta = sourceMeta(source);
+      let badge = top.querySelector("[data-jg-src]");
+      if (!meta) {
+        if (badge) badge.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.dataset.jgSrc = "1";
+        badge.style.cssText =
+          "font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;flex:none;margin-left:4px";
+        top.insertBefore(badge, entry.statusEl);
+      }
+      badge.textContent = meta.label;
+      badge.style.background = meta.bg;
+      badge.style.color = meta.fg;
+      badge.title = "Answer source: " + meta.label;
+    }
+
+    // ── AI Review: tailored-résumé summary + editable AI-written answers ──
+    // Rendered below the field checklist. Lets the AM review what the AI did
+    // (résumé changes / keyword coverage / safety) and edit generated long-form
+    // answers BEFORE submit — each edit fills the page field and teaches the
+    // learning loop via the supplied handlers.
+    function reviewSection() {
+      const el = mount();
+      let section = el.querySelector("[data-jg-review]");
+      if (!section) {
+        section = document.createElement("div");
+        section.dataset.jgReview = "1";
+        section.style.cssText =
+          "border-top:1px solid #eef2f7;padding:10px 14px;max-height:40vh;overflow:auto;flex:none";
+        el.appendChild(section);
+      }
+      section.innerHTML = "";
+      return section;
+    }
+
+    function reviewHeading(text) {
+      const h = document.createElement("div");
+      h.textContent = text;
+      h.style.cssText =
+        "font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin:0 0 6px";
+      return h;
+    }
+
+    function renderResumeCard(section, review) {
+      const t = review.tailoring || {};
+      const card = document.createElement("div");
+      card.style.cssText =
+        "background:#f5f3ff;border:1px solid #e5e7eb;border-radius:9px;padding:10px;margin-bottom:12px";
+
+      const title = document.createElement("div");
+      title.textContent = "Résumé tailored to this job";
+      title.style.cssText = "font-size:12px;font-weight:700;color:#4338ca;margin-bottom:4px";
+      card.appendChild(title);
+
+      if (typeof t.changes_summary === "string" && t.changes_summary.trim()) {
+        const sum = document.createElement("div");
+        sum.textContent = t.changes_summary.trim();
+        sum.style.cssText = "font-size:12px;color:#374151;line-height:1.45;margin-bottom:6px";
+        card.appendChild(sum);
+      }
+
+      const cov = t.coverage;
+      const beforePct = cov?.before?.coveragePct;
+      const afterPct = cov?.after?.coveragePct;
+      if (typeof beforePct === "number" && typeof afterPct === "number") {
+        const covEl = document.createElement("div");
+        covEl.style.cssText = "font-size:11px;color:#4b5563;margin-bottom:6px";
+        const up = afterPct >= beforePct;
+        covEl.innerHTML =
+          "Keyword coverage: <b>" +
+          beforePct +
+          "%</b> → <b style='color:" +
+          (up ? "#16a34a" : "#dc2626") +
+          "'>" +
+          afterPct +
+          "%</b>";
+        card.appendChild(covEl);
+      }
+
+      const safety = t.safety;
+      const badge = document.createElement("div");
+      badge.style.cssText = "font-size:11px;font-weight:600;margin-bottom:8px";
+      const blocking = (safety?.issues || []).filter((i) => i.severity === "block");
+      if (safety && safety.ok !== false && blocking.length === 0) {
+        badge.style.color = "#16a34a";
+        badge.textContent = "✓ Safety check passed — no fabrication detected";
+      } else if (safety) {
+        badge.style.color = "#dc2626";
+        badge.textContent =
+          "⚠ " + (blocking[0]?.message || "Safety check flagged issues — review before submit");
+      } else {
+        badge.style.display = "none";
+      }
+      card.appendChild(badge);
+
+      const btn = document.createElement("button");
+      btn.textContent = "Use base résumé instead";
+      btn.style.cssText =
+        "border:1px solid #d1d5db;background:#fff;color:#374151;font-size:12px;font-weight:600;" +
+        "border-radius:6px;padding:6px 10px;cursor:pointer";
+      btn.addEventListener("click", async () => {
+        if (!review.onUseBase) return;
+        btn.disabled = true;
+        btn.textContent = "Switching…";
+        const ok = await review.onUseBase();
+        btn.textContent = ok ? "Base résumé restored" : "Couldn’t switch";
+        if (!ok) btn.disabled = false;
+      });
+      card.appendChild(btn);
+
+      section.appendChild(card);
+    }
+
+    function renderAnswerEditor(section, answer, review) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "margin-bottom:12px";
+
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:4px";
+      const lb = document.createElement("div");
+      lb.textContent = answer.label;
+      lb.style.cssText =
+        "font-size:12px;font-weight:600;color:#374151;line-height:1.35;flex:1";
+      head.appendChild(lb);
+      const srcMeta = sourceMeta(answer.source);
+      if (srcMeta) {
+        const badge = document.createElement("span");
+        badge.textContent = srcMeta.label;
+        badge.style.cssText =
+          `font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;flex:none;` +
+          `background:${srcMeta.bg};color:${srcMeta.fg}`;
+        badge.title = "Answer source: " + srcMeta.label;
+        head.appendChild(badge);
+      }
+      wrap.appendChild(head);
+
+      const ta = document.createElement("textarea");
+      ta.value = answer.value || "";
+      ta.rows = Math.min(8, Math.max(3, Math.ceil((answer.value || "").length / 60)));
+      ta.style.cssText =
+        "width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:6px;" +
+        "padding:7px 8px;font:12px/1.5 Segoe UI,Arial,sans-serif;color:#111827;resize:vertical";
+      wrap.appendChild(ta);
+
+      const bar = document.createElement("div");
+      bar.style.cssText =
+        "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px";
+      const note = document.createElement("span");
+      note.textContent =
+        answer.source && answer.source !== "llm"
+          ? `From ${(sourceMeta(answer.source) || {}).label || "saved"} — edit if needed.`
+          : "AI-drafted — edit, then save for reuse.";
+      note.style.cssText = "font-size:10px;color:#9ca3af";
+      const save = document.createElement("button");
+      save.textContent = "Save answer";
+      save.style.cssText =
+        "border:0;border-radius:6px;background:#4f46e5;color:#fff;font-size:12px;font-weight:600;" +
+        "padding:6px 10px;cursor:pointer;flex:none";
+      save.addEventListener("click", async () => {
+        const value = String(ta.value || "").trim();
+        if (!value || !review.onAnswerSave) return;
+        save.disabled = true;
+        save.textContent = "Saving…";
+        const ok = await review.onAnswerSave(answer.field, value);
+        save.textContent = ok ? "Saved ✓" : "Retry";
+        if (ok) {
+          note.textContent = "Saved — this answer will be reused.";
+          note.style.color = "#16a34a";
+          setTimeout(() => {
+            save.disabled = false;
+            save.textContent = "Save answer";
+          }, 1200);
+        } else {
+          save.disabled = false;
+        }
+      });
+      bar.appendChild(note);
+      bar.appendChild(save);
+      wrap.appendChild(bar);
+
+      section.appendChild(wrap);
+    }
+
+    // review = { resumeSource, tailoring, answers:[{label,field,value}],
+    //            onUseBase(), onAnswerSave(field, value) }
+    function renderReview(review) {
+      if (!review) return;
+      const hasResume =
+        review.resumeSource === "tailored" && review.tailoring && review.tailoring.ok !== false;
+      const answers = Array.isArray(review.answers) ? review.answers : [];
+      if (!hasResume && answers.length === 0) return;
+
+      const section = reviewSection();
+      section.appendChild(reviewHeading("AI Review — check before submitting"));
+      if (hasResume) renderResumeCard(section, review);
+      if (answers.length > 0) {
+        section.appendChild(reviewHeading("AI-drafted answers"));
+        for (const ans of answers) renderAnswerEditor(section, ans, review);
+      }
+    }
+
+    return {
+      mount,
+      renderFields,
+      setStatus,
+      setRowValue,
+      setRowSource,
+      setHeader,
+      setProvideHandler,
+      renderReview,
+    };
   })();
 
   // ── Mode 3: interactive "Autofill this page" ──────────────────────────
@@ -714,6 +953,9 @@
       jobSeekerId: message.jobSeekerId ?? message.activeSeekerId ?? null,
       activeSeekerId: message.activeSeekerId ?? null,
       resumeUrl: message.resumeUrl ?? null,
+      baseResumeUrl: message.baseResumeUrl ?? null,
+      resumeSource: message.resumeSource ?? "base",
+      tailoring: message.tailoring ?? null,
       profile: message.profile ?? null,
       job: message.job ?? null,
       defaultEmail: message.profile?.email ?? "",
@@ -884,10 +1126,46 @@
       }
     }
     const toClassify = Array.from(byLabel.values());
+    // Classify first (returns the AI's label→value map + per-field source), THEN
+    // fill — so we can both apply the answers to the page and surface the
+    // long-form ones (with which layer produced them) in the AI Review panel.
+    let aiAnswerMap = {};
+    let aiResolved = [];
     if (toClassify.length > 0) {
-      const classified = (await dom.classifyAndFill?.(ctx, toClassify)) ?? 0;
+      const classifyResult = dom.classifyFields
+        ? await dom.classifyFields(ctx, toClassify)
+        : { map: {}, resolved: [] };
+      aiAnswerMap = classifyResult?.map ?? {};
+      aiResolved = Array.isArray(classifyResult?.resolved) ? classifyResult.resolved : [];
+      const classified = await dom.fillFieldsByLabel(aiAnswerMap);
       if (classified > 0) await dom.sleep(400);
     }
+    // label → which layer answered it (learned | screening | default | llm).
+    const sourceByLabel = new Map(
+      aiResolved.map((r) => [
+        String(r.label || "").toLowerCase().trim(),
+        r.source || "llm",
+      ])
+    );
+
+    // Outcome tracking: tally answer sources for this application and report
+    // them (keyed to the captured job) so conversion analytics can compare
+    // AI-answered applications against the rest. Best-effort.
+    if (ctx.job?.job_post_id && aiResolved.length > 0) {
+      const stats = { ai: 0, memory: 0, screening: 0, default: 0 };
+      for (const r of aiResolved) {
+        if (r.source === "llm") stats.ai += 1;
+        else if (r.source === "learned") stats.memory += 1;
+        else if (r.source === "screening") stats.screening += 1;
+        else if (r.source === "default") stats.default += 1;
+      }
+      chrome.runtime.sendMessage({
+        type: "ANSWER_STATS",
+        job_post_id: ctx.job.job_post_id,
+        ...stats,
+      });
+    }
+
     missing = extractMissing();
 
     // Update the checklist from the post-fill DOM state: a field with a value is
@@ -900,11 +1178,22 @@
       postValueBySig.set(fieldSignature(f), String(f.value ?? "").trim());
     }
 
+    // Provenance tag for a filled field: profile-mapped labels come straight
+    // from the seeker's profile; everything else takes the layer the resolver
+    // reported (memory / screening / default / AI).
+    const rowSource = (label) =>
+      profileTargetForLabel(label)
+        ? "profile"
+        : sourceByLabel.get(String(label || "").toLowerCase().trim()) || null;
+
     let filledCount = 0;
     for (const r of rows) {
       if (r.sig === "__resume__") {
         mode3Sidebar.setStatus(r.sig, resumeUploaded ? "filled" : "attention");
-        if (resumeUploaded) filledCount++;
+        if (resumeUploaded) {
+          filledCount++;
+          mode3Sidebar.setRowSource(r.sig, ctx.resumeSource === "tailored" ? "llm" : "profile");
+        }
         continue;
       }
       const val = postValueBySig.get(r.sig) ?? "";
@@ -913,6 +1202,7 @@
       mode3Sidebar.setRowValue(r.sig, val);
       if (val) {
         mode3Sidebar.setStatus(r.sig, "filled");
+        mode3Sidebar.setRowSource(r.sig, rowSource(r.label));
         filledCount++;
       } else if (missingSigs.has(r.sig)) {
         mode3Sidebar.setStatus(r.sig, "attention");
@@ -930,6 +1220,71 @@
     mode3Sidebar.setHeader(
       `Filled ${filledCount}. Tap ✓ to correct or + to add — each is saved for reuse.${captchaNote}`
     );
+
+    // ── AI Review: tailored-résumé summary + editable AI-drafted answers ──
+    const classifyByLabel = new Map(
+      toClassify.map((f) => [String(f.label || "").toLowerCase().trim(), f])
+    );
+    const longFormRe =
+      /describe|why|tell us|cover letter|message|about you|in \d|sentence|motivat|summary|comment|explain|elaborat/i;
+    const aiAnswers = [];
+    for (const [answerLabel, answerValue] of Object.entries(aiAnswerMap)) {
+      const val = String(answerValue ?? "").trim();
+      if (!val) continue;
+      const field =
+        classifyByLabel.get(String(answerLabel).toLowerCase().trim()) || {
+          label: answerLabel,
+          type: "text",
+          options: null,
+        };
+      const isLongForm =
+        String(field.type || "").toLowerCase() === "textarea" ||
+        longFormRe.test(answerLabel) ||
+        val.length > 80;
+      if (!isLongForm) continue;
+      aiAnswers.push({
+        label: field.label || answerLabel,
+        field,
+        value: val,
+        source: sourceByLabel.get(String(answerLabel).toLowerCase().trim()) || "llm",
+      });
+    }
+
+    const onUseBase = async () => {
+      if (!ctx.baseResumeUrl) return false;
+      try {
+        const up = await dom.uploadResume(ctx.baseResumeUrl);
+        if (up?.ok) {
+          mode3Sidebar.setStatus("__resume__", "filled");
+          mode3Sidebar.setRowValue("__resume__", "base");
+        }
+        return Boolean(up?.ok);
+      } catch (error) {
+        console.warn("[JobGenius] use-base résumé failed:", error);
+        return false;
+      }
+    };
+    const onAnswerSave = async (field, value) => {
+      if (!field?.label) return false;
+      try {
+        if (dom.fillFieldsByLabel) await dom.fillFieldsByLabel({ [field.label]: value });
+      } catch (error) {
+        console.warn("[JobGenius] AI-answer save fill failed:", error);
+      }
+      // Reflect the edit in the checklist and teach the loop (a corrected value).
+      const sig = fieldSignature(field);
+      mode3Sidebar.setRowValue(sig, value);
+      mode3Sidebar.setStatus(sig, "captured");
+      return persistAnswer(field, value, "corrected");
+    };
+
+    mode3Sidebar.renderReview({
+      resumeSource: ctx.resumeSource,
+      tailoring: ctx.tailoring,
+      answers: aiAnswers,
+      onUseBase,
+      onAnswerSave,
+    });
 
     // Live capture: watch for the AM's genuine manual edits (isTrusted is false
     // for our own programmatic fills), so answers to non-factual / choice
