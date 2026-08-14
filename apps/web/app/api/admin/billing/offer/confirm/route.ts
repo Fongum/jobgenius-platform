@@ -58,6 +58,9 @@ export async function POST(request: Request) {
     const fee = computePlacementFee({
       baseSalary: Number(offer.base_salary),
       guaranteedCompensation: offer.guaranteed_compensation,
+      // Whatever was actually agreed with this client; falls back to the
+      // headline rate when nothing was recorded (migration 121).
+      rate: offer.commission_rate,
       startDate: offer.start_date,
       offerAcceptedAt: offer.offer_accepted_at,
     });
@@ -65,6 +68,9 @@ export async function POST(request: Request) {
     Object.assign(updateFields, {
       status: "accepted",
       commission_amount: fee.commissionAmount,
+      // Persisted even when it came from the default, so the rate behind a
+      // historical commission is never left to inference.
+      commission_rate: fee.rate,
       commission_due_date: fee.dueDate,
       commission_extended_due_date: fee.extendedDueDate,
       commission_status: "pending",
