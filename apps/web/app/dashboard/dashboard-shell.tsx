@@ -78,6 +78,7 @@ const BASE_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/performance", label: "My Performance", icon: "chart" },
       { href: "/dashboard/me/payslips", label: "My Payslips", icon: "credit-card" },
+      { href: "/dashboard/me/earnings", label: "My Earnings", icon: "credit-card" },
     ],
   },
   {
@@ -130,6 +131,8 @@ const ADMIN_NAV_SECTION: NavSection = {
     { href: "/dashboard/admin/reconciliation", label: "Sheet Reconciliation", icon: "check" },
     { href: "/dashboard/admin/roster", label: "Work Roster", icon: "calendar" },
     { href: "/dashboard/admin/productivity-reviews", label: "Productivity Reviews", icon: "chart" },
+    { href: "/dashboard/admin/incentives", label: "Incentive Rates", icon: "credit-card" },
+    { href: "/dashboard/admin/client-difficulty", label: "Client Difficulty", icon: "chart" },
     { href: "/dashboard/admin/qa", label: "QA Review", icon: "check" },
     { href: "/dashboard/admin/automation", label: "Kill Switches", icon: "alert" },
     { href: "/dashboard/admin/ai-usage", label: "AI Usage", icon: "analytics" },

@@ -25,18 +25,25 @@
 -- multiplier, rate, and the commission it was computed from — so a bonus
 -- can be explained to the person receiving it rather than asserted.
 --
--- `am_incentive_awards` carries everything that is not a placement bonus:
--- the first-interview milestone that shortens the feedback loop, and the
--- portion of a placement held back until it survives 90 days. It is a
--- separate table because employee_bonus_records is one-row-per-accepted-
--- offer by construction and cannot hold anything else.
+-- `am_incentive_awards` carries the first-interview milestone that
+-- shortens the feedback loop. It is a separate table because
+-- employee_bonus_records is one-row-per-accepted-offer by construction
+-- and cannot hold anything else.
+--
+-- ─── Paid when the client starts ─────────────────────────────────────────
+--
+-- The placement bonus is payable at month end of the month the client
+-- actually STARTS the job, not when the offer is accepted. Offers get
+-- rescinded and people fail to show up; a start date is the first moment
+-- the placement is real, and it is also when the commission clock starts,
+-- so money out is timed with money in. `payment_month` already exists for
+-- this and is now populated from the start date.
 --
 -- ─── Amounts are configuration, not schema ───────────────────────────────
 --
--- Every figure here is a default awaiting sign-off, and the rates live in
--- lib/am-incentives.ts where they can be changed without a migration.
--- Nothing in this migration should be read as an agreed compensation
--- policy.
+-- The rates in force live in incentive_settings (migration 122) and are
+-- editable by an admin without a deploy. Each bonus record snapshots the
+-- rate and multiplier it used, so changing a rate never rewrites history.
 -- ============================================================
 
 -- ─── The agreed rate, per placement ──────────────────────────────────────
@@ -55,14 +62,15 @@ alter table public.employee_bonus_records
   -- The commission the percentage was taken of, in the offer's currency.
   add column if not exists commission_basis numeric(12,2),
   add column if not exists bonus_rate numeric(5,4),
-  -- Held back until the placement survives; released by the survival award.
-  add column if not exists withheld_amount numeric(12,2) not null default 0,
+  -- The start date the payment month was derived from, so a bonus that
+  -- moved months can be explained without re-reading the offer.
+  add column if not exists payable_from date,
   add column if not exists computation_note text;
 
 comment on column public.employee_bonus_records.commission_basis is
   'Commission the bonus was computed from. Stored so the arithmetic can be shown to the person being paid.';
-comment on column public.employee_bonus_records.withheld_amount is
-  'Portion of the bonus held pending 90-day survival, released via am_incentive_awards.';
+comment on column public.employee_bonus_records.payable_from is
+  'The client start date this bonus waits on. payment_month is the month end following it.';
 
 -- ─── Everything that is not a placement bonus ────────────────────────────
 
@@ -93,7 +101,7 @@ create table if not exists public.am_incentive_awards (
   updated_at timestamptz not null default now(),
 
   constraint chk_incentive_kind
-    check (kind in ('first_interview', 'placement_survival')),
+    check (kind in ('first_interview')),
   constraint chk_incentive_status
     check (status in ('pending', 'approved', 'paid', 'void'))
 );
@@ -103,11 +111,6 @@ create table if not exists public.am_incentive_awards (
 create unique index if not exists idx_am_incentive_first_interview
   on public.am_incentive_awards (job_seeker_id)
   where kind = 'first_interview';
-
--- One survival award per offer.
-create unique index if not exists idx_am_incentive_survival
-  on public.am_incentive_awards (source_offer_id)
-  where kind = 'placement_survival';
 
 create index if not exists idx_am_incentive_awards_am
   on public.am_incentive_awards (account_manager_id, created_at desc);
@@ -145,4 +148,4 @@ create trigger trg_am_incentive_awards_updated_at
   for each row execute function set_updated_at();
 
 comment on table public.am_incentive_awards is
-  'Account manager incentive payments other than the placement bonus: first-interview milestones and 90-day survival releases. Amounts are configured in lib/am-incentives.ts.';
+  'Account manager incentive payments other than the placement bonus. Currently the first-interview milestone. Amounts come from incentive_settings (migration 122).';

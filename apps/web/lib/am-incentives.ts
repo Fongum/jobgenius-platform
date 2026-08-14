@@ -1,17 +1,9 @@
 // ============================================================
-// What an account manager earns (migration 121).
+// What an account manager earns (migrations 120–122).
 //
 // Pure arithmetic. Nothing here reads or writes the database, so every
 // number below can be tested and, more importantly, explained to the
 // person being paid.
-//
-// ─── EVERY AMOUNT IN THIS FILE IS A PROPOSAL ─────────────────────────────
-//
-// The rates were derived from the unit economics discussed — $300
-// registration, 2.5% of a ~$50k salary, base pay of $100–250/month — but
-// none has been signed off. Treat them as a starting point for a decision,
-// not as agreed policy. They live here rather than in the schema so that
-// changing them is an edit, not a migration.
 //
 // ─── Why a percentage rather than a flat amount ──────────────────────────
 //
@@ -22,58 +14,144 @@
 // resist a client negotiating the rate down, since the discount cost them
 // nothing.
 //
-// A percentage of collected commission aligns all three parties: the AM,
-// the client, and the business all now want the same thing, which is the
-// largest possible offer at the agreed rate.
+// A percentage of commission aligns all three parties: the AM, the client
+// and the business all now want the same thing, which is the largest
+// possible offer at the agreed rate.
+//
+// ─── When it is paid ─────────────────────────────────────────────────────
+//
+// At month end of the month the client actually STARTS the job, not when
+// the offer is accepted. Offers get rescinded and people fail to show up;
+// a start date is the first moment the placement is real. It is also when
+// the commission clock starts, so the money going out is timed with the
+// money coming in.
+//
+// ─── Rates are settings, not constants ───────────────────────────────────
+//
+// Everything below is a DEFAULT. The values in force live in the database
+// (migration 122) and are editable by an admin without a deploy. Each
+// bonus record snapshots the rate and multiplier it was computed with, so
+// changing a rate never rewrites history — a bonus paid last quarter can
+// still be explained with the numbers that produced it.
 //
 // ─── Currency ────────────────────────────────────────────────────────────
 //
-// Commissions are earned in the client's currency (USD) and bonuses are
-// paid locally (XAF). The conversion is explicit and configurable because
+// Commissions are earned in the client's currency (USD) and bonuses paid
+// locally (XAF). The conversion is explicit and configurable, because
 // getting it wrong silently is a payroll error, not a rounding error.
 // ============================================================
 
-import {
-  DIFFICULTY_MULTIPLIERS,
-  effectiveTier,
-  type DifficultyTier,
-} from "./client-difficulty";
+import { DIFFICULTY_MULTIPLIERS, effectiveTier, type DifficultyTier } from "./client-difficulty";
 
-// ─── Configuration ───────────────────────────────────────────────────────
+// ─── Settings ────────────────────────────────────────────────────────────
 
-/** Share of the placement commission paid to the account manager. */
-export const PLACEMENT_BONUS_RATE = 0.1;
+export type IncentiveSettings = {
+  /** Share of the placement commission paid to the account manager. */
+  placement_bonus_rate: number;
+  /**
+   * The floor, in XAF. Placing a modest-salary client into a good
+   * situation must never pay less than the old flat bonus — otherwise the
+   * change reads as a pay cut to exactly the people doing patient work at
+   * the lower end of the market.
+   */
+  placement_bonus_floor: number;
+  /** A ceiling, so one exceptional placement cannot distort a month's payroll. */
+  placement_bonus_cap: number;
+  /**
+   * Paid once per client, when an interview actually happens. A five-month
+   * search with a single payout at the end gives a new AM nothing to reach
+   * for; this is deliberately small, because its job is feedback, not
+   * income.
+   */
+  first_interview_award: number;
+  /** Conversion applied to commissions earned in USD. */
+  usd_to_xaf: number;
+};
+
+export const DEFAULT_INCENTIVE_SETTINGS: IncentiveSettings = {
+  placement_bonus_rate: 0.1,
+  placement_bonus_floor: 30_000,
+  placement_bonus_cap: 400_000,
+  first_interview_award: 2_000,
+  usd_to_xaf: 600,
+};
+
+/** Bounds that stop a typo becoming a payroll incident. */
+export const SETTING_BOUNDS: Record<
+  keyof IncentiveSettings,
+  { min: number; max: number; label: string; isRate?: boolean }
+> = {
+  placement_bonus_rate: {
+    min: 0,
+    max: 0.5,
+    label: "Placement bonus rate",
+    isRate: true,
+  },
+  placement_bonus_floor: { min: 0, max: 1_000_000, label: "Minimum bonus" },
+  placement_bonus_cap: { min: 0, max: 10_000_000, label: "Maximum bonus" },
+  first_interview_award: { min: 0, max: 100_000, label: "First interview award" },
+  usd_to_xaf: { min: 1, max: 10_000, label: "USD → XAF rate" },
+};
+
+export const SETTING_KEYS = Object.keys(
+  DEFAULT_INCENTIVE_SETTINGS
+) as Array<keyof IncentiveSettings>;
 
 /**
- * The floor, in XAF. Placing a modest-salary client into a good situation
- * must never pay less than the old flat bonus — otherwise the change
- * reads as a pay cut to exactly the people doing patient work at the
- * lower end of the market.
+ * Validate a proposed settings change. Returns the errors rather than
+ * throwing, so an admin form can show all of them at once.
+ *
+ * The floor/cap ordering check matters: a floor above the cap would make
+ * every bonus land on one of the two bounds, silently, with the
+ * arithmetic in between doing nothing.
  */
-export const PLACEMENT_BONUS_FLOOR_XAF = 30_000;
+export function validateSettings(
+  input: Partial<IncentiveSettings>
+): { ok: true; settings: Partial<IncentiveSettings> } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const cleaned: Partial<IncentiveSettings> = {};
 
-/** A ceiling, so one exceptional placement cannot distort a month's payroll. */
-export const PLACEMENT_BONUS_CAP_XAF = 400_000;
+  for (const key of SETTING_KEYS) {
+    const raw = input[key];
+    if (raw === undefined) continue;
 
-/**
- * Paid once per client, when an interview actually happens. A five-month
- * search with a single payout at the end gives a new AM nothing to reach
- * for; this is deliberately small, because its job is feedback, not
- * income.
- */
-export const FIRST_INTERVIEW_AWARD_XAF = 2_000;
+    const value = typeof raw === "number" ? raw : Number(raw);
+    const bounds = SETTING_BOUNDS[key];
 
-/**
- * Share of the placement bonus held until the placement survives. Paying
- * purely on acceptance rewards putting someone into any job that will have
- * them; holding a portion back means the AM is paid for a placement that
- * lasted.
- */
-export const SURVIVAL_WITHHOLD_SHARE = 0.2;
-export const SURVIVAL_DAYS = 90;
+    if (!Number.isFinite(value)) {
+      errors.push(`${bounds.label} must be a number.`);
+      continue;
+    }
+    if (value < bounds.min || value > bounds.max) {
+      errors.push(
+        `${bounds.label} must be between ${bounds.min} and ${bounds.max}.`
+      );
+      continue;
+    }
+    cleaned[key] = value;
+  }
 
-/** Illustrative. Set from the rate you actually convert at. */
-export const USD_TO_XAF = 600;
+  const floor = cleaned.placement_bonus_floor;
+  const cap = cleaned.placement_bonus_cap;
+  if (floor !== undefined && cap !== undefined && floor > cap) {
+    errors.push("The minimum bonus cannot be above the maximum.");
+  }
+
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, settings: cleaned };
+}
+
+/** Fill any missing key from the defaults, so callers always get a whole object. */
+export function withDefaults(
+  partial: Partial<IncentiveSettings> | null | undefined
+): IncentiveSettings {
+  const merged = { ...DEFAULT_INCENTIVE_SETTINGS };
+  if (!partial) return merged;
+  for (const key of SETTING_KEYS) {
+    const value = partial[key];
+    if (typeof value === "number" && Number.isFinite(value)) merged[key] = value;
+  }
+  return merged;
+}
 
 export type Currency = "XAF" | "USD";
 
@@ -85,66 +163,52 @@ export type PlacementBonusInput = {
   commissionCurrency?: Currency;
   /** Difficulty tier in force for the client. */
   tier?: DifficultyTier;
-  /** Conversion rate, overridable for testing or a changed rate. */
-  usdToXaf?: number;
 };
 
 export type PlacementBonus = {
-  /** Total earned, in XAF. */
+  /** Total earned, in XAF. Paid in full at month end of the start date. */
   total: number;
-  /** Paid on acceptance. */
-  payable: number;
-  /** Held until the placement survives SURVIVAL_DAYS. */
-  withheld: number;
   multiplier: number;
   tier: DifficultyTier;
+  /** The rate used, snapshotted onto the bonus record. */
+  rate: number;
   /** Before the floor and cap were applied — for explaining the result. */
   computed: number;
   flooredAtMinimum: boolean;
   cappedAtMaximum: boolean;
 };
 
-function round(value: number): number {
-  return Math.round(value);
-}
-
-/**
- * The placement bonus, difficulty-weighted, floored and capped.
- *
- * Rounding happens once at the end rather than at each step, so the parts
- * always sum to the total — a bonus whose halves do not add up is the
- * kind of thing people notice on a payslip.
- */
 export function computePlacementBonus(
-  input: PlacementBonusInput
+  input: PlacementBonusInput,
+  settings: IncentiveSettings = DEFAULT_INCENTIVE_SETTINGS
 ): PlacementBonus {
   const tier = input.tier ?? "standard";
   const multiplier = DIFFICULTY_MULTIPLIERS[tier] ?? 1;
-  const rate = input.usdToXaf ?? USD_TO_XAF;
 
   const commission = Math.max(0, Number(input.commissionAmount) || 0);
   const inXaf =
-    (input.commissionCurrency ?? "USD") === "USD" ? commission * rate : commission;
+    (input.commissionCurrency ?? "USD") === "USD"
+      ? commission * settings.usd_to_xaf
+      : commission;
 
-  const computed = inXaf * PLACEMENT_BONUS_RATE * multiplier;
+  const computed = inXaf * settings.placement_bonus_rate * multiplier;
 
-  const flooredAtMinimum = computed < PLACEMENT_BONUS_FLOOR_XAF;
-  const cappedAtMaximum = computed > PLACEMENT_BONUS_CAP_XAF;
+  const flooredAtMinimum = computed < settings.placement_bonus_floor;
+  const cappedAtMaximum = computed > settings.placement_bonus_cap;
 
-  const total = round(
-    Math.min(PLACEMENT_BONUS_CAP_XAF, Math.max(PLACEMENT_BONUS_FLOOR_XAF, computed))
+  const total = Math.round(
+    Math.min(
+      settings.placement_bonus_cap,
+      Math.max(settings.placement_bonus_floor, computed)
+    )
   );
-
-  const withheld = round(total * SURVIVAL_WITHHOLD_SHARE);
 
   return {
     total,
-    // Derived by subtraction so payable + withheld === total exactly.
-    payable: total - withheld,
-    withheld,
     multiplier,
     tier,
-    computed: round(computed),
+    rate: settings.placement_bonus_rate,
+    computed: Math.round(computed),
     flooredAtMinimum,
     cappedAtMaximum,
   };
@@ -156,66 +220,70 @@ export function explainPlacementBonus(
   commissionAmount: number,
   currency: Currency = "USD"
 ): string {
-  const basis = `${currency} ${commissionAmount.toLocaleString()}`;
   const parts = [
-    `${Math.round(PLACEMENT_BONUS_RATE * 100)}% of ${basis}`,
-    bonus.multiplier === 1 ? null : `×${bonus.multiplier} (${bonus.tier.replace("_", " ")})`,
+    `${Math.round(bonus.rate * 100)}% of ${currency} ${commissionAmount.toLocaleString()}`,
+    bonus.multiplier === 1
+      ? null
+      : `×${bonus.multiplier} (${bonus.tier.replace("_", " ")})`,
   ].filter(Boolean);
 
   let line = `${parts.join(" ")} = ${bonus.total.toLocaleString()} XAF`;
-  if (bonus.flooredAtMinimum) {
-    line += ` (raised to the ${PLACEMENT_BONUS_FLOOR_XAF.toLocaleString()} minimum)`;
-  }
-  if (bonus.cappedAtMaximum) {
-    line += ` (capped at ${PLACEMENT_BONUS_CAP_XAF.toLocaleString()})`;
-  }
-  if (bonus.withheld > 0) {
-    line += `; ${bonus.withheld.toLocaleString()} held until ${SURVIVAL_DAYS} days`;
-  }
+  if (bonus.flooredAtMinimum) line += " (raised to the minimum)";
+  if (bonus.cappedAtMaximum) line += " (capped at the maximum)";
   return line;
 }
 
-// ─── Survival ────────────────────────────────────────────────────────────
+// ─── When it becomes payable ─────────────────────────────────────────────
 
 /**
- * Whether a placement has survived long enough to release the withheld
- * portion. A placement with no start date cannot be assessed, and returns
- * false rather than assuming the best — the money is owed either way, it
- * simply is not yet provable.
+ * The month a placement bonus belongs to: the month the client actually
+ * starts the job. Returned as the first of that month, matching
+ * employee_bonus_records.payment_month.
  */
-export function hasSurvived(
-  startDate: string | null | undefined,
-  now: Date = new Date(),
-  days: number = SURVIVAL_DAYS
-): boolean {
-  if (!startDate) return false;
-  const started = Date.parse(
-    startDate.length === 10 ? `${startDate}T00:00:00Z` : startDate
-  );
-  if (Number.isNaN(started)) return false;
-  return now.getTime() - started >= days * 86_400_000;
+export function paymentMonthFor(startDate: string | null | undefined): string | null {
+  if (!startDate) return null;
+  const iso = startDate.length === 10 ? `${startDate}T00:00:00Z` : startDate;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** The date the withheld portion becomes releasable. */
-export function survivalDueDate(
-  startDate: string,
-  days: number = SURVIVAL_DAYS
-): string | null {
-  const started = Date.parse(
-    startDate.length === 10 ? `${startDate}T00:00:00Z` : startDate
-  );
-  if (Number.isNaN(started)) return null;
-  return new Date(started + days * 86_400_000).toISOString().slice(0, 10);
+/**
+ * Whether the bonus can be paid: the client has actually started.
+ *
+ * A future start date is not payable, and a missing one is not payable
+ * either — an offer without a start date has not become a job yet, and
+ * assuming otherwise pays for placements that never happened.
+ */
+export function isBonusPayable(
+  startDate: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!startDate) return false;
+  const iso = startDate.length === 10 ? `${startDate}T00:00:00Z` : startDate;
+  const started = Date.parse(iso);
+  if (Number.isNaN(started)) return false;
+  return started <= now.getTime();
+}
+
+/** Human-readable status for a bonus awaiting its start date. */
+export function payabilityNote(
+  startDate: string | null | undefined,
+  now: Date = new Date()
+): string {
+  if (!startDate) return "Awaiting a confirmed start date";
+  if (!isBonusPayable(startDate, now)) return `Payable after the client starts on ${startDate}`;
+  const month = paymentMonthFor(startDate);
+  return month ? `Payable in the ${month.slice(0, 7)} payroll` : "Payable";
 }
 
 // ─── Award kinds ─────────────────────────────────────────────────────────
 
-export const AWARD_KINDS = ["first_interview", "placement_survival"] as const;
+export const AWARD_KINDS = ["first_interview"] as const;
 export type AwardKind = (typeof AWARD_KINDS)[number];
 
 export const AWARD_LABELS: Record<AwardKind, string> = {
   first_interview: "First interview",
-  placement_survival: `${SURVIVAL_DAYS}-day survival`,
 };
 
 export function isAwardKind(value: unknown): value is AwardKind {
@@ -230,9 +298,9 @@ export function isAwardStatus(value: unknown): value is AwardStatus {
 }
 
 /**
- * Total owed to an AM across bonus records and awards. Only counts what
- * has been approved or paid — a pending award is a proposal, and showing
- * it as earned sets an expectation the review might not honour.
+ * Total owed to an AM. Pending is kept separate from earned: a pending
+ * award is a proposal, and showing it as earned sets an expectation the
+ * review might not honour.
  */
 export function sumEarned(
   awards: Array<{ amount: number; status: string }>
@@ -256,4 +324,8 @@ export function tierFromAssessment(
   assessment: { computed_tier: string; override_tier?: string | null } | null
 ): DifficultyTier {
   return assessment ? effectiveTier(assessment) : "standard";
+}
+
+export function formatXaf(amount: number): string {
+  return `${Math.round(amount).toLocaleString()} XAF`;
 }

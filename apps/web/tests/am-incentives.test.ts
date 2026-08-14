@@ -1,19 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
-  FIRST_INTERVIEW_AWARD_XAF,
-  PLACEMENT_BONUS_CAP_XAF,
-  PLACEMENT_BONUS_FLOOR_XAF,
-  PLACEMENT_BONUS_RATE,
-  SURVIVAL_DAYS,
-  SURVIVAL_WITHHOLD_SHARE,
-  USD_TO_XAF,
+  DEFAULT_INCENTIVE_SETTINGS,
   computePlacementBonus,
   explainPlacementBonus,
-  hasSurvived,
   isAwardKind,
+  isBonusPayable,
+  payabilityNote,
+  paymentMonthFor,
   sumEarned,
-  survivalDueDate,
   tierFromAssessment,
+  validateSettings,
+  withDefaults,
+  type IncentiveSettings,
 } from "@/lib/am-incentives";
 
 /** The discussed reality: $50k salary at 2.5% = $1,250 commission. */
@@ -49,53 +47,143 @@ describe("computePlacementBonus", () => {
     expect(large.total).toBeGreaterThan(small.total);
   });
 
-  it("never pays less than the old flat bonus", () => {
-    // A tiny commission must not read as a pay cut to the person who
-    // patiently placed a modest-salary client.
+  it("never pays less than the configured minimum", () => {
     const tiny = computePlacementBonus({ commissionAmount: 10 });
-    expect(tiny.total).toBe(PLACEMENT_BONUS_FLOOR_XAF);
+    expect(tiny.total).toBe(DEFAULT_INCENTIVE_SETTINGS.placement_bonus_floor);
     expect(tiny.flooredAtMinimum).toBe(true);
   });
 
   it("caps an exceptional placement", () => {
     const huge = computePlacementBonus({ commissionAmount: 100_000 });
-    expect(huge.total).toBe(PLACEMENT_BONUS_CAP_XAF);
+    expect(huge.total).toBe(DEFAULT_INCENTIVE_SETTINGS.placement_bonus_cap);
     expect(huge.cappedAtMaximum).toBe(true);
   });
 
-  it("splits into payable and withheld that sum exactly to the total", () => {
-    // A bonus whose halves do not add up is what people notice on a payslip.
-    for (const commission of [10, 1_250, 2_137, 9_999, 100_000]) {
-      const bonus = computePlacementBonus({ commissionAmount: commission });
-      expect(bonus.payable + bonus.withheld).toBe(bonus.total);
-      expect(bonus.withheld).toBe(Math.round(bonus.total * SURVIVAL_WITHHOLD_SHARE));
-    }
+  it("pays the whole bonus at once — nothing is withheld", () => {
+    const bonus = computePlacementBonus({ commissionAmount: TYPICAL_COMMISSION });
+    expect(bonus).not.toHaveProperty("withheld");
+    expect(bonus.total).toBe(75_000);
+  });
+
+  it("uses the settings it is given rather than the defaults", () => {
+    const settings: IncentiveSettings = {
+      ...DEFAULT_INCENTIVE_SETTINGS,
+      placement_bonus_rate: 0.2,
+      usd_to_xaf: 700,
+    };
+    const bonus = computePlacementBonus(
+      { commissionAmount: TYPICAL_COMMISSION },
+      settings
+    );
+    expect(bonus.total).toBe(TYPICAL_COMMISSION * 700 * 0.2);
+    // The rate is snapshotted so the record can explain itself later.
+    expect(bonus.rate).toBe(0.2);
   });
 
   it("accepts a commission already in local currency", () => {
     const local = computePlacementBonus({
-      commissionAmount: TYPICAL_COMMISSION * USD_TO_XAF,
+      commissionAmount: TYPICAL_COMMISSION * DEFAULT_INCENTIVE_SETTINGS.usd_to_xaf,
       commissionCurrency: "XAF",
     });
-    const usd = computePlacementBonus({ commissionAmount: TYPICAL_COMMISSION });
-    expect(local.total).toBe(usd.total);
+    expect(local.total).toBe(
+      computePlacementBonus({ commissionAmount: TYPICAL_COMMISSION }).total
+    );
   });
 
   it("treats a negative or absent commission as zero, then floors it", () => {
-    expect(computePlacementBonus({ commissionAmount: -500 }).total).toBe(
-      PLACEMENT_BONUS_FLOOR_XAF
-    );
-    expect(
-      computePlacementBonus({ commissionAmount: Number.NaN }).total
-    ).toBe(PLACEMENT_BONUS_FLOOR_XAF);
+    const floor = DEFAULT_INCENTIVE_SETTINGS.placement_bonus_floor;
+    expect(computePlacementBonus({ commissionAmount: -500 }).total).toBe(floor);
+    expect(computePlacementBonus({ commissionAmount: Number.NaN }).total).toBe(floor);
+  });
+});
+
+describe("payment timing", () => {
+  it("belongs to the month the client starts", () => {
+    expect(paymentMonthFor("2026-09-14")).toBe("2026-09-01");
+    expect(paymentMonthFor("2026-01-31")).toBe("2026-01-01");
   });
 
-  it("honours an overridden conversion rate", () => {
-    const bonus = computePlacementBonus({
-      commissionAmount: TYPICAL_COMMISSION,
-      usdToXaf: 1_000,
+  it("is not payable before the client has started", () => {
+    const now = new Date("2026-08-14T00:00:00Z");
+    expect(isBonusPayable("2026-09-01", now)).toBe(false);
+    expect(isBonusPayable("2026-08-14", now)).toBe(true);
+    expect(isBonusPayable("2026-07-01", now)).toBe(true);
+  });
+
+  it("is not payable without a start date, rather than assuming the best", () => {
+    // An offer with no start date has not become a job yet.
+    expect(isBonusPayable(null)).toBe(false);
+    expect(isBonusPayable(undefined)).toBe(false);
+    expect(isBonusPayable("not a date")).toBe(false);
+    expect(paymentMonthFor(null)).toBeNull();
+    expect(paymentMonthFor("nonsense")).toBeNull();
+  });
+
+  it("explains what a bonus is waiting on", () => {
+    const now = new Date("2026-08-14T00:00:00Z");
+    expect(payabilityNote(null, now)).toMatch(/confirmed start date/i);
+    expect(payabilityNote("2026-09-01", now)).toMatch(/after the client starts/i);
+    expect(payabilityNote("2026-07-01", now)).toContain("2026-07");
+  });
+});
+
+describe("validateSettings", () => {
+  it("accepts a sensible change", () => {
+    const result = validateSettings({ placement_bonus_rate: 0.12 });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a rate entered as a percentage by mistake", () => {
+    // 10 meaning "10%" would pay a thousand percent of commission.
+    const result = validateSettings({ placement_bonus_rate: 10 });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a floor above the cap", () => {
+    const result = validateSettings({
+      placement_bonus_floor: 500_000,
+      placement_bonus_cap: 100_000,
     });
-    expect(bonus.total).toBe(TYPICAL_COMMISSION * PLACEMENT_BONUS_RATE * 1_000);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.join(" ")).toMatch(/minimum bonus cannot be above/i);
+    }
+  });
+
+  it("reports every problem at once rather than the first", () => {
+    const result = validateSettings({
+      placement_bonus_rate: 99,
+      usd_to_xaf: -1,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.length).toBeGreaterThan(1);
+  });
+
+  it("ignores keys that were not submitted", () => {
+    const result = validateSettings({});
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.settings).toEqual({});
+  });
+});
+
+describe("withDefaults", () => {
+  it("fills missing keys", () => {
+    expect(withDefaults({ placement_bonus_rate: 0.15 })).toEqual({
+      ...DEFAULT_INCENTIVE_SETTINGS,
+      placement_bonus_rate: 0.15,
+    });
+  });
+
+  it("ignores nulls and non-numbers stored in the database", () => {
+    const merged = withDefaults({
+      placement_bonus_rate: null as unknown as number,
+      usd_to_xaf: "600" as unknown as number,
+    });
+    expect(merged).toEqual(DEFAULT_INCENTIVE_SETTINGS);
+  });
+
+  it("returns the defaults for no settings at all", () => {
+    expect(withDefaults(null)).toEqual(DEFAULT_INCENTIVE_SETTINGS);
   });
 });
 
@@ -110,52 +198,25 @@ describe("explainPlacementBonus", () => {
     expect(line).toContain("10%");
     expect(line).toContain("×1.5");
     expect(line).toContain("hard");
-    expect(line).toContain(String(SURVIVAL_DAYS));
   });
 
-  it("says when the floor was applied", () => {
-    const bonus = computePlacementBonus({ commissionAmount: 10 });
-    expect(explainPlacementBonus(bonus, 10)).toMatch(/minimum/i);
-  });
-});
-
-describe("hasSurvived", () => {
-  const start = "2026-05-01";
-
-  it("is false before the window and true after", () => {
-    expect(hasSurvived(start, new Date("2026-07-01T00:00:00Z"))).toBe(false);
-    expect(hasSurvived(start, new Date("2026-08-01T00:00:00Z"))).toBe(true);
-  });
-
-  it("is true exactly on the boundary", () => {
-    const due = survivalDueDate(start)!;
-    expect(hasSurvived(start, new Date(`${due}T00:00:00Z`))).toBe(true);
-  });
-
-  it("returns false rather than assuming the best when the date is unknown", () => {
-    expect(hasSurvived(null)).toBe(false);
-    expect(hasSurvived(undefined)).toBe(false);
-    expect(hasSurvived("not a date")).toBe(false);
-  });
-
-  it("computes the due date as start plus the window", () => {
-    expect(survivalDueDate("2026-05-01")).toBe("2026-07-30");
-    expect(survivalDueDate("nonsense")).toBeNull();
+  it("says when a bound was applied", () => {
+    expect(explainPlacementBonus(computePlacementBonus({ commissionAmount: 10 }), 10)).toMatch(
+      /minimum/i
+    );
   });
 });
 
 describe("sumEarned", () => {
   it("keeps pending separate from earned", () => {
-    // A pending award is a proposal; showing it as earned sets an
-    // expectation the review might not honour.
-    const totals = sumEarned([
-      { amount: 75_000, status: "paid" },
-      { amount: 30_000, status: "approved" },
-      { amount: 2_000, status: "pending" },
-      { amount: 99_000, status: "void" },
-    ]);
-
-    expect(totals).toEqual({ paid: 75_000, approved: 30_000, pending: 2_000 });
+    expect(
+      sumEarned([
+        { amount: 75_000, status: "paid" },
+        { amount: 30_000, status: "approved" },
+        { amount: 2_000, status: "pending" },
+        { amount: 99_000, status: "void" },
+      ])
+    ).toEqual({ paid: 75_000, approved: 30_000, pending: 2_000 });
   });
 
   it("handles an empty list", () => {
@@ -164,9 +225,9 @@ describe("sumEarned", () => {
 });
 
 describe("helpers", () => {
-  it("recognises award kinds", () => {
+  it("no longer recognises the survival award", () => {
     expect(isAwardKind("first_interview")).toBe(true);
-    expect(isAwardKind("placement")).toBe(false);
+    expect(isAwardKind("placement_survival")).toBe(false);
   });
 
   it("defaults a missing assessment to the standard tier", () => {
@@ -174,10 +235,5 @@ describe("helpers", () => {
     expect(
       tierFromAssessment({ computed_tier: "standard", override_tier: "very_hard" })
     ).toBe("very_hard");
-  });
-
-  it("keeps the interview milestone small enough to be feedback, not income", () => {
-    const bonus = computePlacementBonus({ commissionAmount: TYPICAL_COMMISSION });
-    expect(FIRST_INTERVIEW_AWARD_XAF).toBeLessThan(bonus.total / 10);
   });
 });
