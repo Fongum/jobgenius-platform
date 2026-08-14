@@ -64,6 +64,8 @@ export type IncentiveSettings = {
    * income.
    */
   first_interview_award: number;
+  /** Paid into the social fund per placement, alongside the AM's bonus. */
+  social_fund_contribution: number;
   /** Conversion applied to commissions earned in USD. */
   usd_to_xaf: number;
 };
@@ -73,6 +75,7 @@ export const DEFAULT_INCENTIVE_SETTINGS: IncentiveSettings = {
   placement_bonus_floor: 30_000,
   placement_bonus_cap: 400_000,
   first_interview_award: 2_000,
+  social_fund_contribution: 20_000,
   usd_to_xaf: 600,
 };
 
@@ -90,6 +93,11 @@ export const SETTING_BOUNDS: Record<
   placement_bonus_floor: { min: 0, max: 1_000_000, label: "Minimum bonus" },
   placement_bonus_cap: { min: 0, max: 10_000_000, label: "Maximum bonus" },
   first_interview_award: { min: 0, max: 100_000, label: "First interview award" },
+  social_fund_contribution: {
+    min: 0,
+    max: 1_000_000,
+    label: "Social fund contribution",
+  },
   usd_to_xaf: { min: 1, max: 10_000, label: "USD → XAF rate" },
 };
 

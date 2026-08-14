@@ -31,6 +31,8 @@ const HELP: Record<keyof IncentiveSettings, string> = {
     "No single placement pays more than this, so one exceptional month cannot distort payroll.",
   first_interview_award:
     "Paid once per client, the first time an interview actually happens.",
+  social_fund_contribution:
+    "Paid into the social fund on each placement, alongside the account manager's bonus.",
   usd_to_xaf: "Applied to commissions earned in USD before the bonus is worked out.",
 };
 

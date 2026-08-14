@@ -8,6 +8,8 @@ import {
   type AcceptedOfferVerificationStatus,
 } from "@/lib/people";
 import { logAdminAction } from "@/lib/audit";
+import { resolvePlacementBonus } from "@/lib/placement-bonus";
+import { loadIncentiveSettings } from "@/lib/incentive-settings";
 import { sendNotification } from "@/lib/notify";
 import { writeOutcomeEvents } from "@/lib/outcomes-server";
 import type { OutcomeEventWriteInput } from "@/lib/outcomes";
@@ -197,6 +199,15 @@ export async function POST(request: Request) {
   let bonusRecordId: string | null = existingBonus?.id ?? null;
 
   if (readyForBonus) {
+    // A share of what the placement actually earned, weighted by how hard
+    // the client was, at the rates currently configured — rather than the
+    // flat 30,000 this used to write. See lib/placement-bonus.ts.
+    const resolved = await resolvePlacementBonus({
+      jobSeekerId: offer.job_seeker_id,
+      companyName: offer.company_name,
+      clientStartDate: offer.client_start_date,
+    });
+
     const { data: upsertedBonus, error: upsertBonusError } = await supabaseAdmin
       .from("employee_bonus_records")
       .upsert(
@@ -210,7 +221,20 @@ export async function POST(request: Request) {
           )
             ? existingBonus.bonus_eligibility_status
             : "eligible",
-        bonus_amount: 30000,
+        // An already-paid bonus keeps its amount: recomputing it after the
+        // fact would silently restate what someone has been paid.
+        bonus_amount:
+          existingBonus?.payment_status === "paid"
+            ? existingBonus.bonus_amount
+            : resolved.bonus.total,
+        // Snapshotted so the figure can be explained later even if the
+        // rates change underneath it.
+        difficulty_tier: resolved.tier,
+        difficulty_multiplier: resolved.bonus.multiplier,
+        commission_basis: resolved.commissionAmount,
+        bonus_rate: resolved.bonus.rate,
+        payable_from: offer.client_start_date,
+        computation_note: resolved.note,
         payment_month: startMonth,
         payment_status:
           existingBonus?.payment_status && existingBonus.payment_status !== "cancelled"
@@ -246,7 +270,8 @@ export async function POST(request: Request) {
       {
         accepted_offer_record_id: offer.id,
         employee_id: employeeId,
-        amount: 20000,
+        // Configurable alongside the bonus rates rather than hardcoded.
+        amount: (await loadIncentiveSettings()).social_fund_contribution,
         contribution_date: startMonth || todayIsoDate(),
         notes: "Auto-created from verified accepted offer.",
       },

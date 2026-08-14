@@ -33,6 +33,9 @@ create table if not exists public.incentive_settings (
   placement_bonus_floor numeric(12,2) not null default 30000,
   placement_bonus_cap numeric(12,2) not null default 400000,
   first_interview_award numeric(12,2) not null default 2000,
+  -- Paid into the social fund per placement, alongside the AM's bonus.
+  -- Hardcoded at 20,000 in the finance route until now.
+  social_fund_contribution numeric(12,2) not null default 20000,
   usd_to_xaf numeric(10,2) not null default 600,
 
   updated_by uuid references public.account_managers(id) on delete set null,
@@ -47,6 +50,7 @@ create table if not exists public.incentive_settings (
   constraint chk_bonus_floor_below_cap
     check (placement_bonus_floor <= placement_bonus_cap),
   constraint chk_first_interview check (first_interview_award >= 0),
+  constraint chk_social_fund check (social_fund_contribution >= 0),
   constraint chk_usd_rate check (usd_to_xaf > 0)
 );
 
