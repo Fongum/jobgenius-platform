@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/auth";
 import type { UserType } from "@/lib/auth";
 import { normalizeOfferCode } from "@/lib/offers";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { cleanSkills } from "@/lib/resume-profile-fill";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const REFRESH_TOKEN_COOKIE = "jg_refresh_token";
@@ -268,6 +269,10 @@ export async function POST(request: Request) {
       }
       if (!updates.linkedin_url && resume.linkedin_url && typeof resume.linkedin_url === "string") {
         updates.linkedin_url = resume.linkedin_url;
+      }
+      if (!updates.skills) {
+        const skills = cleanSkills(resume.skills);
+        if (skills.length > 0) updates.skills = skills;
       }
       if (Array.isArray(resume.work_history) && resume.work_history.length > 0) {
         updates.work_history = resume.work_history;
