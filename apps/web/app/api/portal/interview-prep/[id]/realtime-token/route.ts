@@ -1,4 +1,6 @@
-import { requireJobSeeker } from "@/lib/auth";
+import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { isSessionEligibleForToken } from "@/lib/portal/voice-limits";
 import {
   loadInterviewContext,
   normalizePersona,
@@ -21,13 +23,52 @@ export async function POST(
     return Response.json({ error: "OpenAI is not configured." }, { status: 500 });
   }
 
-  let body: { persona?: string } = {};
+  let body: { persona?: string; session_id?: string } = {};
   try {
     body = await request.json();
   } catch {
     // optional body
   }
   const persona = normalizePersona(body.persona);
+
+  // Cost guard: a token can only be minted for a session the seeker just
+  // created via POST /voice-session (which enforces the daily cap).
+  if (typeof body.session_id !== "string" || !body.session_id) {
+    return Response.json({ error: "session_id is required." }, { status: 400 });
+  }
+
+  const { data: session } = await supabaseAdmin
+    .from("voice_interview_sessions")
+    .select("id, status, started_at")
+    .eq("id", body.session_id)
+    .eq("interview_prep_id", params.id)
+    .eq("job_seeker_id", auth.user.id)
+    .maybeSingle();
+
+  if (
+    !session ||
+    !isSessionEligibleForToken({ status: session.status, startedAt: session.started_at })
+  ) {
+    return Response.json(
+      { error: "Start a new voice session before connecting." },
+      { status: 409 }
+    );
+  }
+
+  // Burst limit on top of the session binding, in case a client retries in a loop.
+  const limit = await enforceRateLimit({
+    request,
+    scope: "portal-realtime-token",
+    identifier: auth.user.id,
+    limit: 10,
+    windowSeconds: 600,
+  });
+  if (!limit.allowed) {
+    return Response.json(
+      { error: "Too many connection attempts. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.max(1, limit.retryAfterSeconds)) } }
+    );
+  }
 
   // loadInterviewContext also verifies the prep belongs to this seeker.
   const context = await loadInterviewContext(params.id, auth.user.id);

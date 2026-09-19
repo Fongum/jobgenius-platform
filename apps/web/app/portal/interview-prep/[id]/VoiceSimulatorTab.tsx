@@ -62,12 +62,10 @@ const PERSONAS = [
 
 const KICKOFF_PROMPT = "Please start the interview with an opening question.";
 const CONSENT_STORAGE_KEY = "jobgenius_voice_consent";
-
-type JobContext = {
-  title: string;
-  company: string | null;
-  description: string | null;
-};
+// Hard stop for a live session: realtime audio is billed per minute, and the
+// interviewer is instructed to wrap up after 6-8 exchanges (well under this).
+const MAX_SESSION_MS = 20 * 60 * 1000;
+const WARN_BEFORE_MS = 2 * 60 * 1000;
 
 function extractMessageText(item: RealtimeItem): string | null {
   if (item.type !== "message") return null;
@@ -111,22 +109,6 @@ function historyToTurns(history: RealtimeItem[]): Turn[] {
     });
   }
   return turns;
-}
-
-function buildInstructions(persona: string, context: JobContext | null) {
-  const personaDescriptions: Record<string, string> = {
-    professional: "a friendly but thorough HR interviewer",
-    technical: "a senior engineer conducting a technical screen",
-    behavioral: "a hiring manager focused on culture fit and leadership",
-    stress: "a direct, challenging interviewer who pushes back on vague answers",
-  };
-  const personaText = personaDescriptions[persona] || personaDescriptions.professional;
-  const jobTitle = context?.title || "the role";
-  const company = context?.company ? ` at ${context.company}` : "";
-  const description = context?.description
-    ? `\nContext: ${context.description.slice(0, 1200)}`
-    : "";
-  return `You are ${personaText}. You are conducting a mock interview for the position of ${jobTitle}${company}.\n\nRules:\n- Ask one question at a time\n- Keep questions concise and role-specific\n- Use relevant follow-up questions\n- After 6-8 exchanges, wrap up and ask if the candidate has questions\n- Do not mention you are AI${description}`;
 }
 
 function CompetencyBar({ label, value }: { label: string; value: number | null }) {
@@ -257,10 +239,14 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
-  const [jobContext, setJobContext] = useState<JobContext | null>(null);
   const [pendingStart, setPendingStart] = useState(false);
+  const [nearLimit, setNearLimit] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<RealtimeSession | null>(null);
+  // Timer callbacks outlive renders, so they read the latest turns/complete via refs.
+  const turnsRef = useRef<Turn[]>([]);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const completeRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (loaded) return;
@@ -274,24 +260,6 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
   }, [loaded, prepId]);
 
   useEffect(() => {
-    fetch(`/api/portal/interview-prep/${prepId}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const post = Array.isArray(data?.prep?.job_posts)
-          ? data?.prep?.job_posts[0]
-          : data?.prep?.job_posts;
-        if (post) {
-          setJobContext({
-            title: post.title || "Role",
-            company: post.company ?? null,
-            description: post.description_text ?? null,
-          });
-        }
-      })
-      .catch((err) => console.error("[voice-sim] fetch job context failed:", err));
-  }, [prepId]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(CONSENT_STORAGE_KEY);
     if (stored === "true") setConsentAccepted(true);
@@ -299,10 +267,13 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    turnsRef.current = turns;
   }, [turns]);
 
   useEffect(() => {
     return () => {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
       if (sessionRef.current) {
         sessionRef.current.close();
         sessionRef.current = null;
@@ -310,18 +281,35 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
     };
   }, []);
 
-  async function connectRealtime() {
+  function clearTimers() {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    setNearLimit(false);
+  }
+
+  function armTimers() {
+    clearTimers();
+    timersRef.current = [
+      setTimeout(() => setNearLimit(true), MAX_SESSION_MS - WARN_BEFORE_MS),
+      setTimeout(() => {
+        setError("Time limit reached — your interview was ended and scored.");
+        void completeRef.current();
+      }, MAX_SESSION_MS),
+    ];
+  }
+
+  async function connectRealtime(sessionId: string) {
     setConnecting(true);
     setError(null);
     try {
       const tokenRes = await fetch(`/api/portal/interview-prep/${prepId}/realtime-token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ persona }),
+        body: JSON.stringify({ persona, session_id: sessionId }),
       });
       if (!tokenRes.ok) {
-        const msg = await tokenRes.text();
-        throw new Error(msg || "Failed to fetch realtime token.");
+        const errBody = await tokenRes.json().catch(() => null);
+        throw new Error(errBody?.error || "Failed to fetch realtime token.");
       }
       const tokenData = await tokenRes.json();
       const token = tokenData?.token;
@@ -329,12 +317,16 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
         throw new Error("Realtime token missing.");
       }
 
+      // Instructions (résumé + JD grounded) are built server-side; never fall back
+      // to a client-built prompt, which would lose the résumé grounding.
+      const instructions = tokenData?.instructions;
+      if (typeof instructions !== "string" || !instructions) {
+        throw new Error("Interview instructions missing.");
+      }
+
       const agent = new RealtimeAgent({
         name: "JobGenius Interviewer",
-        instructions:
-          typeof tokenData?.instructions === "string" && tokenData.instructions
-            ? tokenData.instructions
-            : buildInstructions(persona, jobContext),
+        instructions,
       });
 
       const session = new RealtimeSession(agent, {
@@ -352,6 +344,7 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
 
       await session.connect({ apiKey: token });
       sessionRef.current = session;
+      armTimers();
       session.sendMessage(KICKOFF_PROMPT);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start realtime session.";
@@ -371,14 +364,15 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
         body: JSON.stringify({ persona, mode: "realtime" }),
       });
       if (!res.ok) {
-        throw new Error("Failed to start session.");
+        const errBody = await res.json().catch(() => null);
+        throw new Error(errBody?.error || "Failed to start session.");
       }
       const { session } = await res.json();
       if (session) {
         setSessions((prev) => [session, ...prev]);
         setActiveSession(session);
         setTurns([]);
-        await connectRealtime();
+        await connectRealtime(session.id);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start session.";
@@ -428,10 +422,11 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
 
   async function completeSession() {
     if (!activeSession) return;
+    clearTimers();
     sessionRef.current?.close();
     sessionRef.current = null;
     const payload = {
-      turns: turns.map((t) => ({ speaker: t.speaker, content: t.content })),
+      turns: turnsRef.current.map((t) => ({ speaker: t.speaker, content: t.content })),
     };
     const res = await fetch(
       `/api/portal/interview-prep/${prepId}/voice-session/${activeSession.id}/complete`,
@@ -452,6 +447,8 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
       setError("Failed to save transcript.");
     }
   }
+
+  completeRef.current = completeSession;
 
   function handleBack() {
     if (activeSession && activeSession.status !== "completed") {
@@ -486,6 +483,13 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
             )}
           </div>
         </div>
+
+        {nearLimit && !isCompleted && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 mb-4">
+            About 2 minutes left — this interview ends automatically at 20 minutes. Wrap up your
+            answer, or press End Interview to get your score now.
+          </div>
+        )}
 
         {connecting && (
           <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-sm text-violet-700 mb-4">

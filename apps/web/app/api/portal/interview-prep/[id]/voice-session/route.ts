@@ -1,6 +1,12 @@
 import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { normalizePersona } from "@/lib/portal/interview-context";
+import {
+  VOICE_QUOTA_WINDOW_MS,
+  evaluateVoiceQuota,
+  getVoiceDailySessionCap,
+  voiceQuotaMessage,
+} from "@/lib/portal/voice-limits";
 
 export async function GET(
   request: Request,
@@ -52,6 +58,33 @@ export async function POST(
   }
 
   const persona = normalizePersona(body.persona);
+
+  // Cost guard: rolling 24h cap on realtime sessions per seeker.
+  const since = new Date(Date.now() - VOICE_QUOTA_WINDOW_MS).toISOString();
+  const { data: recent, error: recentError } = await supabaseAdmin
+    .from("voice_interview_sessions")
+    .select("created_at")
+    .eq("job_seeker_id", auth.user.id)
+    .gte("created_at", since);
+
+  if (recentError) {
+    console.error("[portal:voice-session] quota lookup failed:", recentError);
+    return Response.json({ error: "Could not start session. Please try again." }, { status: 500 });
+  }
+
+  const quota = evaluateVoiceQuota({
+    sessionStarts: (recent ?? []).map((r) => new Date(r.created_at as string)),
+    dailyCap: getVoiceDailySessionCap(),
+  });
+  if (!quota.allowed) {
+    return Response.json(
+      { error: voiceQuotaMessage(quota), code: quota.reason },
+      {
+        status: 429,
+        headers: { "Retry-After": String(quota.retryAfterSeconds) },
+      }
+    );
+  }
 
   // Create the session. The live interview is driven by the Realtime client,
   // which connects via the realtime-token route and finalizes via /complete.
