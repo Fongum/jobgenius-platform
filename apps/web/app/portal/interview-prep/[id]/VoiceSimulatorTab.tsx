@@ -310,18 +310,18 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
     };
   }, []);
 
-  async function connectRealtime() {
+  async function connectRealtime(sessionId: string) {
     setConnecting(true);
     setError(null);
     try {
       const tokenRes = await fetch(`/api/portal/interview-prep/${prepId}/realtime-token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ persona }),
+        body: JSON.stringify({ persona, session_id: sessionId }),
       });
       if (!tokenRes.ok) {
-        const msg = await tokenRes.text();
-        throw new Error(msg || "Failed to fetch realtime token.");
+        const errBody = await tokenRes.json().catch(() => null);
+        throw new Error(errBody?.error || "Failed to fetch realtime token.");
       }
       const tokenData = await tokenRes.json();
       const token = tokenData?.token;
@@ -371,14 +371,15 @@ export default function VoiceSimulatorTab({ prepId }: { prepId: string }) {
         body: JSON.stringify({ persona, mode: "realtime" }),
       });
       if (!res.ok) {
-        throw new Error("Failed to start session.");
+        const errBody = await res.json().catch(() => null);
+        throw new Error(errBody?.error || "Failed to start session.");
       }
       const { session } = await res.json();
       if (session) {
         setSessions((prev) => [session, ...prev]);
         setActiveSession(session);
         setTurns([]);
-        await connectRealtime();
+        await connectRealtime(session.id);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start session.";
