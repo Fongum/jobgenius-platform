@@ -1,6 +1,7 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { enforceOpsRateLimit } from "@/lib/rate-limit-presets";
+import { sendSlackAlert } from "@/lib/ops-alerts";
 
 type AlertInsert = {
   severity: string;
@@ -8,22 +9,6 @@ type AlertInsert = {
   message: string;
   meta?: Record<string, unknown>;
 };
-
-async function sendSlackAlert(text: string) {
-  const webhook = process.env.SLACK_WEBHOOK_URL;
-  if (!webhook) {
-    return;
-  }
-  try {
-    await fetch(webhook, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-  } catch {
-    // Best-effort only.
-  }
-}
 
 async function runAlerts(request: Request) {
   const rl = await enforceOpsRateLimit(request);
