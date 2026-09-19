@@ -18,6 +18,7 @@ import type { ResumeTemplateId } from "@/lib/resume-templates";
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
 import { buildInterviewPrepContentWithAI } from "@/lib/interview-prep-ai";
 import { isOpenAIConfigured } from "@/lib/openai";
+import { candidateFromSeekerRow } from "@/lib/portal/candidate-context";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { interviewPrepReadyEmail } from "@/lib/email-templates/interview-prep-ready";
@@ -1007,7 +1008,7 @@ async function runInterviewPrepReady(payload: Record<string, unknown>) {
 
   const { data: jobSeeker } = await supabaseServer
     .from("job_seekers")
-    .select("id, full_name, email, phone, seniority, work_type, skills")
+    .select("id, full_name, email, phone, seniority, work_type, skills, work_history, education")
     .eq("id", jobSeekerId)
     .single();
 
@@ -1025,6 +1026,7 @@ async function runInterviewPrepReady(payload: Record<string, unknown>) {
       seniority: jobSeeker.seniority,
       workType: jobSeeker.work_type,
       seekerSkills: jobSeeker.skills,
+      candidate: candidateFromSeekerRow(jobSeeker),
     });
   } else {
     content = buildInterviewPrepContent({

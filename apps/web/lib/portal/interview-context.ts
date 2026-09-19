@@ -1,4 +1,14 @@
 import { supabaseAdmin } from "@/lib/auth";
+import {
+  buildCandidateContextBlock,
+  candidateFromSeekerRow,
+  candidateHasResume,
+  type InterviewCandidateContext,
+} from "@/lib/portal/candidate-context";
+
+// Re-exported so existing importers (evaluator, routes) keep working.
+export { buildCandidateContextBlock };
+export type { InterviewCandidateContext };
 
 export type InterviewPersona = "professional" | "technical" | "behavioral" | "stress";
 
@@ -22,13 +32,6 @@ export type InterviewJobContext = {
   description: string | null;
 };
 
-export type InterviewCandidateContext = {
-  fullName: string | null;
-  skills: string[];
-  workHistory: string[];
-  education: string[];
-};
-
 export type InterviewContext = {
   job: InterviewJobContext;
   candidate: InterviewCandidateContext;
@@ -39,33 +42,6 @@ export function normalizePersona(value: unknown): InterviewPersona {
   return INTERVIEW_PERSONAS.includes(value as InterviewPersona)
     ? (value as InterviewPersona)
     : "professional";
-}
-
-function asStringArray(value: unknown, limit: number): string[] {
-  if (!Array.isArray(value)) return [];
-  const out: string[] = [];
-  for (const entry of value) {
-    if (out.length >= limit) break;
-    if (typeof entry === "string") {
-      const trimmed = entry.trim();
-      if (trimmed) out.push(trimmed);
-      continue;
-    }
-    if (entry && typeof entry === "object") {
-      // work_history / education are jsonb arrays of objects — flatten the
-      // human-readable bits into a single line.
-      const record = entry as Record<string, unknown>;
-      const parts = [
-        record.title ?? record.role ?? record.degree ?? record.position,
-        record.company ?? record.school ?? record.institution ?? record.employer,
-        record.duration ?? record.dates ?? record.year ?? record.years,
-      ]
-        .filter((p) => typeof p === "string" && p.trim())
-        .map((p) => (p as string).trim());
-      if (parts.length > 0) out.push(parts.join(" — "));
-    }
-  }
-  return out;
 }
 
 /**
@@ -110,34 +86,10 @@ export async function loadInterviewContext(
     .eq("id", jobSeekerId)
     .maybeSingle();
 
-  const candidate: InterviewCandidateContext = {
-    fullName: (seeker?.full_name as string | null) ?? null,
-    skills: asStringArray(seeker?.skills, 25),
-    workHistory: asStringArray(seeker?.work_history, 8),
-    education: asStringArray(seeker?.education, 5),
-  };
-
-  const hasResume =
-    candidate.skills.length > 0 ||
-    candidate.workHistory.length > 0 ||
-    candidate.education.length > 0;
+  const candidate: InterviewCandidateContext = candidateFromSeekerRow(seeker);
+  const hasResume = candidateHasResume(candidate);
 
   return { job, candidate, hasResume };
-}
-
-/** Compact, prompt-ready candidate résumé block (empty string if none). */
-export function buildCandidateContextBlock(candidate: InterviewCandidateContext): string {
-  const lines: string[] = [];
-  if (candidate.skills.length > 0) {
-    lines.push(`Candidate skills: ${candidate.skills.join(", ")}`);
-  }
-  if (candidate.workHistory.length > 0) {
-    lines.push(`Candidate work history:\n- ${candidate.workHistory.join("\n- ")}`);
-  }
-  if (candidate.education.length > 0) {
-    lines.push(`Candidate education:\n- ${candidate.education.join("\n- ")}`);
-  }
-  return lines.join("\n");
 }
 
 /**
