@@ -18,6 +18,8 @@ import type { ResumeTemplateId } from "@/lib/resume-templates";
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
 import { buildInterviewPrepContentWithAI } from "@/lib/interview-prep-ai";
 import { isOpenAIConfigured } from "@/lib/openai";
+import { decideJobFailure, isAiQuotaError } from "@/lib/ai-provider-errors";
+import { raiseOpsAlert } from "@/lib/ops-alerts";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { interviewPrepReadyEmail } from "@/lib/email-templates/interview-prep-ready";
@@ -46,6 +48,7 @@ type BackgroundJobRow = {
   payload: Record<string, unknown> | null;
   attempts: number | null;
   max_attempts: number | null;
+  created_at?: string | null;
 };
 
 type JobPostRow = {
@@ -82,8 +85,6 @@ type StaleApplicationRunRow = {
   locked_at: string | null;
 };
 
-const RETRY_BASE_MS = 60 * 1000;
-const RETRY_MAX_MS = 30 * 60 * 1000;
 const IS_PROD =
   process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
 const DEFAULT_THRESHOLD = Number(process.env.AUTO_QUEUE_DEFAULT_THRESHOLD ?? 60);
@@ -878,6 +879,12 @@ async function runTailorResume(payload: Record<string, unknown>) {
     }
   } catch (structuredError) {
     console.error("Structured tailoring failed, falling back to plain text:", structuredError);
+
+    // A provider-wide quota outage is not a property of this résumé: let the job
+    // handler defer it rather than mislabelling the item as missing input below.
+    if (isAiQuotaError(structuredError)) {
+      throw structuredError;
+    }
 
     if (!seeker.resume_text) {
       if (queueId) {
@@ -1958,7 +1965,7 @@ async function runJobs(request: Request) {
       .eq("id", job.id)
       .is("locked_at", null)
       .in("status", ["QUEUED", "RETRY"])
-      .select("id, type, payload, attempts, max_attempts")
+      .select("id, type, payload, attempts, max_attempts, created_at")
       .single();
 
     if (!lockedJob) {
@@ -1978,12 +1985,29 @@ async function runJobs(request: Request) {
         .eq("id", lockedJob.id);
       results.push({ id: lockedJob.id, status: "DONE" });
     } catch (err) {
-      const attempts = (lockedJob.attempts ?? 0) + 1;
-      const maxAttempts = lockedJob.max_attempts ?? 3;
-      const retry = attempts < maxAttempts;
-      const delayMs = Math.min(RETRY_BASE_MS * 2 ** Math.max(attempts - 1, 0), RETRY_MAX_MS);
-      const nextRunAt = new Date(Date.now() + delayMs).toISOString();
       const errorMessage = err instanceof Error ? err.message : "Job failed.";
+      const createdAtMs = lockedJob.created_at ? Date.parse(lockedJob.created_at) : NaN;
+      const decision = decideJobFailure({
+        error: err,
+        attempts: lockedJob.attempts,
+        maxAttempts: lockedJob.max_attempts,
+        jobAgeMs: Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : null,
+      });
+      const attempts = decision.attempts;
+      const retry = decision.status === "RETRY";
+      const nextRunAt = new Date(Date.now() + decision.delayMs).toISOString();
+
+      if (decision.reason === "quota_deferral") {
+        // The AI provider is out of credits: defer instead of failing the job and
+        // parking the queue item, and tell a human once.
+        await raiseOpsAlert({
+          severity: "HIGH",
+          type: "AI_PROVIDER_QUOTA",
+          message:
+            "The OpenAI account is out of credits. AI-dependent work is being deferred and will resume automatically once billing is restored (platform.openai.com/settings/organization/billing).",
+          meta: { provider: "openai", job_type: lockedJob.type, sample_error: errorMessage.slice(0, 300) },
+        });
+      }
 
       if (!retry && lockedJob.payload && typeof lockedJob.payload === "object" && !Array.isArray(lockedJob.payload)) {
         const payload = lockedJob.payload as Record<string, unknown>;
