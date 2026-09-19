@@ -4,6 +4,11 @@ import {
   isOpenAIConfigured,
 } from "@/lib/openai";
 import { buildInterviewPrepContent } from "@/lib/interview-prep";
+import {
+  buildCandidateContextBlock,
+  candidateHasResume,
+  type InterviewCandidateContext,
+} from "@/lib/portal/candidate-context";
 
 type InterviewPrepContent = {
   role_summary: string;
@@ -24,6 +29,7 @@ export async function buildInterviewPrepContentWithAI({
   seniority,
   workType,
   seekerSkills,
+  candidate,
 }: {
   jobTitle: string;
   companyName?: string | null;
@@ -32,6 +38,8 @@ export async function buildInterviewPrepContentWithAI({
   seniority?: string | null;
   workType?: string | null;
   seekerSkills?: string[] | null;
+  /** Full résumé context (skills + work history + education); preferred over seekerSkills. */
+  candidate?: InterviewCandidateContext | null;
 }): Promise<InterviewPrepContent> {
   if (!isOpenAIConfigured()) {
     return buildInterviewPrepContent({
@@ -47,15 +55,20 @@ export async function buildInterviewPrepContentWithAI({
   try {
     const client = getOpenAIClient();
 
+    const hasResume = !!candidate && candidateHasResume(candidate);
+    const resumeBlock = hasResume
+      ? buildCandidateContextBlock(candidate as InterviewCandidateContext)
+      : seekerSkills && seekerSkills.length > 0
+      ? `Candidate skills: ${seekerSkills.join(", ")}`
+      : null;
+
     const contextParts = [
       `Job title: ${jobTitle}`,
       companyName ? `Company: ${companyName}` : null,
       location ? `Location: ${location}` : null,
       seniority ? `Seniority level: ${seniority}` : null,
       workType ? `Work type: ${workType}` : null,
-      seekerSkills && seekerSkills.length > 0
-        ? `Candidate skills: ${seekerSkills.join(", ")}`
-        : null,
+      resumeBlock,
       descriptionText
         ? `Job description:\n${descriptionText.slice(0, 3000)}`
         : null,
@@ -84,7 +97,16 @@ Return a JSON object with exactly these fields:
 
 Make questions specific: instead of "Tell me about a challenge" write "Describe a time you had to debug a production issue under time pressure" for an engineering role.
 If the company name is provided, include company-specific questions like "What interests you about [Company]'s approach to [domain]?"
-Tailor technical topics to what's actually in the job description.`,
+Tailor technical topics to what's actually in the job description.${
+            hasResume
+              ? `
+
+The candidate's résumé is included below the job details. Use it:
+- At least 4 of the likely_questions must probe the candidate's ACTUAL roles, projects or skills, and at least 2 must probe a gap between the résumé and this job description.
+- Checklist items should name which résumé experiences the candidate should prepare as STAR stories for this role.
+- Use only what the résumé states. Never invent employers, titles, projects or metrics.`
+              : ""
+          }`,
         },
         {
           role: "user",
