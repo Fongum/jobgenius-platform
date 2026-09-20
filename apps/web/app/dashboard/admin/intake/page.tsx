@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
 import { normalizeAMRole } from "@/lib/auth/roles";
 import { getCapacitySnapshot } from "@/lib/intake";
+import { getIntakeSla } from "@/lib/intake-aging";
 import IntakeQueueClient from "./IntakeQueueClient";
 
 type IntakeStateRow = {
@@ -23,6 +24,8 @@ type IntakeStateRow = {
   preview_converted_at: string | null;
   call_completed_at: string | null;
   assigned_account_manager_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type SeekerRow = {
@@ -53,7 +56,7 @@ export default async function IntakePage() {
       supabaseAdmin
         .from("job_seeker_intake_states")
         .select(
-          "id, job_seeker_id, selected_plan, offer_path, submitted_code, base_registration_fee, discount_amount, final_registration_fee, status, submitted_at, approved_at, capacity_month, preview_agreed_at, preview_started_at, preview_expires_at, preview_converted_at, call_completed_at, assigned_account_manager_id"
+          "id, job_seeker_id, selected_plan, offer_path, submitted_code, base_registration_fee, discount_amount, final_registration_fee, status, submitted_at, approved_at, capacity_month, preview_agreed_at, preview_started_at, preview_expires_at, preview_converted_at, call_completed_at, assigned_account_manager_id, created_at, updated_at"
         )
         .order("submitted_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false }),
@@ -102,6 +105,7 @@ export default async function IntakePage() {
       accountManagers={(accountManagers ?? []) as AccountManagerRow[]}
       initialCapacity={initialCapacity}
       isSuperAdmin={normalizeAMRole(user.role) === "superadmin"}
+      sla={getIntakeSla()}
     />
   );
 }

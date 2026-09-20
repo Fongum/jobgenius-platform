@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { waitingBadge, type IntakeSla } from "@/lib/intake-aging";
 
 type AccountManager = {
   id: string;
@@ -47,6 +48,8 @@ type IntakeState = {
   preview_expires_at: string | null;
   preview_converted_at: string | null;
   call_completed_at: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   assigned_account_manager_id: string | null;
   jobSeeker: {
     id: string;
@@ -125,11 +128,13 @@ export default function IntakeQueueClient({
   accountManagers,
   initialCapacity,
   isSuperAdmin = false,
+  sla,
 }: {
   initialIntakeStates: IntakeState[];
   accountManagers: AccountManager[];
   initialCapacity: CapacitySnapshot;
   isSuperAdmin?: boolean;
+  sla: IntakeSla;
 }) {
   const router = useRouter();
   const [filter, setFilter] =
@@ -449,6 +454,27 @@ export default function IntakeQueueClient({
                         >
                           {state.status.replace(/_/g, " ")}
                         </span>
+                        {(() => {
+                          const badge = waitingBadge(state, new Date(), sla);
+                          if (!badge) return null;
+                          return (
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                badge.overdue
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}
+                              title={
+                                badge.overdue
+                                  ? "Past the target for this stage"
+                                  : "Within the target for this stage"
+                              }
+                            >
+                              {badge.label}
+                              {badge.overdue ? " · overdue" : ""}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-600">
                         <span>{state.jobSeeker?.email}</span>
