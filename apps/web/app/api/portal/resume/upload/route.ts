@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireJobSeeker } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/auth";
 import { calculateProfileCompletion } from "@/lib/portal/profile-completion";
+import { buildProfileFill } from "@/lib/resume-profile-fill";
 import { getOpenAIClient, isOpenAIConfigured, OPENAI_MODEL } from "@/lib/openai";
 
 /**
@@ -252,10 +253,35 @@ export async function POST(request: Request) {
     }
   }
 
+  // Persist what was parsed, server-side and fill-only (never overwrites a value the
+  // seeker or an AM already set). Previously this only came back to the browser and
+  // was lost unless the client applied and re-saved it.
+  let profileFilled: string[] = [];
+  if (parsedProfile && updatedSeeker) {
+    const fill = buildProfileFill(updatedSeeker as Record<string, unknown>, parsedProfile);
+    if (fill.filled.length > 0) {
+      const completion = calculateProfileCompletion({
+        ...(updatedSeeker as Record<string, unknown>),
+        ...fill.updates,
+      });
+      const { error: fillError } = await supabaseAdmin
+        .from("job_seekers")
+        .update({ ...fill.updates, profile_completion: completion.percentage })
+        .eq("id", auth.user.id);
+
+      if (fillError) {
+        console.error("[portal:resume] failed to save parsed profile fields:", fillError);
+      } else {
+        profileFilled = fill.filled;
+      }
+    }
+  }
+
   return NextResponse.json({
     document: doc,
     parsed_text: rawText || null,
     parsed_profile: parsedProfile,
+    profile_filled: profileFilled,
   }, { status: 201 });
 }
 
