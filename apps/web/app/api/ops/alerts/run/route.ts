@@ -1,6 +1,7 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { enforceOpsRateLimit } from "@/lib/rate-limit-presets";
+import { AGING_STATUSES, intakeAlertsFrom, summarizeIntakeAging } from "@/lib/intake-aging";
 
 type AlertInsert = {
   severity: string;
@@ -111,6 +112,23 @@ async function runAlerts(request: Request) {
     }
   });
 
+  // Seekers stuck waiting on a human in intake (review / payment). A failed lookup
+  // must never suppress the alerts above, so it is swallowed here.
+  try {
+    const { data: intakeRows, error: intakeError } = await supabaseServer
+      .from("job_seeker_intake_states")
+      .select("id, status, submitted_at, approved_at, call_completed_at, created_at, updated_at")
+      .in("status", AGING_STATUSES);
+
+    if (intakeError) {
+      console.error("[ops:alerts] intake aging lookup failed:", intakeError);
+    } else {
+      alertsToInsert.push(...intakeAlertsFrom(summarizeIntakeAging(intakeRows ?? [], new Date(now))));
+    }
+  } catch (err) {
+    console.error("[ops:alerts] intake aging check failed:", err);
+  }
+
   if (alertsToInsert.length === 0) {
     return Response.json({ success: true, created: 0 });
   }
@@ -132,6 +150,10 @@ async function runAlerts(request: Request) {
       }
       if (existingMeta?.ats_type && alertMeta.ats_type) {
         return existingMeta.ats_type === alertMeta.ats_type;
+      }
+      // One open alert per intake queue (review / payment).
+      if (existingMeta?.scope && alertMeta.scope) {
+        return existingMeta.scope === alertMeta.scope;
       }
       return false;
     });
