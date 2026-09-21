@@ -2,6 +2,12 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import {
+  getMatchStoreFloor,
+  loadExistingScoreKeys,
+  scoreKey,
+  shouldStoreScore,
+} from "@/lib/match-storage";
+import {
   computeMatchScore,
   parseJobPostSmart,
   type JobSeekerProfile,
@@ -133,25 +139,27 @@ export async function POST(request: Request) {
     });
   }
 
-  // Get existing scores to optionally skip already-scored pairs
-  let existingScoreKeys = new Set<string>();
-  if (payload.only_unscored) {
-    const seekerIdList = seekers.map((s) => s.id);
-    const { data: existingScores } = await supabaseServer
-      .from("job_match_scores")
-      .select("job_post_id, job_seeker_id")
-      .in("job_seeker_id", seekerIdList);
-
-    if (existingScores) {
-      existingScoreKeys = new Set(
-        existingScores.map((s) => `${s.job_seeker_id}:${s.job_post_id}`)
-      );
-    }
+  // Existing (seeker, job) pairs. Needed both to skip already-scored pairs
+  // (only_unscored) and to decide whether a below-floor result may be dropped:
+  // a pair that already has a row is always updated so it can never go stale.
+  // Paginated — the previous single query was silently truncated at 1,000 rows,
+  // so only_unscored skipped almost nothing. See lib/match-storage.ts.
+  const errors: string[] = [];
+  const existing = await loadExistingScoreKeys(
+    supabaseServer,
+    seekers.map((s) => s.id)
+  );
+  const existingScoreKeys = existing.keys;
+  // If the lookup failed we cannot tell which pairs already exist, so store
+  // everything (the old behaviour) rather than risk leaving a stale row.
+  const storeFloor = existing.complete ? getMatchStoreFloor() : 0;
+  if (!existing.complete) {
+    errors.push(`Could not load existing scores (${existing.error}); storing every score this run.`);
   }
 
   let totalScored = 0;
+  let skippedBelowFloor = 0;
   let totalParsed = 0;
-  const errors: string[] = [];
 
   // Parse jobs that need parsing. Each parse is an LLM call, so at cap-sized
   // volumes running them fully sequentially risks the function timeout on
@@ -241,8 +249,10 @@ export async function POST(request: Request) {
     const scoreRows: Record<string, unknown>[] = [];
 
     for (const post of jobPosts) {
+      const alreadyStored = existingScoreKeys.has(scoreKey(seeker.id, post.id));
+
       // Skip if only_unscored and already scored
-      if (payload.only_unscored && existingScoreKeys.has(`${seeker.id}:${post.id}`)) {
+      if (payload.only_unscored && alreadyStored) {
         continue;
       }
 
@@ -279,6 +289,14 @@ export async function POST(request: Request) {
               alpha: blendAlpha,
             })
           : matchResult.score;
+
+        // A NEW pair below the floor is never displayed by any screen, so it is not
+        // stored (and its features are not recorded). Existing rows always update.
+        if (!shouldStoreScore({ score: finalScore, alreadyStored, floor: storeFloor })) {
+          skippedBelowFloor++;
+          totalScored++;
+          continue;
+        }
 
         scoreRows.push({
           job_post_id: post.id,
@@ -342,6 +360,8 @@ export async function POST(request: Request) {
     jobs_in_bank: jobPosts.length,
     jobs_parsed: totalParsed,
     jobs_scored: totalScored,
+    scores_stored: totalScored - skippedBelowFloor,
+    scores_skipped_below_floor: skippedBelowFloor,
     errors: errors.length > 0 ? errors.slice(0, 20) : undefined,
   });
 }
