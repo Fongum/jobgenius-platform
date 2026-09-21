@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   const { data: run, error: runError } = await supabaseServer
     .from("application_runs")
     .select(
-      "id, queue_id, ats_type, status, current_step, step_attempts, total_attempts, max_step_retries"
+      "id, queue_id, job_seeker_id, ats_type, status, current_step, step_attempts, total_attempts, max_step_retries"
     )
     .eq("id", payload.run_id)
     .single();
@@ -65,6 +65,13 @@ export async function POST(request: Request) {
       { status: 404 }
     );
   }
+
+  // This endpoint advances or fails an application run, and it used to have no
+  // authentication at all: the middleware only checks that *some* credential is
+  // present, so any request with a fake Authorization header and a run id got
+  // through. Same check as apply/fail and apply/complete.
+  const access = await requireAMAccessToSeeker(request.headers, run.job_seeker_id);
+  if (!access.ok) return access.response;
 
   if (run.current_step !== payload.step) {
     return Response.json(
