@@ -55,7 +55,7 @@ describe("isAutoQueueable", () => {
   });
 
   it("follows the configured allow-list, so enabling an ATS re-enables queueing", () => {
-    const withIndeed = new Set([...ALLOWED, "INDEED"]);
+    const withIndeed = new Set(Array.from(ALLOWED).concat("INDEED"));
     expect(
       isAutoQueueable({ url: "https://www.indeed.com/viewjob?jk=abc123", source: "indeed", allowedAts: withIndeed })
         .queueable
