@@ -1,6 +1,7 @@
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { getOutreachAdapter } from "@/lib/email/adapter";
-import { assertOutreachConsent } from "@/lib/outreach-consent";
+import { assertOutreachConsent, getRecruiterOptOut } from "@/lib/outreach-consent";
+import { findOrCreateRecruiter, recordOutboundContact } from "@/lib/outreach-recruiters";
 import {
   buildHtmlBodyWithTracking,
   buildTrackingOpenUrl,
@@ -174,36 +175,26 @@ export async function POST(request: Request) {
     const contactRole = draft.outreach_contacts?.role ?? null;
     const companyName = draft.outreach_contacts?.company_name ?? null;
 
-    const { data: existingRecruiter } = await supabaseServer
-      .from("recruiters")
-      .select("id")
-      .eq("email", contactEmail)
-      .maybeSingle();
+    const recruiter = await findOrCreateRecruiter({
+      email: contactEmail,
+      name: contactName,
+      title: contactRole,
+      company: companyName,
+      source: "outreach_batch",
+    });
 
-    let recruiterId: string;
-    if (existingRecruiter) {
-      recruiterId = existingRecruiter.id;
-    } else {
-      const { data: created, error: createErr } = await supabaseServer
-        .from("recruiters")
-        .insert({
-          email: contactEmail,
-          name: contactName,
-          title: contactRole,
-          company: companyName,
-          source: "outreach_batch",
-          status: "NEW",
-          updated_at: nowIso,
-        })
-        .select("id")
-        .single();
+    if (!recruiter.ok) {
+      failed++;
+      errors.push(`Failed to create recruiter for draft ${draft.id}.`);
+      continue;
+    }
+    const recruiterId = recruiter.id;
 
-      if (createErr || !created) {
-        failed++;
-        errors.push(`Failed to create recruiter for draft ${draft.id}.`);
-        continue;
-      }
-      recruiterId = created.id;
+    // Every other send path honours opt-outs; this one used to send anyway.
+    const optOutStatus = await getRecruiterOptOut(recruiterId);
+    if (optOutStatus.optedOut) {
+      skipped++;
+      continue;
     }
 
     // Find or create recruiter thread
@@ -337,15 +328,7 @@ export async function POST(request: Request) {
       })
       .eq("id", threadId);
 
-    // Update recruiter status
-    await supabaseServer
-      .from("recruiters")
-      .update({
-        status: "CONTACTED",
-        last_contacted_at: nowIso,
-        updated_at: nowIso,
-      })
-      .eq("id", recruiterId);
+    await recordOutboundContact({ recruiterId, threadId, nowIso });
 
     sent++;
   }

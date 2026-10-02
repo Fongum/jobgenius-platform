@@ -24,18 +24,17 @@ type PipelineRow = {
 
 type RiskRow = {
   id: string;
+  stage: string;
   ghosting_risk_score: number | null;
   next_follow_up_at: string | null;
   recruiters:
     | {
         name: string | null;
         company: string | null;
-        status: string;
       }
     | Array<{
         name: string | null;
         company: string | null;
-        status: string;
       }>
     | null;
 };
@@ -149,7 +148,7 @@ export default async function OutreachConversionPage() {
   if (seekerIds.length > 0) {
     const { data } = await supabaseServer
       .from("recruiter_threads")
-      .select("id, ghosting_risk_score, next_follow_up_at, recruiters (name, company, status)")
+      .select("id, stage, ghosting_risk_score, next_follow_up_at, recruiters (name, company)")
       .in("job_seeker_id", seekerIds)
       .order("ghosting_risk_score", { ascending: false })
       .limit(10);
@@ -303,7 +302,7 @@ export default async function OutreachConversionPage() {
             <thead>
               <tr>
                 <th style={{ textAlign: "left", padding: "8px" }}>Recruiter</th>
-                <th style={{ textAlign: "left", padding: "8px" }}>Status</th>
+                <th style={{ textAlign: "left", padding: "8px" }}>Stage</th>
                 <th style={{ textAlign: "left", padding: "8px" }}>Risk</th>
                 <th style={{ textAlign: "left", padding: "8px" }}>Next Follow-up</th>
                 <th style={{ textAlign: "left", padding: "8px" }}>Thread</th>
@@ -317,7 +316,7 @@ export default async function OutreachConversionPage() {
                     <td style={{ padding: "8px" }}>
                       {recruiter?.name ?? "Unknown"} {recruiter?.company ? `(${recruiter.company})` : ""}
                     </td>
-                    <td style={{ padding: "8px" }}>{recruiter?.status ?? "-"}</td>
+                    <td style={{ padding: "8px" }}>{row.stage}</td>
                     <td style={{ padding: "8px" }}>{row.ghosting_risk_score ?? 0}</td>
                     <td style={{ padding: "8px" }}>
                       {row.next_follow_up_at

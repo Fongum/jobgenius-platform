@@ -3,6 +3,7 @@ import { scoreReplySentiment, sentimentLabel } from "@/lib/outreach-intelligence
 import { canTransitionOutreachState, type OutreachMessageState } from "@/lib/outreach-state";
 import { classifyReply, generateDraftReply } from "@/lib/outreach-reply-classifier";
 import { detectSchedulingLink } from "@/lib/interview-link-detector";
+import { advanceThreadStage } from "@/lib/outreach-recruiters";
 import { supabaseServer } from "@/lib/supabase/server";
 import { verifySvixSignature } from "@/lib/webhooks/svix-signature";
 
@@ -173,6 +174,7 @@ export async function POST(request: Request) {
       .update({
         thread_status: "CLOSED",
         last_message_direction: "OUTBOUND",
+        stage: "CLOSED",
         close_reason: "BOUNCED",
         closed_at: nowIso,
         updated_at: nowIso,
@@ -210,13 +212,13 @@ export async function POST(request: Request) {
       })
       .eq("id", thread.id);
 
-    await supabaseServer
-      .from("recruiters")
-      .update({
-        status: replySentimentScore >= 20 ? "ENGAGED" : "CONTACTED",
-        updated_at: nowIso,
-      })
-      .eq("id", thread.recruiter_id);
+    // A reply moves this seeker's thread forward; it says nothing about the
+    // recruiter's threads with anyone else, and never moves one backwards.
+    await advanceThreadStage(
+      thread.id,
+      replySentimentScore >= 20 ? "ENGAGED" : "CONTACTED",
+      nowIso
+    );
 
     await supabaseServer.from("outreach_plans").upsert(
       {
@@ -295,6 +297,7 @@ export async function POST(request: Request) {
       .from("recruiter_threads")
       .update({
         thread_status: "CLOSED",
+        stage: "CLOSED",
         close_reason: "OPT_OUT",
         closed_at: nowIso,
         updated_at: nowIso,

@@ -1,5 +1,6 @@
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { enforceBackgroundRateLimit } from "@/lib/rate-limit-presets";
+import { findOrCreateRecruiter } from "@/lib/outreach-recruiters";
 import { supabaseServer } from "@/lib/supabase/server";
 import {
   describeDbError,
@@ -1429,41 +1430,26 @@ async function runAutoOutreach(payload: Record<string, unknown>) {
       continue;
     }
 
-    const { data: existingRecruiter } = await supabaseServer
-      .from("recruiters")
-      .select("id")
-      .eq("email", email)
-      .limit(1)
-      .maybeSingle();
+    const recruiter = await findOrCreateRecruiter({
+      email,
+      name: contact?.full_name ?? email,
+      title: contact?.role ?? null,
+      company: contact?.company_name ?? null,
+      source: "auto_apply",
+    });
 
-    let recruiterId = existingRecruiter?.id ?? null;
-    if (!recruiterId) {
-      const { data: insertedRecruiter, error: recruiterError } = await supabaseServer
-        .from("recruiters")
-        .insert({
-          name: contact?.full_name ?? email,
-          title: contact?.role ?? null,
-          company: contact?.company_name ?? null,
-          email,
-          source: "auto_apply",
+    if (!recruiter.ok) {
+      await supabaseServer
+        .from("outreach_drafts")
+        .update({
+          status: "FAILED",
+          last_error: "Failed to create recruiter.",
           updated_at: new Date().toISOString(),
         })
-        .select("id")
-        .single();
-
-      if (recruiterError || !insertedRecruiter) {
-        await supabaseServer
-          .from("outreach_drafts")
-          .update({
-            status: "FAILED",
-            last_error: "Failed to create recruiter.",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", draftRow.id);
-        continue;
-      }
-      recruiterId = insertedRecruiter.id;
+        .eq("id", draftRow.id);
+      continue;
     }
+    const recruiterId = recruiter.id;
 
     const { data: thread } = await supabaseServer
       .from("recruiter_threads")

@@ -119,7 +119,7 @@ export async function findExistingRecruiterMatch({
     .select(
       "id, name, email, company, linkedin_url, owner_account_manager_id, do_not_contact, status, company_domain"
     )
-    .ilike("email", normalizedEmail)
+    .eq("email", normalizedEmail)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();

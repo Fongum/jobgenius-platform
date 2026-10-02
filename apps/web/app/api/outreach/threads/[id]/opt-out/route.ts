@@ -75,6 +75,7 @@ export async function POST(
     .from("recruiter_threads")
     .update({
       thread_status: "CLOSED",
+      stage: "CLOSED",
       close_reason: "OPT_OUT",
       closed_at: nowIso,
       updated_at: nowIso,

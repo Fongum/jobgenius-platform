@@ -12,6 +12,7 @@ import {
 } from "@/lib/outreach-email";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { canTransitionOutreachState } from "@/lib/outreach-state";
+import { recordOutboundContact } from "@/lib/outreach-recruiters";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type ThreadRow = {
@@ -224,6 +225,7 @@ async function runScheduler(request: Request) {
         .from("recruiter_threads")
         .update({
           thread_status: "CLOSED",
+          stage: "CLOSED",
           close_reason: "OPT_OUT",
           closed_at: nowIso,
           updated_at: nowIso,
@@ -439,6 +441,7 @@ async function runScheduler(request: Request) {
         .from("recruiter_threads")
         .update({
           thread_status: "CLOSED",
+          stage: "CLOSED",
           close_reason: "OPT_OUT",
           closed_at: nowIso,
           updated_at: nowIso,
@@ -540,14 +543,11 @@ async function runScheduler(request: Request) {
       })
       .eq("id", message.recruiter_thread_id);
 
-    await supabaseServer
-      .from("recruiters")
-      .update({
-        status: "CONTACTED",
-        last_contacted_at: nowIso,
-        updated_at: nowIso,
-      })
-      .eq("id", thread.recruiter_id);
+    await recordOutboundContact({
+      recruiterId: thread.recruiter_id,
+      threadId: message.recruiter_thread_id,
+      nowIso,
+    });
 
     await upsertPlanForThread({
       thread,

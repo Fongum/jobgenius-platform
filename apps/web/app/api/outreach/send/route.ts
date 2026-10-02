@@ -15,6 +15,7 @@ import {
 } from "@/lib/outreach-email";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { canTransitionOutreachState } from "@/lib/outreach-state";
+import { recordOutboundContact } from "@/lib/outreach-recruiters";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type SendPayload = {
@@ -437,14 +438,11 @@ export async function POST(request: Request) {
     })
     .eq("id", thread.id);
 
-  await supabaseServer
-    .from("recruiters")
-    .update({
-      status: "CONTACTED",
-      last_contacted_at: nowIso,
-      updated_at: nowIso,
-    })
-    .eq("id", thread.recruiter_id);
+  await recordOutboundContact({
+    recruiterId: thread.recruiter_id,
+    threadId: thread.id,
+    nowIso,
+  });
 
   await upsertPlan({
     thread,

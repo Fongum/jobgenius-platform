@@ -26,7 +26,7 @@ export default async function ThreadPage({ params }: { params: { id: string } })
   const { data: thread } = await supabaseServer
     .from("recruiter_threads")
     .select(
-      "id, job_seeker_id, thread_status, last_message_direction, last_reply_at, next_follow_up_at, ghosting_risk_score, interview_started_at, offer_received_at, closed_at, close_reason, recruiters (id, name, email, company, status, last_contacted_at), job_seekers (full_name, email)"
+      "id, job_seeker_id, thread_status, stage, last_message_direction, last_reply_at, next_follow_up_at, ghosting_risk_score, interview_started_at, offer_received_at, closed_at, close_reason, recruiters (id, name, email, company, status, last_contacted_at), job_seekers (full_name, email)"
     )
     .eq("id", threadId)
     .single();
@@ -93,7 +93,7 @@ export default async function ThreadPage({ params }: { params: { id: string } })
 
       <ThreadClient
         threadId={threadId}
-        recruiterStatus={recruiter?.status ?? "NEW"}
+        recruiterStatus={thread.stage ?? "NEW"}
         threadStatus={thread.thread_status}
         sequences={(sequences ?? []) as Array<{ id: string; name: string }>}
       />

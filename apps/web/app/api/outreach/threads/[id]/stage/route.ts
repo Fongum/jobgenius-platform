@@ -1,22 +1,15 @@
 import { getAccountManagerFromRequest, hasJobSeekerAccess } from "@/lib/am-access";
 import { requireOpsAuth } from "@/lib/ops-auth";
+import { isOutreachStage, type OutreachStage } from "@/lib/outreach-recruiters";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type StagePayload = {
-  recruiter_status?: "NEW" | "CONTACTED" | "ENGAGED" | "INTERVIEWING" | "CLOSED";
+  recruiter_status?: OutreachStage;
   thread_status?: "ACTIVE" | "WAITING_REPLY" | "FOLLOW_UP_DUE" | "CLOSED";
   mark_interview?: boolean;
   mark_offer?: boolean;
   close_reason?: string | null;
 };
-
-const RECRUITER_STATUS_OPTIONS = new Set([
-  "NEW",
-  "CONTACTED",
-  "ENGAGED",
-  "INTERVIEWING",
-  "CLOSED",
-]);
 
 const THREAD_STATUS_OPTIONS = new Set([
   "ACTIVE",
@@ -49,7 +42,7 @@ export async function PATCH(
 
   if (
     payload.recruiter_status &&
-    !RECRUITER_STATUS_OPTIONS.has(payload.recruiter_status)
+    !isOutreachStage(payload.recruiter_status)
   ) {
     return Response.json(
       { success: false, error: "Invalid recruiter_status." },
@@ -103,27 +96,18 @@ export async function PATCH(
 
   const nowIso = new Date().toISOString();
 
-  if (payload.recruiter_status) {
-    await supabaseServer
-      .from("recruiters")
-      .update({
-        status: payload.recruiter_status,
-        updated_at: nowIso,
-      })
-      .eq("id", thread.recruiter_id);
-  } else if (payload.mark_interview) {
-    await supabaseServer
-      .from("recruiters")
-      .update({
-        status: "INTERVIEWING",
-        updated_at: nowIso,
-      })
-      .eq("id", thread.recruiter_id);
-  }
-
   const threadUpdates: Record<string, unknown> = {
     updated_at: nowIso,
   };
+
+  // `recruiter_status` keeps its wire name for the existing client, but it is
+  // this seeker's stage with the recruiter. It used to be written to the
+  // shared recruiters row, so closing it here closed it for every seeker.
+  if (payload.recruiter_status) {
+    threadUpdates.stage = payload.recruiter_status;
+  } else if (payload.mark_interview) {
+    threadUpdates.stage = "INTERVIEWING";
+  }
 
   if (payload.thread_status) {
     threadUpdates.thread_status = payload.thread_status;

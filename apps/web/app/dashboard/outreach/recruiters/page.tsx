@@ -6,6 +6,7 @@ type ThreadRow = {
   id: string;
   job_seeker_id: string;
   thread_status: string;
+  stage: string;
   last_reply_at: string | null;
   next_follow_up_at: string | null;
   ghosting_risk_score: number | null;
@@ -73,18 +74,15 @@ export default async function RecruitersPage({ searchParams }: PageProps) {
   const { data: threadRows } = await supabaseServer
     .from("recruiter_threads")
     .select(
-      "id, job_seeker_id, thread_status, last_reply_at, next_follow_up_at, ghosting_risk_score, recruiters (id, name, title, company, email, status, last_contacted_at), job_seekers (full_name, email)"
+      "id, job_seeker_id, thread_status, stage, last_reply_at, next_follow_up_at, ghosting_risk_score, recruiters (id, name, title, company, email, status, last_contacted_at), job_seekers (full_name, email)"
     )
     .in("job_seeker_id", seekerIds);
 
   let rows = (threadRows ?? []) as ThreadRow[];
   if (statusFilter) {
-    rows = rows.filter((row) => {
-      const recruiter = Array.isArray(row.recruiters)
-        ? row.recruiters[0]
-        : row.recruiters;
-      return recruiter?.status === statusFilter;
-    });
+    // Stage is per thread: the same recruiter can be CLOSED for one seeker
+    // and ENGAGED for another.
+    rows = rows.filter((row) => row.stage === statusFilter);
   }
 
   return (
@@ -98,7 +96,7 @@ export default async function RecruitersPage({ searchParams }: PageProps) {
       </nav>
       <form method="get" style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
         <label>
-          Status{" "}
+          Stage{" "}
           <select name="status" defaultValue={statusFilter ?? ""}>
             <option value="">All</option>
             {statusOptions.map((status) => (
@@ -119,7 +117,7 @@ export default async function RecruitersPage({ searchParams }: PageProps) {
             <tr>
               <th style={{ textAlign: "left", padding: "8px" }}>Recruiter</th>
               <th style={{ textAlign: "left", padding: "8px" }}>Company</th>
-              <th style={{ textAlign: "left", padding: "8px" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "8px" }}>Stage</th>
               <th style={{ textAlign: "left", padding: "8px" }}>Risk</th>
               <th style={{ textAlign: "left", padding: "8px" }}>Next Follow-up</th>
               <th style={{ textAlign: "left", padding: "8px" }}>Thread</th>
@@ -141,7 +139,7 @@ export default async function RecruitersPage({ searchParams }: PageProps) {
                     {recruiter?.email ? `(${recruiter.email})` : ""}
                   </td>
                   <td style={{ padding: "8px" }}>{recruiter?.company ?? "-"}</td>
-                  <td style={{ padding: "8px" }}>{recruiter?.status ?? "-"}</td>
+                  <td style={{ padding: "8px" }}>{row.stage}</td>
                   <td style={{ padding: "8px" }}>{row.ghosting_risk_score ?? 0}</td>
                   <td style={{ padding: "8px" }}>
                     {row.next_follow_up_at

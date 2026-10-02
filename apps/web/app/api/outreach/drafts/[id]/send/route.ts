@@ -1,6 +1,7 @@
 import { getOutreachAdapter } from "@/lib/email/adapter";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
 import { assertOutreachConsent, getRecruiterOptOut } from "@/lib/outreach-consent";
+import { findRecruiterIdByEmail } from "@/lib/outreach-recruiters";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function POST(
@@ -62,14 +63,10 @@ export async function POST(
     );
   }
 
-  const { data: existingRecruiter } = await supabaseServer
-    .from("recruiters")
-    .select("id")
-    .eq("email", contact.email)
-    .maybeSingle();
+  const existingRecruiterId = await findRecruiterIdByEmail(contact.email);
 
-  if (existingRecruiter?.id) {
-    const optOutStatus = await getRecruiterOptOut(existingRecruiter.id);
+  if (existingRecruiterId) {
+    const optOutStatus = await getRecruiterOptOut(existingRecruiterId);
     if (optOutStatus.optedOut) {
       return Response.json(
         { success: false, error: "Recruiter opted out from outreach automation." },
