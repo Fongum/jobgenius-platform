@@ -3,6 +3,13 @@ import { isPeopleManagerRole } from "@/lib/auth/roles";
 import { createLogger } from "@/lib/logger";
 import { NOTIFICATION_CATEGORIES, sendNotification } from "@/lib/notify";
 import { getPeopleOpsReminderSnapshot, listPeopleEmployees } from "@/lib/people-server";
+import {
+  buildManagerDigestBody,
+  formatDateTime,
+  formatDigestDay,
+  getEmployeeDisplayName,
+  summarizeList,
+} from "@/lib/people-ops-digest";
 
 const log = createLogger("cron.people-ops-reminders");
 
@@ -26,44 +33,6 @@ function getUtcDayStart(now = new Date()): string {
   ).toISOString();
 }
 
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "Date pending";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Date pending";
-  return parsed.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
-  });
-}
-
-function summarizeList(values: string[], limit = 5): string {
-  if (values.length === 0) return "None";
-  if (values.length <= limit) return values.join(", ");
-  return `${values.slice(0, limit).join(", ")}, and ${values.length - limit} more`;
-}
-
-function getEmployeeDisplayName(input: {
-  worker?: { full_name?: string | null; job_title?: string | null } | null;
-  role_title?: string | null;
-  account_manager?: { name?: string | null; email?: string | null } | null;
-  id?: string | null;
-}): string {
-  return (
-    input.worker?.full_name ||
-    input.account_manager?.name ||
-    input.role_title ||
-    input.worker?.job_title ||
-    input.account_manager?.email ||
-    input.id ||
-    "Unknown employee"
-  );
-}
-
 async function getExistingDailyKeys(dayStartIso: string): Promise<Set<string>> {
   const { data, error } = await supabaseAdmin
     .from("notifications")
@@ -82,38 +51,6 @@ async function getExistingDailyKeys(dayStartIso: string): Promise<Set<string>> {
   return new Set(
     (data ?? []).map((row) => `${String(row.category)}:${String(row.user_id)}`)
   );
-}
-
-function buildManagerDigestBody(snapshot: Awaited<ReturnType<typeof getPeopleOpsReminderSnapshot>>) {
-  const scorecardNames = snapshot.dueScorecardEmployees.map((employee) =>
-    getEmployeeDisplayName(employee)
-  );
-  const probationNames = snapshot.dueProbationSummaries.map((summary) =>
-    `${getEmployeeDisplayName(summary.employee)} (Month ${summary.dueCheckpoint})`
-  );
-  const onboardingNames = snapshot.pendingOnboardingQueue.map((form) => form.full_name);
-  const disciplinaryNames = snapshot.activeDisciplinaryRecords.map((record) =>
-    `${getEmployeeDisplayName(record.employee ?? { id: record.employee_id })} - ${record.title}`
-  );
-  const electionNames = snapshot.electionsClosingSoon.map((election) => {
-    const closingAt =
-      election.status === "nominations_open"
-        ? election.nominations_close_at
-        : election.voting_close_at;
-    return `${election.title} (${formatDateTime(closingAt)})`;
-  });
-
-  return [
-    `People Ops review digest for ${snapshot.currentReviewMonth}.`,
-    "",
-    `Scorecards due (${snapshot.dueScorecardEmployees.length}): ${summarizeList(scorecardNames)}`,
-    `Probation checkpoints due (${snapshot.dueProbationSummaries.length}): ${summarizeList(probationNames)}`,
-    `Onboarding follow-up (${snapshot.pendingOnboardingQueue.length}): ${summarizeList(onboardingNames)}`,
-    `Active disciplinary records (${snapshot.activeDisciplinaryRecords.length}): ${summarizeList(disciplinaryNames)}`,
-    `Elections closing soon (${snapshot.electionsClosingSoon.length}): ${summarizeList(electionNames, 3)}`,
-    "",
-    "Open the People Ops dashboard to review and action these items.",
-  ].join("\n");
 }
 
 function buildElectionReminderBody(snapshot: Awaited<ReturnType<typeof getPeopleOpsReminderSnapshot>>) {
@@ -231,7 +168,7 @@ export async function GET(request: Request) {
           userId: manager.id,
           userType: "am",
           category: NOTIFICATION_CATEGORIES.people_ops_review_digest,
-          subject: `People Ops review digest: ${snapshot.currentReviewMonth}`,
+          subject: `People Ops review digest — ${formatDigestDay(dayStartIso)}`,
           body: digestBody,
           linkUrl: "/dashboard/people",
           channel: "both",
@@ -326,7 +263,7 @@ export async function GET(request: Request) {
           userId: accountManagerId,
           userType: "am",
           category: NOTIFICATION_CATEGORIES.employee_bonus_payable_this_month,
-          subject: "Your JobGenuis bonus is payable this month",
+          subject: "Your JobGenius bonus is payable this month",
           body: buildBonusReminderBody({
             reviewMonth: snapshot.currentReviewMonth,
             offers,

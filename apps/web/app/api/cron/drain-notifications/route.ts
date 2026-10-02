@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/auth";
 import { resolveRecipientEmail } from "@/lib/notify";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
+import { renderNotificationEmail } from "@/lib/email/notification-email";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("cron.drain-notifications");
@@ -29,20 +30,6 @@ function isAuthorized(request: Request): boolean {
     if (host === "localhost" || host === "127.0.0.1") return true;
   }
   return false;
-}
-
-function htmlBodyFor(subject: string, body: string | null, linkUrl: string | null): string {
-  const safeBody = (body ?? "").replace(/\n/g, "<br/>");
-  const cta = linkUrl
-    ? `<p style="margin-top:24px;"><a href="${linkUrl}" style="display:inline-block;padding:10px 18px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Open</a></p>`
-    : "";
-  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;margin:0 auto;padding:24px;">
-    <h2 style="font-size:18px;margin-bottom:12px;">${subject}</h2>
-    <div style="font-size:14px;line-height:1.55;color:#374151;">${safeBody}</div>
-    ${cta}
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0 12px;" />
-    <p style="font-size:12px;color:#6b7280;">JobGenius — automated notification</p>
-  </body></html>`;
 }
 
 export async function GET(request: Request) {
@@ -88,15 +75,22 @@ export async function GET(request: Request) {
       continue;
     }
 
+    // One shell, but the stream behind the category picks the sender name,
+    // the header chip and the accent — that is what makes a scorecard digest
+    // and an overnight-shift alert tell themselves apart in the list view.
+    const email = renderNotificationEmail({
+      category: row.category as string | null,
+      subject: (row.subject as string | null) ?? "JobGenius update",
+      body: (row.body as string | null) ?? null,
+      linkUrl: (row.link_url as string | null) ?? null,
+    });
+
     const result = await sendAndLogEmail({
       to: recipient,
-      subject: row.subject ?? "JobGenius update",
-      html: htmlBodyFor(
-        row.subject ?? "JobGenius update",
-        (row.body as string | null) ?? null,
-        (row.link_url as string | null) ?? null
-      ),
-      text: (row.body as string | null) ?? row.subject ?? "JobGenius update",
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      from_name: email.fromName,
       template_key: `notify:${row.category}`,
       meta: { notification_id: row.id, category: row.category },
     }).catch((err) => ({

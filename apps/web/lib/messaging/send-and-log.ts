@@ -1,5 +1,6 @@
 import { getEmailAdapter, type EmailSendOutput } from "@/lib/email/adapter";
 import { supabaseServer } from "@/lib/supabase/server";
+import { formatFromHeader } from "@/lib/email/brand";
 
 export type SendAndLogOptions = {
   to: string;
@@ -7,6 +8,8 @@ export type SendAndLogOptions = {
   html: string;
   text?: string;
   template_key?: string;
+  /** Display name shown instead of a bare "noreply", e.g. "JobGenius People Ops". */
+  from_name?: string;
   job_seeker_id?: string;
   job_post_id?: string;
   interview_id?: string;
@@ -29,18 +32,22 @@ export async function sendAndLogEmail(
   const isProduction =
     process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
   const fromEmail =
-    configuredFrom ?? (isProduction ? null : "noreply@joblinca.com");
+    configuredFrom ?? (isProduction ? null : "noreply@job-genius.com");
 
   if (!fromEmail) {
     throw new Error("EMAIL_FROM_ADDRESS or OUTREACH_FROM_EMAIL is required in production.");
   }
+
+  // The envelope keeps the bare address; the header carries the display name,
+  // so the inbox list shows who is writing instead of rows of "noreply".
+  const fromHeader = formatFromHeader(fromEmail, options.from_name);
 
   const adapter = getEmailAdapter();
   let result: EmailSendOutput;
 
   try {
     result = await adapter.sendEmail({
-      from: fromEmail,
+      from: fromHeader,
       to: [options.to],
       subject: options.subject,
       html: options.html,
