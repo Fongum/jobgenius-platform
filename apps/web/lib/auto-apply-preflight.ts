@@ -125,6 +125,40 @@ function ineligible(
   return { eligible: false, ...input };
 }
 
+/**
+ * Preflight outcomes that depend only on the job itself, so no later state
+ * can change them: the link is unusable, the ATS isn't allowed, or the host
+ * has no automation rule. Everything else (no saved LinkedIn session, an
+ * extension-first host, a blocked match) can change, or is a hand-off to a
+ * human, so it still belongs in the queue.
+ */
+const STRUCTURAL_REJECTIONS = new Set(["JOB_URL_INVALID", "ATS_UNSUPPORTED", "HOST_UNSUPPORTED"]);
+
+/**
+ * Whether the auto-matcher should queue this job at all. Queueing an item
+ * the preflight will always reject cost an AI tailoring call per item and
+ * then parked it in NEEDS_ATTENTION; on 2026-10-02, 127 of 131 parked
+ * production jobs were aggregator links (adzuna, arbeitnow, themuse) that
+ * failed exactly this check, only after tailoring had run.
+ */
+export function isAutoQueueable(input: {
+  source?: string | null;
+  url?: string | null;
+  allowedAts: Set<string>;
+}): { queueable: boolean; reasonCode: string | null; targetHost: string | null } {
+  const decision = evaluateAutoApplyPreflight({
+    source: input.source,
+    url: input.url,
+    allowedAts: input.allowedAts,
+  });
+  const structural = !decision.eligible && STRUCTURAL_REJECTIONS.has(decision.reasonCode ?? "");
+  return {
+    queueable: !structural,
+    reasonCode: structural ? decision.reasonCode : null,
+    targetHost: decision.targetHost,
+  };
+}
+
 export function evaluateAutoApplyPreflight(
   input: AutoApplyPreflightInput
 ): AutoApplyPreflightDecision {

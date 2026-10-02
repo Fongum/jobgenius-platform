@@ -27,6 +27,7 @@ import { maybeUpsertResumeHardeningAlert } from "@/lib/resume-bank-alerts";
 import { createRetellPhoneCall } from "@/lib/voice/retell";
 import {
   evaluateAutoApplyPreflight,
+  isAutoQueueable,
   loadSavedRunnerStorageState,
 } from "@/lib/auto-apply-preflight";
 import { applyHostGraduation } from "@/lib/host-graduation";
@@ -51,6 +52,7 @@ type BackgroundJobRow = {
 type JobPostRow = {
   id: string;
   url: string | null;
+  source: string | null;
   title: string | null;
   company: string | null;
   location: string | null;
@@ -539,7 +541,7 @@ async function runAutoMatch(payload: Record<string, unknown>) {
   const { data: rawJobPosts } = await supabaseServer
     .from("job_posts")
     .select(`
-      id, url, title, company, location, description_text,
+      id, url, source, title, company, location, description_text,
       salary_min, salary_max, seniority_level, work_type,
       years_experience_min, years_experience_max,
       required_skills, preferred_skills, industry, company_size,
@@ -556,6 +558,8 @@ async function runAutoMatch(payload: Record<string, unknown>) {
     const parsed = await ensureParsedJobPost(jobPost);
     jobPosts.push(parsed);
   }
+
+  let skippedUnappliable = 0;
 
   for (const seekerData of seekers) {
     const seeker = {
@@ -649,10 +653,24 @@ async function runAutoMatch(payload: Record<string, unknown>) {
       const eligibleByScore =
         matchResult.score >= threshold &&
         AUTO_QUEUE_ALLOWED_RECOMMENDATIONS.has(recommendation);
-      const eligible = decision === "OVERRIDDEN_IN" || eligibleByScore;
+      // Don't queue for autonomous apply what the preflight will always
+      // reject (aggregator links, disallowed ATS): each one used to cost a
+      // tailoring call and then sit in NEEDS_ATTENTION. An AM's explicit
+      // OVERRIDDEN_IN still queues — that is a human asking for it.
+      const structurallyBlocked =
+        AUTO_APPLY_ENABLED &&
+        decision !== "OVERRIDDEN_IN" &&
+        !isAutoQueueable({
+          source: jobPost.source,
+          url: jobPost.url,
+          allowedAts: AUTO_APPLY_ALLOWED_ATS,
+        }).queueable;
+      const eligible = decision === "OVERRIDDEN_IN" || (eligibleByScore && !structurallyBlocked);
 
       if (eligible) {
         candidates.push({ job_post_id: jobPost.id });
+      } else if (eligibleByScore && structurallyBlocked) {
+        skippedUnappliable += 1;
       }
     }
 
@@ -716,6 +734,12 @@ async function runAutoMatch(payload: Record<string, unknown>) {
         });
       }
     }
+  }
+
+  if (skippedUnappliable > 0) {
+    console.info(
+      `Auto-queue skipped ${skippedUnappliable} match(es) that autonomous apply cannot run (unsupported host or ATS).`
+    );
   }
 
   // After scoring, check network contacts for matches against these job posts
