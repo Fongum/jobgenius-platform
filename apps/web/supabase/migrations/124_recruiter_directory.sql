@@ -19,8 +19,9 @@
 -- zero rows means "not visible to you".
 --
 -- Called only through the service-role client, after the route has
--- authenticated the caller; execute is revoked from PUBLIC so anon and
--- authenticated cannot call it with an arbitrary p_account_manager_id.
+-- authenticated the caller; execute is revoked from PUBLIC, anon and
+-- authenticated (see the bottom of the file for why all three) so no client
+-- key can call it with an arbitrary p_account_manager_id or p_is_admin.
 -- ============================================================
 
 create or replace function public.recruiter_directory(
@@ -173,5 +174,8 @@ as $$
   offset greatest(coalesce(p_offset, 0), 0);
 $$;
 
-revoke all on function public.recruiter_directory(uuid, boolean, text, text, uuid, int, int) from public;
+-- Supabase grants EXECUTE on new public functions to anon and authenticated
+-- directly (default privileges), so revoking from PUBLIC alone leaves both
+-- able to call this with p_is_admin = true. Revoke all three explicitly.
+revoke all on function public.recruiter_directory(uuid, boolean, text, text, uuid, int, int) from public, anon, authenticated;
 grant execute on function public.recruiter_directory(uuid, boolean, text, text, uuid, int, int) to service_role;
