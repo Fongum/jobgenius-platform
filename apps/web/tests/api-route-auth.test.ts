@@ -58,9 +58,6 @@ const ALLOWLIST: Record<string, Allowed> = {
   "recruiter/partner/logout": { methods: "*", kind: "self-validating", reason: "Clears the caller's own partner-session cookie." },
   "extension/me": { methods: "*", kind: "self-validating", reason: "Validates the extension session token (sha256 hash + expiry) inline, then returns the AM profile." },
 
-  "orchestrator/mark": { methods: "*", kind: "stub", reason: "Legacy orchestrator, disabled: always 410." },
-  "orchestrator/resume": { methods: "*", kind: "stub", reason: "Legacy orchestrator, disabled: always 410." },
-  "orchestrator/tick": { methods: "*", kind: "stub", reason: "Legacy orchestrator, disabled: always 410." },
   "seed/demo": { methods: "*", kind: "stub", reason: "Disabled permanently (it once seeded demo data into production): always 404." },
 
   "discovery/run": {
