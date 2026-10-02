@@ -161,7 +161,7 @@ export default async function OutreachConversionPage() {
         <h1>Outreach Conversion</h1>
         <p>Account Manager: {user.name ?? user.email}</p>
         <nav style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <a href="/dashboard/outreach/recruiters">Recruiters</a>
+          <a href="/dashboard/recruiters">Recruiters</a>
           <a href="/dashboard/outreach/follow-ups">Follow-ups Due</a>
           <a href="/dashboard/outreach/conversion">Conversion</a>
           <a href="/dashboard/outreach">Drafts</a>

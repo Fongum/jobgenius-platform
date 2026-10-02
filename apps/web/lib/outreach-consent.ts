@@ -74,18 +74,37 @@ export async function assertOutreachConsent(jobSeekerId: string) {
   return { ok: true } as const;
 }
 
+/**
+ * Whether outreach to this recruiter is blocked. Two sources, either is
+ * enough: an opt-out row (unsubscribe, bounce, a request recorded by an AM)
+ * and the recruiters.do_not_contact flag, which the partner flow sets on a
+ * "wrong contact" reply without writing an opt-out. Every send path calls
+ * this, so the flag only means something because it is read here.
+ */
 export async function getRecruiterOptOut(recruiterId: string) {
-  const { data, error } = await supabaseServer
-    .from("recruiter_opt_outs")
-    .select("id, reason, source, opted_out_at")
-    .eq("recruiter_id", recruiterId)
-    .maybeSingle();
+  const [optOutResult, recruiterResult] = await Promise.all([
+    supabaseServer
+      .from("recruiter_opt_outs")
+      .select("id, reason, source, opted_out_at")
+      .eq("recruiter_id", recruiterId)
+      .maybeSingle(),
+    supabaseServer
+      .from("recruiters")
+      .select("do_not_contact")
+      .eq("id", recruiterId)
+      .maybeSingle(),
+  ]);
 
-  if (error) {
+  if (optOutResult.error) {
     return { optedOut: false, error: "Failed to load opt-out state." } as const;
   }
 
-  return { optedOut: Boolean(data), optOut: data ?? null, error: null as string | null } as const;
+  const flagged = recruiterResult.data?.do_not_contact === true;
+  return {
+    optedOut: Boolean(optOutResult.data) || flagged,
+    optOut: optOutResult.data ?? null,
+    error: null as string | null,
+  } as const;
 }
 
 export async function recordRecruiterOptOut({

@@ -22,6 +22,7 @@ type AuditAction =
   | "broadcast.send"
   | "referral.update"
   | "recruiter_partner.send_workspace_link"
+  | "recruiter.update"
   | "intake.approve"
   | "intake.activate_override"
   | "intake.mark_call_complete"

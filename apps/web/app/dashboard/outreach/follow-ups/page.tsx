@@ -90,7 +90,7 @@ export default async function FollowUpsPage() {
     <main>
       <h1>Follow-ups Due</h1>
       <nav style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
-        <a href="/dashboard/outreach/recruiters">Recruiters</a>
+        <a href="/dashboard/recruiters">Recruiters</a>
         <a href="/dashboard/outreach/follow-ups">Follow-ups Due</a>
         <a href="/dashboard/outreach/conversion">Conversion</a>
         <a href="/dashboard/outreach">Drafts</a>

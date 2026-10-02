@@ -140,7 +140,7 @@ export default async function OutreachPage() {
       <h1>Outreach CRM</h1>
       <p>Account Manager: {user.email}</p>
       <nav style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
-        <a href="/dashboard/outreach/recruiters">Recruiters</a>
+        <a href="/dashboard/recruiters">Recruiters</a>
         <a href="/dashboard/outreach/follow-ups">Follow-ups Due</a>
         <a href="/dashboard/outreach/conversion">Conversion</a>
         <a href="/dashboard/outreach">Drafts</a>
