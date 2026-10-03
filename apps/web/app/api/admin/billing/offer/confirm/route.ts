@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
             <li><strong>Due Date:</strong> ${new Date(dueDate).toLocaleDateString()}</li>
           </ul>
           <p>Please arrange payment through your portal before the due date to avoid late fees or legal action.</p>
-          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/portal/billing">Pay Commission →</a></p>
+          <p><a href="${appUrl("/portal/billing")}">Pay Commission →</a></p>
         `,
         job_seeker_id: updated.job_seeker_id,
         template_key: "billing-offer-accepted",

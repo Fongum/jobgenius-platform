@@ -4,6 +4,7 @@
  * Handles authentication using Supabase Auth.
  */
 
+import { appUrl } from "@/lib/app-url";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type {
@@ -652,11 +653,9 @@ export async function initiatePasswordReset(
   redirectTo?: string
 ): Promise<{ success: boolean; error?: string }> {
   // Prefer an explicit per-request origin (passed by the API route); fall back
-  // to NEXT_PUBLIC_APP_URL, then the production URL. The path must match the
-  // actual route — `/reset-password`, not `/auth/reset-password`.
-  const fallbackBase =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://job-genius.com";
-  const target = redirectTo ?? `${fallbackBase}/reset-password`;
+  // to the configured site origin. The path must match the actual route —
+  // `/reset-password`, not `/auth/reset-password`.
+  const target = redirectTo ?? appUrl("/reset-password");
   const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
     redirectTo: target,
   });

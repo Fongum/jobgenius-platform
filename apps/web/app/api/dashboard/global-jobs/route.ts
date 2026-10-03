@@ -1,3 +1,4 @@
+import { getAppOrigin } from "@/lib/app-url";
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
 
   // Trigger match run for this specific pair
   const matchResponse = await fetch(
-    `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/match/run`,
+    `${getAppOrigin()}/api/match/run`,
     {
       method: "POST",
       headers: {

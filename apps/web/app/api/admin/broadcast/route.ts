@@ -1,3 +1,4 @@
+import { getAppOrigin } from "@/lib/app-url";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { normalizeAMRole } from "@/lib/auth/roles";
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
   }
 
   const announcementId = announcement.id;
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const appUrl = getAppOrigin();
 
   // Fetch recipients
   const [seekerResult, amResult] = await Promise.all([

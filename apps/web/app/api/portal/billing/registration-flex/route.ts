@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -409,7 +410,7 @@ export async function POST(request: Request) {
             <ol>${scheduleLines}</ol>
             <p>Reason:</p>
             <blockquote style="border-left:3px solid #d1d5db;padding-left:12px;margin:8px 0;">${requestedNote}</blockquote>
-            <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing">Review in Billing Dashboard</a></p>
+            <p><a href="${appUrl("/dashboard/billing")}">Review in Billing Dashboard</a></p>
           `,
           job_seeker_id: auth.user.id,
           template_key: "billing-registration-flex-requested",

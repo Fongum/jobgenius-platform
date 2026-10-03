@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
             <li><strong>Accepted On:</strong> ${new Date(offerAcceptedAt).toLocaleDateString()}</li>
           </ul>
           <p>Please confirm this offer in your dashboard to start the commission clock.</p>
-          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing">Confirm in Dashboard →</a></p>
+          <p><a href="${appUrl("/dashboard/billing")}">Confirm in Dashboard →</a></p>
         `,
         job_seeker_id: auth.user.id,
         template_key: "billing-offer-reported",

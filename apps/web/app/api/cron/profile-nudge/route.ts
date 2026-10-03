@@ -1,3 +1,4 @@
+import { getAppOrigin } from "@/lib/app-url";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { profileCompletionNudgeEmail } from "@/lib/email-templates/profile-completion-nudge";
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.jobgenius.ai";
+  const portalUrl = getAppOrigin();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   // Find active seekers with profile_completion < 80

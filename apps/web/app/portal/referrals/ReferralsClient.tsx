@@ -1,5 +1,6 @@
 "use client";
 
+import { getAppOrigin } from "@/lib/app-url";
 import { useState } from "react";
 
 type ReferralStatus = "signed_up" | "placed" | "rewarded";
@@ -90,9 +91,7 @@ export default function ReferralsClient({ referralCode, stats, referrals }: Prop
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const appUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL ?? "";
+    typeof window !== "undefined" ? window.location.origin : getAppOrigin();
 
   const referralLink = referralCode ? `${appUrl}/signup?ref=${referralCode}` : "";
 

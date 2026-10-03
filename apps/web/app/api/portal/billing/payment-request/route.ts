@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
             <p>Hello ${admin.name},</p>
             <p><strong>${seekerName}</strong> has requested payment details via <strong>${methodLabel}</strong>.</p>
             <p>Please log in to the admin dashboard to send the payment details.</p>
-            <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing">View in Dashboard →</a></p>
+            <p><a href="${appUrl("/dashboard/billing")}">View in Dashboard →</a></p>
           `,
           job_seeker_id: auth.user.id,
           template_key: "billing-payment-requested",

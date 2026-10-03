@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
         <p>Here are the payment details you requested via <strong>${setting.display_name}</strong>:</p>
         <pre style="background:#f3f4f6;padding:16px;border-radius:6px;font-family:monospace;white-space:pre-wrap;">${setting.details}</pre>
         <p>After making your payment, please upload a screenshot in your portal to confirm the transaction.</p>
-        <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/portal/billing">Upload Screenshot →</a></p>
+        <p><a href="${appUrl("/portal/billing")}">Upload Screenshot →</a></p>
         <p>If you have any questions, please contact your Account Manager.</p>
       `,
       job_seeker_id: payReq.job_seeker_id,

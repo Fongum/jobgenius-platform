@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
           <li><strong>Accepted On:</strong> ${new Date(offerAcceptedAt).toLocaleDateString()}</li>
         </ul>
         <p>Once both parties confirm, the placement fee becomes due within two months of your employment start date.</p>
-        <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/portal/billing">Confirm in Portal →</a></p>
+        <p><a href="${appUrl("/portal/billing")}">Confirm in Portal →</a></p>
       `,
       job_seeker_id: jobSeekerId,
       template_key: "billing-offer-reported",

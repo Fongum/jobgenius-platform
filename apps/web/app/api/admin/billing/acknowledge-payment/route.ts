@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -161,7 +162,7 @@ export async function POST(request: Request) {
             ? ""
             : "<p>Your installment has been marked as paid. Services will continue as scheduled.</p>"
         }
-        <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/portal/billing">View your billing status →</a></p>
+        <p><a href="${appUrl("/portal/billing")}">View your billing status →</a></p>
       `,
       job_seeker_id: screenshot.job_seeker_id,
       template_key: "billing-payment-acknowledged",

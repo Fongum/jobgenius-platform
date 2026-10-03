@@ -1,3 +1,4 @@
+import { appUrl, getAppOrigin } from "@/lib/app-url";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { enforceBackgroundRateLimit } from "@/lib/rate-limit-presets";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -1057,11 +1058,7 @@ async function runInterviewPrepReady(payload: Record<string, unknown>) {
   }
 
   if (jobSeeker.email) {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      "http://localhost:3000";
-    const prepUrl = `${baseUrl}/portal/interview-prep/${prep.id}`;
+    const prepUrl = appUrl(`/portal/interview-prep/${prep.id}`);
     const template = interviewPrepReadyEmail({
       recipientName: jobSeeker.full_name ?? "Candidate",
       jobTitle: jobPost.title ?? "Interview",
@@ -1583,16 +1580,7 @@ type VoiceCallRow = {
 };
 
 function resolveAppBaseUrl() {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (configured) {
-    return configured.endsWith("/") ? configured.slice(0, -1) : configured;
-  }
-  const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (!vercelUrl) return null;
-  const withProtocol = vercelUrl.startsWith("http")
-    ? vercelUrl
-    : `https://${vercelUrl}`;
-  return withProtocol.endsWith("/") ? withProtocol.slice(0, -1) : withProtocol;
+  return getAppOrigin();
 }
 
 function resolveVoiceWebhookUrl() {

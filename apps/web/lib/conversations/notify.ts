@@ -1,3 +1,4 @@
+import { getAppOrigin } from "@/lib/app-url";
 import { conversationMessageNotificationEmail } from "@/lib/email-templates/conversation-message-notification";
 import { amMessageNotificationEmail } from "@/lib/email-templates/am-message-notification";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
@@ -17,7 +18,7 @@ export async function notifySeekerConversationActivity(params: {
     return;
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = getAppOrigin();
   const normalizedBaseUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
   const baseUrl = normalizedBaseUrl || "http://localhost:3000";
   const conversationUrl = `${baseUrl}/portal/conversations/${params.conversationId}`;
@@ -64,7 +65,7 @@ export async function notifyAMConversationActivity(params: {
     return;
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = getAppOrigin();
   const normalizedBaseUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
   const baseUrl = normalizedBaseUrl || "http://localhost:3000";
   // AM sees conversations through the seeker detail page

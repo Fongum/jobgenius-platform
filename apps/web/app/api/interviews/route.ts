@@ -1,3 +1,4 @@
+import { getAppOrigin } from "@/lib/app-url";
 import { getAccountManagerFromRequest } from "@/lib/am-access";
 import { requireOpsAuth } from "@/lib/ops-auth";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
 
   if (seeker?.email && jobPost) {
     const candidateName = seeker.full_name ?? "Candidate";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const appUrl = getAppOrigin();
 
     if (hasSlots) {
       // Fetch offered slots for summary
