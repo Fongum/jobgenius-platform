@@ -10,7 +10,7 @@ export default function DashboardMockup() {
         </div>
         <div>
           <p className="text-xs font-semibold text-gray-900">Interview Booked</p>
-          <p className="text-xs text-gray-500">Stripe · Wed 2pm</p>
+          <p className="text-xs text-gray-500">Security Engineer · Wed 2pm</p>
         </div>
       </div>
 
@@ -36,7 +36,7 @@ export default function DashboardMockup() {
             <div className="w-3 h-3 rounded-full bg-green-400" />
           </div>
           <div className="flex-1 bg-white rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-400 mx-2">
-            portal.jobgenius.com
+            job-genius.com/portal
           </div>
         </div>
 
@@ -75,9 +75,9 @@ export default function DashboardMockup() {
               <p className="text-xs font-semibold text-gray-700 mb-2">Recent Activity</p>
               <div className="space-y-2">
                 {[
-                  { dot: "bg-green-400", text: "Applied to Notion · Product Manager", time: "2h ago" },
-                  { dot: "bg-violet-400", text: "Outreach sent to Stripe recruiter", time: "5h ago" },
-                  { dot: "bg-orange-400", text: "Interview scheduled · HubSpot", time: "Yesterday" },
+                  { dot: "bg-green-400", text: "Applied · GRC Analyst (remote)", time: "2h ago" },
+                  { dot: "bg-violet-400", text: "Outreach sent to hiring recruiter", time: "5h ago" },
+                  { dot: "bg-orange-400", text: "Interview scheduled · Security Engineer", time: "Yesterday" },
                 ].map((item, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${item.dot} flex-shrink-0`} />

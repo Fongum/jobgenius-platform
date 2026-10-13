@@ -109,7 +109,8 @@ export const SUCCESS_STORIES_DISCLAIMER =
   "Individual results vary depending on experience, target roles, market conditions, location, interview performance, and employer hiring decisions. Testimonials reflect individual client experiences and do not guarantee similar outcomes.";
 
 export const BUSINESS_CONTACT = {
-  email: "hello@jobgenius.com",
+  email: "hello@job-genius.com",
+  partnershipsEmail: "partners@job-genius.com",
   phoneLabel: "+1 (346) 866-3766",
   phoneHref: "tel:+13468663766",
   linkedInLabel: "LinkedIn Company Page",
@@ -118,5 +119,12 @@ export const BUSINESS_CONTACT = {
   refundPolicyHref: "/refund-policy",
   privacyHref: "/privacy",
   termsHref: "/terms",
-  consultationHref: "/signup",
 } as const;
+
+// Real calendar booking page (Calendly, Cal.com, ...). Baked at build time. When unset,
+// CTAs say "Create Free Account" instead of promising a call that leads to signup.
+const CONSULTATION_BOOKING_URL = process.env.NEXT_PUBLIC_CONSULTATION_BOOKING_URL?.trim() || "";
+
+export const CONSULTATION_CTA = CONSULTATION_BOOKING_URL
+  ? { href: CONSULTATION_BOOKING_URL, label: "Schedule a Consultation", external: true }
+  : { href: "/signup", label: "Create Free Account", external: false };

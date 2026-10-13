@@ -49,20 +49,12 @@ function SuccessStoryCard({
           <p className="font-semibold text-gray-900">{resultLine}</p>
         </div>
 
-        <div className="mt-6 grid gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-          <p>
-            <span className="font-semibold text-gray-900">LinkedIn profile:</span>{" "}
-            {hasLinkedIn ? "Approved link attached." : "Placeholder pending client approval."}
-          </p>
-          <p>
-            <span className="font-semibold text-gray-900">Client photo:</span>{" "}
-            {hasPhoto ? "Approved photo attached." : "Optional placeholder pending client approval."}
-          </p>
-          <p>
-            <span className="font-semibold text-gray-900">Testimonial quote:</span>{" "}
-            {hasQuote ? quote : "Optional quote placeholder pending client approval."}
-          </p>
-        </div>
+        {/* Only client-approved quote/link render; nothing shows while approval is pending. */}
+        {hasQuote ? (
+          <blockquote className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm italic leading-7 text-gray-700">
+            &ldquo;{quote}&rdquo;
+          </blockquote>
+        ) : null}
 
         {hasLinkedIn ? (
           <a
@@ -73,14 +65,7 @@ function SuccessStoryCard({
           >
             View LinkedIn Profile
           </a>
-        ) : (
-          <span
-            aria-disabled="true"
-            className="mt-6 inline-flex cursor-not-allowed rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-400"
-          >
-            View LinkedIn Profile
-          </span>
-        )}
+        ) : null}
       </div>
     </article>
   );

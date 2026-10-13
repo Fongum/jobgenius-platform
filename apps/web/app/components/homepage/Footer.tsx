@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ROLES } from "../../for/roles";
-import { BUSINESS_CONTACT } from "./marketingContent";
+import { BUSINESS_CONTACT, CONSULTATION_CTA } from "./marketingContent";
 
 export default function Footer() {
   return (
@@ -20,10 +20,11 @@ export default function Footer() {
               </p>
             </div>
             <Link
-              href={BUSINESS_CONTACT.consultationHref}
+              href={CONSULTATION_CTA.href}
+              {...(CONSULTATION_CTA.external ? { target: "_blank", rel: "noreferrer" } : {})}
               className="inline-flex rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
             >
-              Schedule a Consultation
+              {CONSULTATION_CTA.label}
             </Link>
           </div>
           <div className="mt-6 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -109,8 +110,7 @@ export default function Footer() {
             <ul className="space-y-2.5 text-sm">
               <li><Link href="/signup" className="hover:text-white transition-colors">Create Account</Link></li>
               <li><Link href="/login" className="hover:text-white transition-colors">Sign In</Link></li>
-              <li><a href="mailto:partners@jobgenius.com" className="hover:text-white transition-colors">Recruiter Partnership</a></li>
-              <li><Link href="/signup" className="hover:text-white transition-colors">Schedule a Consultation</Link></li>
+              <li><a href={`mailto:${BUSINESS_CONTACT.partnershipsEmail}`} className="hover:text-white transition-colors">Recruiter Partnership</a></li>
             </ul>
           </div>
           <div>
@@ -119,7 +119,7 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2.5 text-sm">
               <li><a href={`mailto:${BUSINESS_CONTACT.email}`} className="hover:text-white transition-colors">Contact Us</a></li>
-              <li><a href="mailto:partners@jobgenius.com" className="hover:text-white transition-colors">Partnerships</a></li>
+              <li><a href={`mailto:${BUSINESS_CONTACT.partnershipsEmail}`} className="hover:text-white transition-colors">Partnerships</a></li>
               <li><Link href={BUSINESS_CONTACT.privacyHref} className="hover:text-white transition-colors">Privacy Policy</Link></li>
               <li><Link href={BUSINESS_CONTACT.termsHref} className="hover:text-white transition-colors">Terms of Service</Link></li>
               <li><Link href={BUSINESS_CONTACT.serviceAgreementHref} className="hover:text-white transition-colors">Service Agreement</Link></li>
