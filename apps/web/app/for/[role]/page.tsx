@@ -27,7 +27,8 @@ export function generateMetadata({
   const role = getRole(params.role);
   if (!role) return {};
   return {
-    title: role.metaTitle,
+    // metaTitle already ends in "| JobGenius"; skip the layout title template.
+    title: { absolute: role.metaTitle },
     description: role.metaDescription,
     alternates: { canonical: `/for/${role.slug}` },
     openGraph: {
@@ -150,6 +151,23 @@ export default function RolePage({ params }: { params: { role: string } }) {
               </span>
             ))}
           </div>
+          {role.certifications?.length ? (
+            <>
+              <h3 className="mt-10 mb-4 text-lg font-bold text-gray-900">
+                Certifications we know how to position
+              </h3>
+              <div className="flex flex-wrap justify-center gap-2 max-w-3xl mx-auto">
+                {role.certifications.map((c) => (
+                  <span
+                    key={c}
+                    className="bg-violet-50 text-violet-700 border border-violet-100 px-4 py-2 rounded-full text-sm font-medium"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
       </section>
 
