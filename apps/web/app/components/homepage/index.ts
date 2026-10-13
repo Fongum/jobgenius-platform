@@ -1,5 +1,4 @@
 export { default as HeroSection } from "./HeroSection";
-export { default as CompaniesStrip } from "./CompaniesStrip";
 export { default as PainPointSection } from "./PainPointSection";
 export { default as HowItWorksSection } from "./HowItWorksSection";
 export { default as WhatWeDoSection } from "./WhatWeDoSection";

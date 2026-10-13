@@ -5,7 +5,6 @@ import MarketingShell from "./components/MarketingShell";
 import { FAQS } from "./components/faqs";
 import {
   HeroSection,
-  CompaniesStrip,
   PainPointSection,
   HowItWorksSection,
   WhatWeDoSection,
@@ -55,7 +54,6 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
       <HeroSection capacitySummary={capacitySummary} />
-      <CompaniesStrip />
       <PainPointSection />
       <HowItWorksSection />
       <WhatWeDoSection />

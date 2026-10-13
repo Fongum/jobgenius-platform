@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ScrollReveal from "../ScrollReveal";
+import { BUSINESS_CONTACT } from "./marketingContent";
 
 function BulletPoint({ text }: { text: string }) {
   return (
@@ -78,7 +79,7 @@ export default function NetworkSection() {
                 <BulletPoint text="Work with an account manager who knows the candidate's strengths" />
               </ul>
               <a
-                href="mailto:partners@jobgenius.com"
+                href={`mailto:${BUSINESS_CONTACT.partnershipsEmail}`}
                 className="inline-block text-center bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-colors"
               >
                 Become a Partner

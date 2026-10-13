@@ -16,16 +16,10 @@ export default function InterviewPrepSection() {
           <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
             Walk into every interview ready to win
           </h2>
-          <p className="text-center text-violet-200 max-w-2xl mx-auto mb-4 text-lg">
+          <p className="text-center text-violet-200 max-w-2xl mx-auto mb-14 text-lg">
             The interview is the one part only you can do. We make sure you&apos;re
             the most prepared candidate in the room.
           </p>
-          <div className="flex justify-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-5 py-2 text-sm font-medium text-white">
-              <span className="text-orange-300 font-bold text-base">85%</span>
-              of JobGenius candidates pass their first interview round
-            </div>
-          </div>
 
           <div className="grid sm:grid-cols-2 gap-6">
             {[
