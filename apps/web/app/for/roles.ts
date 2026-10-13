@@ -9,9 +9,212 @@ export type RolePage = {
   painPoints: { title: string; desc: string }[];
   whyJobGenius: { title: string; desc: string }[];
   targetTitles: string[];
+  // Credentials this audience is screened on; rendered as chips when present.
+  certifications?: string[];
 };
 
 export const ROLES: RolePage[] = [
+  {
+    slug: "cybersecurity-grc",
+    role: "cybersecurity & GRC",
+    rolePlural: "cybersecurity & GRC professionals",
+    metaTitle: "Job Search Service for Cybersecurity & GRC Professionals | JobGenius",
+    metaDescription:
+      "A managed job search for GRC analysts, security engineers and architects. A dedicated account manager runs targeted applications, recruiter outreach and interview prep, and most of the fee is due only after you accept an offer.",
+    heroTitle: "A managed job search for cybersecurity & GRC professionals",
+    heroSubtitle:
+      "GRC, security engineering, IAM and architecture roles hire through recruiters and referrals more than job boards. A dedicated account manager runs that search for you, and the 5% success fee is due only after you accept an offer.",
+    painPoints: [
+      {
+        title: "Titles that mean five different jobs",
+        desc: "“Security Analyst” can be SOC triage, GRC audit work or vendor risk. Applying broadly lands you in the wrong pipeline and wastes interview loops.",
+      },
+      {
+        title: "Certifications that never get read",
+        desc: "CISSP, CISA or Security+ on page two does nothing if the ATS filters on frameworks like NIST 800-53, ISO 27001, SOC 2 or FedRAMP and your bullets don't name them.",
+      },
+      {
+        title: "Compliance roles hide behind recruiters",
+        desc: "Many GRC and federal-adjacent security roles are filled through staffing partners and direct recruiter outreach, not the front door.",
+      },
+    ],
+    whyJobGenius: [
+      {
+        title: "Targeting by security track",
+        desc: "Your account manager separates GRC, security engineering, IAM and architecture targets, so every application matches the work you actually want to do.",
+      },
+      {
+        title: "Framework-first positioning",
+        desc: "Resume and LinkedIn positioning that puts your frameworks, audits and controls work where recruiters and ATS filters look for it.",
+      },
+      {
+        title: "Recruiter outreach, not volume",
+        desc: "Direct outreach to security recruiters and hiring managers, plus interview prep built around the scenario and controls questions these teams ask.",
+      },
+    ],
+    targetTitles: [
+      "GRC Analyst",
+      "Senior GRC Analyst",
+      "IT Risk & Compliance Analyst",
+      "Third-Party / Vendor Risk Analyst",
+      "Security Engineer",
+      "Firewall / Network Security Engineer",
+      "IAM Engineer",
+      "Cloud Security Engineer",
+      "Security Architect",
+      "IT Auditor",
+    ],
+    certifications: ["CISSP", "CISA", "CISM", "CRISC", "Security+", "CCSP", "CySA+", "ISO 27001 Lead Auditor"],
+  },
+  {
+    slug: "it-infrastructure",
+    role: "IT infrastructure",
+    rolePlural: "IT infrastructure professionals",
+    metaTitle: "Job Search Service for IT Support & Infrastructure Professionals | JobGenius",
+    metaDescription:
+      "A managed job search for systems administrators, network engineers and IT support leads. Targeted applications, recruiter outreach and interview prep run by a dedicated account manager.",
+    heroTitle: "A managed job search for IT support & infrastructure professionals",
+    heroSubtitle:
+      "Systems, network, cloud and end-user support roles are everywhere, and so is the competition. A dedicated account manager targets the roles that fit your stack and level, and handles the applications and recruiter outreach.",
+    painPoints: [
+      {
+        title: "Stuck at the same tier",
+        desc: "Moving from help desk to systems, or from systems to cloud and infrastructure engineering, means rewriting how your experience reads. Most resumes still describe tickets, not outcomes.",
+      },
+      {
+        title: "Every posting lists a different stack",
+        desc: "Windows Server or Linux, Cisco or Juniper, Azure or AWS, Intune or Jamf. Generic applications get filtered out on keywords before a person sees them.",
+      },
+      {
+        title: "Half the market sits with staffing firms",
+        desc: "A large share of infrastructure hiring runs through staffing recruiters. Without someone working those relationships, you only see part of the market.",
+      },
+    ],
+    whyJobGenius: [
+      {
+        title: "Stack-matched targeting",
+        desc: "Your account manager matches roles to the platforms and tools you actually run, and to the next level you're aiming for.",
+      },
+      {
+        title: "Staffing and in-house recruiters",
+        desc: "Outreach to IT staffing recruiters and in-house hiring teams, so contract-to-hire and direct roles both reach you.",
+      },
+      {
+        title: "Practical interview prep",
+        desc: "Prep for troubleshooting walk-throughs, networking fundamentals and the “tell me about an outage” stories infrastructure teams ask about.",
+      },
+    ],
+    targetTitles: [
+      "IT Support Specialist",
+      "Desktop Support Lead",
+      "Systems Administrator",
+      "Systems Analyst",
+      "Network Administrator",
+      "Network Engineer",
+      "Cloud / Infrastructure Engineer",
+      "IT Operations Manager",
+    ],
+    certifications: ["CompTIA A+", "Network+", "CCNA", "Azure Administrator", "AWS SysOps", "ITIL", "RHCSA"],
+  },
+  {
+    slug: "database-administrators",
+    role: "database administrator",
+    rolePlural: "database administrators",
+    metaTitle: "Job Search Service for Database Administrators (Oracle, SQL Server, Snowflake) | JobGenius",
+    metaDescription:
+      "A managed job search for Oracle, SQL Server, PostgreSQL and Snowflake DBAs and data platform engineers. Targeted applications, recruiter outreach and interview prep from a dedicated account manager.",
+    heroTitle: "A managed job search for database administrators",
+    heroSubtitle:
+      "Oracle, SQL Server, PostgreSQL and Snowflake roles reward depth, but job boards flatten it. A dedicated account manager positions your platform expertise and puts it in front of the teams hiring for it.",
+    painPoints: [
+      {
+        title: "Deep skills, shallow resumes",
+        desc: "RAC, Data Guard, GoldenGate, Always On or performance tuning at scale rarely come through in a one-page summary, so senior DBAs get screened like generalists.",
+      },
+      {
+        title: "On-prem experience in a cloud market",
+        desc: "Many postings now ask for cloud and migration experience. If your cloud work isn't framed clearly, you get passed over for roles you could do.",
+      },
+      {
+        title: "Niche roles, few listings",
+        desc: "Strong DBA roles are often filled by specialist recruiters before they're widely posted. You need to be in those conversations early.",
+      },
+    ],
+    whyJobGenius: [
+      {
+        title: "Platform-specific positioning",
+        desc: "Your account manager makes the platforms, versions and high-availability work you've done obvious to recruiters and ATS filters.",
+      },
+      {
+        title: "Migration and cloud framing",
+        desc: "We present upgrades, migrations and cloud projects as the modernization experience hiring managers are screening for.",
+      },
+      {
+        title: "Specialist recruiter outreach",
+        desc: "Direct outreach to database and data platform recruiters, plus prep for the technical deep-dives and scenario questions DBA loops include.",
+      },
+    ],
+    targetTitles: [
+      "Oracle DBA",
+      "SQL Server DBA",
+      "PostgreSQL DBA",
+      "Senior Database Administrator",
+      "Database Engineer",
+      "Snowflake Administrator / Engineer",
+      "Data Platform Engineer",
+      "Database Reliability Engineer",
+    ],
+    certifications: ["Oracle OCP", "Azure Database Administrator", "SnowPro Core", "AWS Database Specialty"],
+  },
+  {
+    slug: "construction-safety",
+    role: "construction & HSE safety",
+    rolePlural: "construction & HSE safety professionals",
+    metaTitle: "Job Search Service for Construction Safety & HSE Professionals | JobGenius",
+    metaDescription:
+      "A managed job search for safety managers, coordinators and HSE leads, including data center and large commercial construction. Targeted applications, recruiter outreach and interview prep from a dedicated account manager.",
+    heroTitle: "A managed job search for construction & HSE safety professionals",
+    heroSubtitle:
+      "Data center and large commercial builds are hiring safety talent fast, but most career services don't speak the language of the jobsite. A dedicated account manager targets the projects and contractors that fit your experience.",
+    painPoints: [
+      {
+        title: "Hiring moves faster than you can search",
+        desc: "Large projects staff up quickly and often through contractor networks. By the time a role is widely posted, the shortlist may already exist.",
+      },
+      {
+        title: "Field results that don't show on paper",
+        desc: "Incident rates, site audits, safety programs and crew sizes are what hiring managers want to see, and they are usually missing from safety resumes.",
+      },
+      {
+        title: "Travel, per diem and project length",
+        desc: "Comparing travel roles, rotations and project durations across contractors takes time you don't have while you're on a site.",
+      },
+    ],
+    whyJobGenius: [
+      {
+        title: "Project-type targeting",
+        desc: "Your account manager focuses on the project types you know, such as data centers, commercial, industrial or infrastructure, and the contractors building them.",
+      },
+      {
+        title: "Results-first positioning",
+        desc: "We put your safety metrics, programs and site responsibilities up front, where superintendents and HSE directors look first.",
+      },
+      {
+        title: "Contractor and recruiter outreach",
+        desc: "Direct outreach to general contractors, specialty contractors and construction recruiters, plus prep for the scenario questions safety interviews rely on.",
+      },
+    ],
+    targetTitles: [
+      "Safety Coordinator",
+      "Site Safety Manager",
+      "Construction Safety Manager",
+      "HSE Lead",
+      "EHS Manager",
+      "Regional Safety Director",
+      "Data Center Safety Manager",
+    ],
+    certifications: ["CHST", "CSP", "ASP", "OSHA 30", "OSHA 500 / 510", "STS"],
+  },
   {
     slug: "software-engineers",
     role: "software engineer",
@@ -601,7 +804,10 @@ export const ROLES: RolePage[] = [
       "PMO Lead",
       "Director of Program Management",
       "Head of Operations",
+      "Implementation Manager",
+      "Project Coordinator",
     ],
+    certifications: ["PMP", "CAPM", "PgMP", "PMI-ACP", "CSM", "SAFe", "PRINCE2"],
   },
   {
     slug: "recent-graduates",

@@ -3,12 +3,12 @@ import ScrollReveal from "../ScrollReveal";
 import { ROLES } from "../../for/roles";
 
 const FEATURED_ROLE_SLUGS = [
+  "cybersecurity-grc",
+  "it-infrastructure",
+  "database-administrators",
+  "program-managers",
+  "construction-safety",
   "software-engineers",
-  "product-managers",
-  "data-scientists",
-  "marketers",
-  "finance-professionals",
-  "designers",
 ];
 
 const featuredRoles = FEATURED_ROLE_SLUGS.map((slug) =>
@@ -27,9 +27,9 @@ export default function RolePathsSection() {
             Start with the version built for your market
           </h2>
           <p className="text-center text-gray-500 max-w-3xl mx-auto mb-14">
-            Software, product, data, marketing, finance, and design all hire
-            differently. These pages let the acquisition story match the role
-            you actually want.
+            Cybersecurity, IT infrastructure, databases, project management and
+            construction safety all hire differently. Pick the page that matches
+            the role you actually want.
           </p>
 
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">

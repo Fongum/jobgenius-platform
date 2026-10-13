@@ -93,7 +93,7 @@ export default function HeroSection({
                   <StarIcon key={i} className="w-4 h-4 fill-current" />
                 ))}
               </div>
-              <span>Built for software, product, data, marketing, finance, and design roles</span>
+              <span>Built for cybersecurity, IT, data, project management, and safety roles</span>
               <span className="text-gray-300 hidden sm:inline">|</span>
               <a href="#by-role" className="font-medium text-violet-700 hover:text-violet-800">
                 Browse role-specific pages
