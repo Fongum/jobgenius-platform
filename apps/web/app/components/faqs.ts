@@ -29,7 +29,7 @@ export const FAQS = [
   },
   {
     q: "When exactly is the 5% success fee due?",
-    a: "The 5% success fee is only due after you receive and accept an offer. If you do not accept an offer, no success fee is charged.",
+    a: "The success fee is 5% of your first-year base salary plus any guaranteed cash compensation, such as a signing bonus. It only applies after you receive and accept an offer, and it is due within two months of your employment start date. If you do not accept an offer, no success fee is charged.",
   },
   {
     q: "Can I pause or stop if my plans change?",

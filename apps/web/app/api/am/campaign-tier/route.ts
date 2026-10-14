@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
-import { PRICING_PLANS } from "@/app/components/homepage/marketingContent";
+import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
 
 /**
  * POST  /api/am/campaign-tier    → assign the client's campaign plan (Essentials/Premium)
@@ -37,13 +37,15 @@ export async function POST(request: Request) {
   if (!access.ok) return access.response;
 
   const selectedAt = new Date().toISOString();
+  // Lock in the price at selection time; the agreement reuses this stored fee.
+  const setupFeeUsd = currentSetupFeeUsd(plan);
   const { error } = await supabaseAdmin
     .from("job_seekers")
     .update({
       campaign_tier: plan.name.toLowerCase(),
       campaign_tier_selected_at: selectedAt,
       campaign_tier_selected_by: access.amId,
-      setup_fee_usd: plan.setupFeeUsd,
+      setup_fee_usd: setupFeeUsd,
       // Changing plans resets any prior paid mark — re-confirm payment for the new fee.
       setup_fee_paid_at: null,
       setup_fee_marked_paid_by: null,
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     campaign_tier: plan.name.toLowerCase(),
-    setup_fee_usd: plan.setupFeeUsd,
+    setup_fee_usd: setupFeeUsd,
     campaign_tier_selected_at: selectedAt,
   });
 }

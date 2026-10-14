@@ -12,50 +12,64 @@ import {
   WhyTrustSection,
   FinalCtaSection,
 } from "../components/homepage";
+import {
+  LAUNCH_PRICING_END_LABEL,
+  PRICING_PLANS,
+  currentSetupFeeUsd,
+  isLaunchPricingActive,
+} from "../components/homepage/marketingContent";
 
-const title = "Pricing: Essentials $300 / Premium $600 + 5% Success Fee";
-const description =
-  "Transparent JobGenius pricing. Creating an account is free. Activate Essentials at $300 or Premium at $600, with a 5% success fee only after you receive and accept an offer.";
+// Prices come from PRICING_PLANS so the launch → list switch on Jan 1 needs no edit here.
+function pricingCopy() {
+  const [essentials, premium] = PRICING_PLANS;
+  const e = currentSetupFeeUsd(essentials);
+  const p = currentSetupFeeUsd(premium);
+  const launch = isLaunchPricingActive();
+  const title = `Pricing: Essentials $${e} / Premium $${p}${launch ? " Launch Pricing" : ""} + 5% Success Fee`;
+  const description = `Transparent JobGenius pricing. Creating an account is free. Activate Essentials at $${e} or Premium at $${p}${
+    launch ? ` (launch pricing through ${LAUNCH_PRICING_END_LABEL})` : ""
+  }, with a 5% success fee only after you receive and accept an offer.`;
+  return { title, description, launch };
+}
 
-export const metadata: Metadata = {
-  title,
-  description,
-  alternates: { canonical: "/pricing" },
-  openGraph: { title, description, url: "/pricing", type: "website" },
-  twitter: { card: "summary_large_image", title, description },
-};
+export function generateMetadata(): Metadata {
+  const { title, description } = pricingCopy();
+  return {
+    title,
+    description,
+    alternates: { canonical: "/pricing" },
+    openGraph: { title, description, url: "/pricing", type: "website" },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
-const productJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Product",
-  name: "JobGenius Managed Job Search",
-  description,
-  brand: { "@type": "Brand", name: "JobGenius" },
-  offers: [
-    {
-      "@type": "Offer",
-      name: "Essentials",
-      description:
-        "Consistent role-matched applications, guided outreach support, dedicated account manager support, and campaign visibility.",
-      price: "300",
-      priceCurrency: "USD",
-      url: "https://job-genius.com/pricing",
-      availability: "https://schema.org/InStock",
-    },
-    {
-      "@type": "Offer",
-      name: "Premium",
-      description:
-        "Higher-touch campaign execution with priority outreach support, interview preparation, and dedicated account manager support.",
-      price: "600",
-      priceCurrency: "USD",
-      url: "https://job-genius.com/pricing",
-      availability: "https://schema.org/InStock",
-    },
-  ],
+const OFFER_DESCRIPTIONS: Record<string, string> = {
+  "Essentials": "Consistent role-matched applications, guided outreach support, dedicated account manager support, and campaign visibility.",
+  "Premium": "Higher-touch campaign execution with priority outreach support, interview preparation, and dedicated account manager support."
 };
+
+function productJsonLd() {
+  const { description, launch } = pricingCopy();
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "JobGenius Managed Job Search",
+    description,
+    brand: { "@type": "Brand", name: "JobGenius" },
+    offers: PRICING_PLANS.map((plan) => ({
+      "@type": "Offer",
+      name: plan.name,
+      description: OFFER_DESCRIPTIONS[plan.name],
+      price: String(currentSetupFeeUsd(plan)),
+      priceCurrency: "USD",
+      ...(launch ? { priceValidUntil: "2026-12-31" } : {}),
+      url: "https://job-genius.com/pricing",
+      availability: "https://schema.org/InStock",
+    })),
+  };
+}
 
 const breadcrumb = breadcrumbJsonLd([
   { name: "Home", path: "/" },
@@ -69,7 +83,7 @@ export default async function PricingPage() {
     <MarketingShell>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd()) }}
       />
       <script
         type="application/ld+json"
@@ -78,7 +92,7 @@ export default async function PricingPage() {
       <PageHero
         eyebrow="Pricing"
         title="Free account first. Paid campaign activation only when you decide to move forward."
-        subtitle="Review your fit, strategy direction, and service boundaries before you activate a managed Job Search Campaign. The 5% success fee is only due after an accepted offer."
+        subtitle="Review your fit, strategy direction, and service boundaries before you activate a managed Job Search Campaign. The 5% success fee only applies after you accept an offer and is due within two months of your start date."
         secondaryCta={{ href: "/how-it-works", label: "How It Works" }}
       />
       <PrePaymentSection />

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProfileData } from "../OnboardingWizard";
+import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
 
 // ─── Profile Score ─────────────────────────────────────────────
 
@@ -253,7 +254,7 @@ export default function ReviewFinishStep({
           <div>
             <p className="text-sm font-semibold text-gray-900">How JobGenius is paid</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-600">
-              A one-time Campaign Setup &amp; Execution Fee ($300 Essentials / $600 Premium) is due when
+              A one-time Campaign Setup &amp; Execution Fee (${currentSetupFeeUsd(PRICING_PLANS[0])} Essentials / ${currentSetupFeeUsd(PRICING_PLANS[1])} Premium) is due when
               you activate a paid Job Search Campaign, plus a 5% placement fee only when you accept a job
               we help you land, due within two months of your start date. Your account manager will share
               the full service agreement for signature when the time is right.{" "}

@@ -33,13 +33,20 @@ export const WHY_TRUST_POINTS = [
 ] as const;
 
 export const SUCCESS_FEE_SUMMARY =
-  "5% of first-year base salary only after the candidate receives and accepts an offer.";
+  "5% of first-year base salary plus guaranteed cash compensation (such as a signing bonus), only after you receive and accept an offer. It is due within two months of your start date.";
+
+// Launch pricing runs through Dec 31, 2026 (US Eastern). List prices apply automatically
+// from Jan 1, 2027, so pages that show prices must render dynamically or revalidate.
+export const LAUNCH_PRICING_ENDS_AT = new Date("2027-01-01T05:00:00Z");
+export const LAUNCH_PRICING_END_LABEL = "December 31, 2026";
+export const LIST_PRICING_START_LABEL = "January 1, 2027";
 
 export const PRICING_PLANS = [
   {
     name: "Essentials",
     badge: "Structured campaign support",
-    setupFeeUsd: 300,
+    launchSetupFeeUsd: 399,
+    listSetupFeeUsd: 500,
     description: "Consistent role-matched applications and guided outreach support.",
     features: [
       "Consistent role-matched applications",
@@ -56,7 +63,8 @@ export const PRICING_PLANS = [
   {
     name: "Premium",
     badge: "Most comprehensive",
-    setupFeeUsd: 600,
+    launchSetupFeeUsd: 799,
+    listSetupFeeUsd: 1000,
     description: "Higher-touch campaign execution with deeper interview and outreach support.",
     features: [
       "Higher-volume role-matched applications",
@@ -128,3 +136,13 @@ const CONSULTATION_BOOKING_URL = process.env.NEXT_PUBLIC_CONSULTATION_BOOKING_UR
 export const CONSULTATION_CTA = CONSULTATION_BOOKING_URL
   ? { href: CONSULTATION_BOOKING_URL, label: "Schedule a Consultation", external: true }
   : { href: "/signup", label: "Create Free Account", external: false };
+
+export type PricingPlan = (typeof PRICING_PLANS)[number];
+
+export function isLaunchPricingActive(now: Date = new Date()): boolean {
+  return now < LAUNCH_PRICING_ENDS_AT;
+}
+
+export function currentSetupFeeUsd(plan: PricingPlan, now: Date = new Date()): number {
+  return isLaunchPricingActive(now) ? plan.launchSetupFeeUsd : plan.listSetupFeeUsd;
+}

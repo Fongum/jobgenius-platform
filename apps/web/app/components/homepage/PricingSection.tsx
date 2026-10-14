@@ -4,8 +4,12 @@ import ScrollReveal from "../ScrollReveal";
 import {
   CAMPAIGN_FEE_LABEL,
   FREE_ACCOUNT_PRICING_MESSAGE,
+  LAUNCH_PRICING_END_LABEL,
+  LIST_PRICING_START_LABEL,
   PRICING_PLANS,
   SUCCESS_FEE_SUMMARY,
+  currentSetupFeeUsd,
+  isLaunchPricingActive,
 } from "./marketingContent";
 
 function PricingItem({
@@ -61,6 +65,7 @@ export default function PricingSection({
   capacitySummary?: CapacityNoticeSummary | null;
 }) {
   const [essentials, premium] = PRICING_PLANS;
+  const launch = isLaunchPricingActive();
 
   return (
     <section id="pricing" className="py-20 sm:py-28">
@@ -127,13 +132,19 @@ export default function PricingSection({
                   {CAMPAIGN_FEE_LABEL}
                 </p>
                 <p className="mt-2 text-4xl font-extrabold text-gray-900">
-                  {formatUsd(essentials.setupFeeUsd)}
+                  {formatUsd(currentSetupFeeUsd(essentials))}
                 </p>
+                {launch ? (
+                  <p className="mt-1 text-xs font-medium text-orange-700">
+                    Launch price through {LAUNCH_PRICING_END_LABEL}. Rises to{" "}
+                    {formatUsd(essentials.listSetupFeeUsd)} on {LIST_PRICING_START_LABEL}.
+                  </p>
+                ) : null}
                 <p className="mt-3 text-sm font-medium text-violet-700">
-                  Success Fee: 5% of first-year base salary
+                  Success Fee: 5% of first-year base + guaranteed cash
                 </p>
                 <p className="mt-1 text-sm text-gray-600">
-                  Only due after the candidate receives and accepts an offer.
+                  Only after you accept an offer. Due within two months of your start date.
                 </p>
               </div>
               <ul className="mb-8 flex-1 space-y-3">
@@ -169,12 +180,20 @@ export default function PricingSection({
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">
                   {CAMPAIGN_FEE_LABEL}
                 </p>
-                <p className="mt-2 text-4xl font-extrabold">{formatUsd(premium.setupFeeUsd)}</p>
+                <p className="mt-2 text-4xl font-extrabold">
+                  {formatUsd(currentSetupFeeUsd(premium))}
+                </p>
+                {launch ? (
+                  <p className="mt-1 text-xs font-medium text-orange-200">
+                    Launch price through {LAUNCH_PRICING_END_LABEL}. Rises to{" "}
+                    {formatUsd(premium.listSetupFeeUsd)} on {LIST_PRICING_START_LABEL}.
+                  </p>
+                ) : null}
                 <p className="mt-3 text-sm font-medium text-orange-200">
-                  Success Fee: 5% of first-year base salary
+                  Success Fee: 5% of first-year base + guaranteed cash
                 </p>
                 <p className="mt-1 text-sm text-violet-100">
-                  Only due after the candidate receives and accepts an offer.
+                  Only after you accept an offer. Due within two months of your start date.
                 </p>
               </div>
               <ul className="mb-8 flex-1 space-y-3">

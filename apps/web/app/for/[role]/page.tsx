@@ -15,6 +15,9 @@ import { ROLES, getRole } from "../roles";
 
 const SITE_URL = "https://job-genius.com";
 
+// Hourly regeneration so plan prices switch from launch to list pricing on schedule.
+export const revalidate = 3600;
+
 export function generateStaticParams() {
   return ROLES.map((r) => ({ role: r.slug }));
 }

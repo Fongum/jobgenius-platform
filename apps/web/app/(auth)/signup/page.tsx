@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
 import MultiCheckbox from "../../portal/components/MultiCheckbox";
 
 type UserType = "am" | "job_seeker";
@@ -421,7 +422,8 @@ function SignUpForm() {
             {userType === "job_seeker" && (
               <div className="mt-6 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4 text-sm text-orange-900">
                 Creating your account is free. Paid campaign activation starts at{" "}
-                <strong>$300 for Essentials</strong> or <strong>$600 for Premium</strong>, and
+                <strong>${currentSetupFeeUsd(PRICING_PLANS[0])} for Essentials</strong> or{" "}
+                <strong>${currentSetupFeeUsd(PRICING_PLANS[1])} for Premium</strong>, and
                 that only happens after consultation, strategy review, and your decision to move
                 forward.
               </div>
