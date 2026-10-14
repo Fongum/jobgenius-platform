@@ -186,7 +186,30 @@ separate Retell agent (and prompt) per call type via `voice_playbooks.retell_age
 | 1. Qualify leads | Instant first call, caller brief, categorisation, retries/callbacks, opt-out, admin view | Built (PR #13) |
 | 2. Cal.com | Emi books Fidelis's strategy call live (Retell Cal.com tools, `founder_call_booked`); "Intro call with Emi" booking link for LinkedIn leads → Cal.com webhook creates the lead with background and schedules Emi at the booked time; founder-booked calls get an emailed brief | Next |
 | 3. Nurture + alerts | Email sequence for no-phone / unanswered / nurture leads (Resend, booking link); email to Fidelis for hot leads and new bookings | Planned |
-| 4. Client interview calls | See below | Planned |
+| 4a. Interview & application capture | Platform becomes the record of interviews and manual applications (see below) | In progress |
+| 4. Client interview calls | See below; needs 4a | Planned |
+
+### Phase 4a: interview and application capture (prerequisite)
+
+In production (Oct 2026) the `interviews` table had 0 rows ever and manual
+applications were not recorded anywhere: interview details, bookings and
+availability lived only in AM↔client WhatsApp groups. Emi can only act on what
+the platform knows, so AMs own the facts and Emi acts only on confirmed facts.
+
+1. **Fast interview logging** for AMs (phone-friendly, about a minute): company, role,
+   date/time with timezone, format, link, interviewer, round, note for Emi.
+   An interview counts toward AM metrics and incentives only once it is logged.
+2. **Manual application logging** (company, role, link) plus fixing analytics that
+   queried a non-existent `applications` table.
+3. **Email-detected interview drafts**: invites arriving in the designated job-search
+   inbox become drafts the AM confirms in one click (inbox scanner + scheduling-link
+   detector exist; verify they run in production).
+4. **Emi captures on check-in calls**: upcoming interviews and availability become
+   drafts for AM confirmation; Emi never acts on an unconfirmed draft.
+
+WhatsApp stays the conversation channel. Group chats are not read automatically
+(unofficial tools break WhatsApp's terms). Possible later: a JobGenius WhatsApp
+Business number where AMs forward an invite and AI drafts the interview.
 
 ### Phase 4: Emi for clients' interviews
 
@@ -204,6 +227,8 @@ signup consent covers calls about the job search.
 - **Debrief call** a few hours after the interview: how it went, next round expected,
   thank-you note sent → feeds the client's timeline and the AM.
 - **No-show / reschedule follow-up** when the interview status changes.
+- Only for interviews an AM has confirmed; per-interview "Emi prep call" on/off switch;
+  brief includes the AM's note for Emi; Emi preps, she does not re-confirm logistics.
 - Same rules as lead calls: calling window, opt-out, never promise outcomes.
 - Before relying on it: run one real portal mock interview end to end (the realtime
   scoring path has never run against real data).
