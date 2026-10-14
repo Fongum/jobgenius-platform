@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import DeliveryCommandPanel from "./DeliveryCommandPanel";
+import QuickLogPanel from "./QuickLogPanel";
 import {
   formatTaskStatusLabel,
   getTaskAttachmentFromAttachments,
@@ -567,6 +568,17 @@ export default function SeekerDetailClient({
           }
         }
         canReviewCases={canReviewDeliveryCases}
+      />
+
+      <QuickLogPanel
+        seekerId={seeker.id}
+        recentApplications={runs
+          .filter((r) => r.job_posts && ["APPLIED", "COMPLETED"].includes(r.status))
+          .slice(0, 30)
+          .map((r) => ({
+            jobPostId: r.job_posts!.id,
+            label: `${r.job_posts!.title}${r.job_posts!.company ? ` · ${r.job_posts!.company}` : ""}`,
+          }))}
       />
 
       {/* Tabs */}

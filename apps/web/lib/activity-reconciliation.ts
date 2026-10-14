@@ -24,7 +24,8 @@
 //
 // ─── What is compared ────────────────────────────────────────────────────
 //
-//   Applications  typed easy + company     vs  application_runs COMPLETED
+//   Applications  typed easy + company     vs  application_runs APPLIED/COMPLETED
+//                                              (automated and AM-logged manual)
 //   Interviews    typed phone + video      vs  interviews rows of that type
 //   Follow-ups    typed follow_ups         vs  follow_up_drafts HANDLED
 //
@@ -41,6 +42,7 @@ import {
   interviewTotal,
   type ActivityCounts,
 } from "./activity-sheet";
+import { SUCCESSFUL_APPLICATION_STATUSES } from "./application-stats";
 
 /** Sheet metrics the interview comparison can actually corroborate. */
 export const CORROBORATED_INTERVIEW_METRICS = [
@@ -348,13 +350,14 @@ export async function loadReconciliation(
         .select(entryColumns)
         .gte("entry_date", start)
         .lte("entry_date", end),
-      // COMPLETED is the terminal success state for an application run.
+      // The runner marks success as APPLIED (older rows: COMPLETED); applied_at
+      // is stamped by a trigger and set by the manual-application log.
       db
         .from("application_runs")
-        .select("job_seeker_id, updated_at")
-        .eq("status", "COMPLETED")
-        .gte("updated_at", startInstant)
-        .lte("updated_at", endInstant),
+        .select("job_seeker_id, applied_at")
+        .in("status", SUCCESSFUL_APPLICATION_STATUSES)
+        .gte("applied_at", startInstant)
+        .lte("applied_at", endInstant),
       db
         .from("interviews")
         .select("account_manager_id, interview_type, scheduled_at, created_at")
@@ -448,7 +451,7 @@ export async function loadReconciliation(
   }
 
   for (const run of runs ?? []) {
-    const date = watDay(run.updated_at as string);
+    const date = watDay(run.applied_at as string);
     if (!date) continue;
     // Attributed to whoever logged that seeker that day. A run for a
     // seeker nobody logged has no owner to credit, and is skipped rather
