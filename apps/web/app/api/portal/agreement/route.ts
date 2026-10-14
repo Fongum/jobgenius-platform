@@ -16,7 +16,7 @@ import {
 async function loadSeeker(id: string) {
   const { data } = await supabaseAdmin
     .from("job_seekers")
-    .select("full_name, email, campaign_tier")
+    .select("full_name, email, campaign_tier, setup_fee_usd")
     .eq("id", id)
     .maybeSingle();
   return data;
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       clientEmail,
       commissionRatePercent: DEFAULT_COMMISSION_RATE * 100,
       campaignTier: seeker?.campaign_tier ?? null,
+      setupFeeUsd: seeker?.setup_fee_usd ?? null,
     });
 
   return NextResponse.json({
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
     signatureName,
     agreedDate: agreedAt,
     campaignTier: gate?.campaign_tier ?? null,
+    setupFeeUsd: gate?.setup_fee_usd ?? null,
   });
 
   const { data: agreement, error } = await supabaseAdmin

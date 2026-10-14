@@ -13,7 +13,7 @@ import {
   type JobGeniusReport,
 } from "@/lib/jobgenius/report";
 import { RESUME_TEMPLATES, type ResumeTemplateId } from "@/lib/resume-templates/types";
-import { PRICING_PLANS } from "@/app/components/homepage/marketingContent";
+import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
 import type { ClientDeliveryCaseBundle } from "@/lib/client-delivery";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
 
@@ -967,7 +967,7 @@ function CampaignTierCard({
             >
               <span className="font-medium">{plan.name}</span>
               <span className="block text-xs text-gray-400">
-                ${plan.setupFeeUsd.toLocaleString()} setup fee
+                ${currentSetupFeeUsd(plan).toLocaleString()} setup fee
               </span>
             </button>
           );

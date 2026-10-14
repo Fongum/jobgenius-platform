@@ -23,7 +23,7 @@ export const ROLES: RolePage[] = [
       "A managed job search for GRC analysts, security engineers and architects. A dedicated account manager runs targeted applications, recruiter outreach and interview prep, and most of the fee is due only after you accept an offer.",
     heroTitle: "A managed job search for cybersecurity & GRC professionals",
     heroSubtitle:
-      "GRC, security engineering, IAM and architecture roles hire through recruiters and referrals more than job boards. A dedicated account manager runs that search for you, and the 5% success fee is due only after you accept an offer.",
+      "GRC, security engineering, IAM and architecture roles hire through recruiters and referrals more than job boards. A dedicated account manager runs that search for you, and the 5% success fee applies only after you accept an offer.",
     painPoints: [
       {
         title: "Titles that mean five different jobs",

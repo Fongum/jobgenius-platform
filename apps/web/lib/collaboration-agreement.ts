@@ -10,7 +10,11 @@
 // acceptances stay auditable.
 // ============================================================
 
-import { PRICING_PLANS, CAMPAIGN_FEE_LABEL } from "@/app/components/homepage/marketingContent";
+import {
+  PRICING_PLANS,
+  CAMPAIGN_FEE_LABEL,
+  currentSetupFeeUsd,
+} from "@/app/components/homepage/marketingContent";
 
 export const AGREEMENT_VERSION = "2026-07-collaboration-v2";
 export const DEFAULT_COMMISSION_RATE = 0.05;
@@ -28,6 +32,8 @@ export interface CollaborationAgreementParams {
   agreedDate?: string | null;
   /** Client's selected plan (job_seekers.campaign_tier). Unset shows both plan fees as a range. */
   campaignTier?: "essentials" | "premium" | null;
+  /** Fee locked in when the tier was chosen (job_seekers.setup_fee_usd); wins over today's price. */
+  setupFeeUsd?: number | null;
 }
 
 function esc(value: string): string {
@@ -61,8 +67,8 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
     : undefined;
 
   const setupFeeLine = selectedPlan
-    ? `$${selectedPlan.setupFeeUsd.toLocaleString()} (${selectedPlan.name} plan)`
-    : PRICING_PLANS.map((plan) => `$${plan.setupFeeUsd.toLocaleString()} (${plan.name} plan)`).join(
+    ? `$${(params.setupFeeUsd ?? currentSetupFeeUsd(selectedPlan)).toLocaleString()} (${selectedPlan.name} plan)`
+    : PRICING_PLANS.map((plan) => `$${currentSetupFeeUsd(plan).toLocaleString()} (${plan.name} plan)`).join(
         " or "
       );
 
