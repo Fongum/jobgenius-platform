@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
 import { isAdminRole } from "@/lib/auth/roles";
+import LeadEmiControls from "./LeadEmiControls";
 
 type LeadStatus = "new" | "qualified" | "nurture" | "disqualified" | "converted";
 
@@ -20,6 +21,17 @@ type LeadRow = {
   last_call_at: string | null;
   owner_account_manager_id: string | null;
   created_at: string;
+  temperature: string | null;
+  niche: string | null;
+  fit_score: number | null;
+  next_action: string | null;
+  next_action_at: string | null;
+  qualification: Record<string, unknown> | null;
+  agent_background: string | null;
+  handled_by: "emi" | "founder";
+  call_attempts: number;
+  disqualify_reason: string | null;
+  timezone: string | null;
 };
 
 type AccountManagerRow = {
@@ -34,6 +46,7 @@ type VoiceCallRow = {
   created_at: string;
   call_started_at: string | null;
   call_ended_at: string | null;
+  summary: string | null;
 };
 
 type LeadResumeMetadata = {
@@ -70,6 +83,41 @@ function badgeClasses(status: string) {
       return "bg-gray-100 text-gray-700 border-gray-200";
   }
 }
+
+function temperatureClasses(value: string) {
+  switch (value) {
+    case "hot":
+      return "bg-rose-50 text-rose-700 border-rose-200";
+    case "warm":
+      return "bg-orange-50 text-orange-700 border-orange-200";
+    case "realign":
+      return "bg-sky-50 text-sky-700 border-sky-200";
+    case "nurture":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    default:
+      return "bg-gray-100 text-gray-700 border-gray-200";
+  }
+}
+
+const NEXT_ACTION_LABELS: Record<string, string> = {
+  call: "Emi calls again",
+  callback: "Emi calls back",
+  founder_call: "Fidelis: strategy call",
+  founder_review: "Fidelis: review",
+  nurture_email: "Nurture email",
+  closed: "Closed",
+};
+
+const KEY_ANSWERS: Array<[string, string]> = [
+  ["target_role", "Role"],
+  ["years_experience", "Yrs"],
+  ["search_timeline", "Timeline"],
+  ["salary_target_usd", "Salary"],
+  ["work_authorization", "Auth"],
+  ["budget_status", "Fee"],
+  ["fit_rating_1_10", "Fit 1-10"],
+  ["concerns", "Concerns"],
+];
 
 function formatStatus(value: string) {
   return value
@@ -131,7 +179,7 @@ function isSignupIntake(metadata: Record<string, unknown> | null) {
 export default async function AdminLeadsPage({
   searchParams,
 }: {
-  searchParams?: { status?: string; source?: string };
+  searchParams?: { status?: string; source?: string; temp?: string };
 }) {
   const user = await getCurrentUser();
   if (!user) {
@@ -144,17 +192,22 @@ export default async function AdminLeadsPage({
 
   const statusFilter = String(searchParams?.status ?? "all").toLowerCase();
   const sourceFilter = String(searchParams?.source ?? "all").toLowerCase();
+  const tempFilter = String(searchParams?.temp ?? "all").toLowerCase();
 
   let leadsQuery = supabaseAdmin
     .from("lead_intake_submissions")
     .select(
-      "id, source, status, full_name, email, phone, location, target_roles, notes, metadata, next_call_due_at, last_call_at, owner_account_manager_id, created_at"
+      "id, source, status, full_name, email, phone, location, target_roles, notes, metadata, next_call_due_at, last_call_at, owner_account_manager_id, created_at, temperature, niche, fit_score, next_action, next_action_at, qualification, agent_background, handled_by, call_attempts, disqualify_reason, timezone"
     )
     .order("created_at", { ascending: false })
     .limit(100);
 
   if (statusFilter !== "all") {
     leadsQuery = leadsQuery.eq("status", statusFilter);
+  }
+
+  if (tempFilter !== "all") {
+    leadsQuery = leadsQuery.eq("temperature", tempFilter);
   }
 
   if (sourceFilter !== "all" && sourceFilter !== "signup_intake") {
@@ -165,10 +218,10 @@ export default async function AdminLeadsPage({
     leadsQuery,
     supabaseAdmin
       .from("lead_intake_submissions")
-      .select("id, status, source, metadata", { count: "exact" }),
+      .select("id, status, source, metadata, temperature", { count: "exact" }),
     supabaseAdmin
       .from("voice_calls")
-      .select("lead_submission_id, status, created_at, call_started_at, call_ended_at")
+      .select("lead_submission_id, status, created_at, call_started_at, call_ended_at, summary")
       .not("lead_submission_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(250),
@@ -180,6 +233,7 @@ export default async function AdminLeadsPage({
     status: LeadStatus;
     source: string;
     metadata: Record<string, unknown> | null;
+    temperature: string | null;
   }>;
   const voiceCalls = (queuedCallsRes.data ?? []) as VoiceCallRow[];
   const ownerIds = Array.from(
@@ -226,6 +280,15 @@ export default async function AdminLeadsPage({
     { label: "Qualified", value: "qualified", count: counts.qualified },
     { label: "Nurture", value: "nurture", count: counts.nurture },
     { label: "Converted", value: "converted", count: counts.converted },
+  ];
+
+  const tempTabs: Array<{ label: string; value: string; count: number }> = [
+    { label: "Any temperature", value: "all", count: counts.total },
+    ...["hot", "warm", "realign", "nurture", "disqualified"].map((value) => ({
+      label: formatStatus(value),
+      value,
+      count: allLeadRows.filter((lead) => lead.temperature === value).length,
+    })),
   ];
 
   const sourceTabs: Array<{ label: string; value: string; count: number }> = [
@@ -308,7 +371,7 @@ export default async function AdminLeadsPage({
         <div className="flex flex-wrap gap-2">
           {statusTabs.map((tab) => {
             const active = statusFilter === tab.value;
-            const href = `/dashboard/admin/leads?status=${tab.value}&source=${sourceFilter}`;
+            const href = `/dashboard/admin/leads?status=${tab.value}&source=${sourceFilter}&temp=${tempFilter}`;
             return (
               <Link
                 key={`status-${tab.value}`}
@@ -329,9 +392,32 @@ export default async function AdminLeadsPage({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {tempTabs.map((tab) => {
+            const active = tempFilter === tab.value;
+            const href = `/dashboard/admin/leads?status=${statusFilter}&source=${sourceFilter}&temp=${tab.value}`;
+            return (
+              <Link
+                key={`temp-${tab.value}`}
+                href={href}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium ${
+                  active
+                    ? "border-rose-600 bg-rose-600 text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs ${active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"}`}>
+                  {tab.count}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
           {sourceTabs.map((tab) => {
             const active = sourceFilter === tab.value;
-            const href = `/dashboard/admin/leads?status=${statusFilter}&source=${tab.value}`;
+            const href = `/dashboard/admin/leads?status=${statusFilter}&source=${tab.value}&temp=${tempFilter}`;
             return (
               <Link
                 key={`source-${tab.value}`}
@@ -440,6 +526,11 @@ export default async function AdminLeadsPage({
                           {lead.notes && (
                             <p className="text-xs text-gray-500 line-clamp-2">{lead.notes}</p>
                           )}
+                          <LeadEmiControls
+                            leadId={lead.id}
+                            initialBackground={lead.agent_background}
+                            initialHandledBy={lead.handled_by ?? "emi"}
+                          />
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -451,7 +542,48 @@ export default async function AdminLeadsPage({
                           >
                             {formatStatus(lead.status)}
                           </span>
+                          {lead.temperature && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${temperatureClasses(
+                                  lead.temperature
+                                )}`}
+                              >
+                                {formatStatus(lead.temperature)}
+                              </span>
+                              {lead.fit_score != null && (
+                                <span className="text-xs font-semibold text-gray-700">Fit {lead.fit_score}/100</span>
+                              )}
+                              {lead.niche && (
+                                <span className="text-xs text-gray-500">{formatStatus(lead.niche)}</span>
+                              )}
+                            </div>
+                          )}
+                          {lead.next_action && (
+                            <p className="text-xs font-medium text-gray-800">
+                              Next: {NEXT_ACTION_LABELS[lead.next_action] ?? formatStatus(lead.next_action)}
+                              {lead.next_action_at && lead.next_action !== "closed"
+                                ? ` · ${formatDateTime(lead.next_action_at)}`
+                                : ""}
+                            </p>
+                          )}
+                          {lead.disqualify_reason && (
+                            <p className="text-xs text-rose-700">{lead.disqualify_reason}</p>
+                          )}
+                          {lead.qualification && Object.keys(lead.qualification).length > 0 && (
+                            <dl className="grid grid-cols-[auto,1fr] gap-x-2 gap-y-0.5 text-xs">
+                              {KEY_ANSWERS.filter(([key]) => lead.qualification?.[key] != null).map(([key, label]) => (
+                                <div key={key} className="contents">
+                                  <dt className="text-gray-400">{label}</dt>
+                                  <dd className="text-gray-700">
+                                    {String(lead.qualification?.[key]).replace(/_/g, " ")}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
                           <div className="text-xs text-gray-500 space-y-1">
+                            <p>Calls placed: {lead.call_attempts ?? 0}{lead.timezone ? ` · ${lead.timezone}` : ""}</p>
                             <p>Next call due: {formatDateTime(lead.next_call_due_at)}</p>
                             <p>Last call: {formatDateTime(lead.last_call_at)}</p>
                             <p className="font-mono text-[11px] text-gray-400">{lead.id}</p>
@@ -475,6 +607,9 @@ export default async function AdminLeadsPage({
                               )}
                               {voice.call_ended_at && (
                                 <p>Ended: {formatDateTime(voice.call_ended_at)}</p>
+                              )}
+                              {voice.summary && (
+                                <p className="max-w-xs text-gray-700 line-clamp-4">{voice.summary}</p>
                               )}
                             </div>
                           </div>

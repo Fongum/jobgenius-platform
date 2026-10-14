@@ -157,6 +157,52 @@ export async function markUpsellOptOut(params: {
   return (data?.id as string | undefined) ?? null;
 }
 
+/** True when the number asked to receive no automated calls at all. */
+export async function isVoiceOptedOut(phone: string): Promise<boolean> {
+  const candidates = phoneCandidates(phone);
+  if (candidates.length === 0) return false;
+
+  const { data } = await supabaseServer
+    .from("voice_opt_outs")
+    .select("id")
+    .eq("active", true)
+    .eq("scope", "all_voice")
+    .in("phone_number", candidates)
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(data?.id);
+}
+
+/** Record a "stop calling me" request; blocks every automated call type. */
+export async function markVoiceOptOut(params: {
+  phone: string;
+  jobSeekerId?: string | null;
+  leadSubmissionId?: string | null;
+  reason?: string | null;
+  source?: string;
+}) {
+  const normalizedPhone = normalizePhone(params.phone);
+  if (!normalizedPhone) return null;
+  if (await isVoiceOptedOut(normalizedPhone)) return null;
+
+  const { data } = await supabaseServer
+    .from("voice_opt_outs")
+    .insert({
+      phone_number: normalizedPhone,
+      scope: "all_voice",
+      reason: params.reason ?? "Asked not to be called again.",
+      source: params.source ?? "voice_call",
+      active: true,
+      job_seeker_id: params.jobSeekerId ?? null,
+      lead_submission_id: params.leadSubmissionId ?? null,
+    })
+    .select("id")
+    .maybeSingle();
+
+  return (data?.id as string | undefined) ?? null;
+}
+
 function buildConversationSubject(callType: VoiceCallType) {
   return `Voice Calls: ${CALL_TYPE_LABELS[callType]}`;
 }
