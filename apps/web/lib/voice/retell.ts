@@ -32,6 +32,12 @@ export type NormalizedRetellWebhookEvent = {
   summary: string | null;
   disposition: string | null;
   recordingUrl: string | null;
+  /** Retell disconnection_reason, e.g. user_hangup, dial_no_answer, voicemail_reached. */
+  disconnectionReason: string | null;
+  /** Post Call Extraction results (call_analysis.custom_analysis_data); only on call_analyzed. */
+  customAnalysis: JsonRecord;
+  /** True once the analysis is present (call_analyzed event). */
+  analyzed: boolean;
   metadata: JsonRecord;
   payload: JsonRecord;
 };
@@ -63,12 +69,44 @@ function normalizeRetellUrl() {
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 }
 
+const NO_ANSWER_REASONS = ["dial_no_answer", "dial_busy", "user_declined"];
+const FAILED_REASON_PREFIXES = [
+  "dial_failed",
+  "invalid_destination",
+  "telephony_",
+  "sip_routing_error",
+  "marked_as_spam",
+  "concurrency_limit_reached",
+  "no_valid_payment",
+  "error_",
+];
+
+/** Outcome implied by Retell's disconnection_reason / in_voicemail, if any. */
+function statusFromDisconnection(
+  reason: string | null,
+  inVoicemail: boolean
+): VoiceCallStatus | null {
+  const r = (reason ?? "").toLowerCase();
+  if (inVoicemail || r === "voicemail_reached") return "voicemail";
+  if (NO_ANSWER_REASONS.includes(r)) return "no_answer";
+  if (FAILED_REASON_PREFIXES.some((prefix) => r.startsWith(prefix))) return "failed";
+  return null;
+}
+
 /**
  * Map a Retell webhook event + call_status into our internal VoiceCallStatus.
  */
-function inferStatus(eventType: string, callStatus: string | null): VoiceCallStatus | null {
+function inferStatus(
+  eventType: string,
+  callStatus: string | null,
+  disconnectionReason: string | null = null,
+  inVoicemail = false
+): VoiceCallStatus | null {
   const event = eventType.toLowerCase();
   const status = (callStatus ?? "").toLowerCase();
+
+  const fromDisconnection = statusFromDisconnection(disconnectionReason, inVoicemail);
+  if (fromDisconnection) return fromDisconnection;
 
   // Disconnection reasons / dispositions surfaced on call_analyzed/call_ended.
   if (status.includes("voicemail") || status.includes("machine")) return "voicemail";
@@ -130,15 +168,22 @@ function safeCompare(valueA: string, valueB: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+const SIGNATURE_TOLERANCE_MS = 5 * 60 * 1000;
+
 /**
  * Verify the Retell webhook signature. FAIL CLOSED: if no signing secret is
- * configured, or no signature header is present, verification fails. This is
- * intentional per the migration safety requirements.
+ * configured, or no signature header is present, verification fails.
  *
- * Retell signs the raw request body with your API key (or a dedicated webhook
- * secret) using HMAC-SHA256 and sends it in the `x-retell-signature` header.
+ * Retell's current format is `x-retell-signature: v={unix_ms},d={hex}` where
+ * hex = HMAC-SHA256(key = webhook API key, message = raw body + timestamp),
+ * and the timestamp must be within 5 minutes. The older body-only digest is
+ * still accepted for headers without a timestamp.
  */
-export function verifyRetellWebhookSignature(rawBody: string, headers: Headers): boolean {
+export function verifyRetellWebhookSignature(
+  rawBody: string,
+  headers: Headers,
+  now: number = Date.now()
+): boolean {
   const secret =
     process.env.RETELL_WEBHOOK_SECRET?.trim() || process.env.RETELL_API_KEY?.trim();
   if (!secret) {
@@ -153,6 +198,14 @@ export function verifyRetellWebhookSignature(rawBody: string, headers: Headers):
     "";
   if (!provided) {
     return false;
+  }
+
+  const timestamped = /^v=(\d+),d=([0-9a-f]+)$/i.exec(provided.trim());
+  if (timestamped) {
+    const [, timestamp, digest] = timestamped;
+    if (Math.abs(now - Number(timestamp)) > SIGNATURE_TOLERANCE_MS) return false;
+    const expected = createHmac("sha256", secret).update(rawBody + timestamp).digest("hex");
+    return safeCompare(digest.toLowerCase(), expected);
   }
 
   const digestHex = createHmac("sha256", secret).update(rawBody).digest("hex");
@@ -280,12 +333,15 @@ export function normalizeRetellWebhookPayload(
     null;
 
   const recordingUrl = readString(call.recording_url);
+  const disconnectionReason = readString(call.disconnection_reason);
+  const inVoicemail = analysis.in_voicemail === true;
+  const customAnalysis = toRecord(analysis.custom_analysis_data);
 
   return {
     providerCallId,
     providerEventId,
     eventType,
-    status: inferStatus(eventType, callStatus),
+    status: inferStatus(eventType, callStatus, disconnectionReason, inVoicemail),
     direction: parseDirection(call),
     fromNumber: readString(call.from_number),
     toNumber: readString(call.to_number),
@@ -293,6 +349,9 @@ export function normalizeRetellWebhookPayload(
     summary,
     disposition,
     recordingUrl,
+    disconnectionReason,
+    customAnalysis,
+    analyzed: Object.keys(analysis).length > 0,
     metadata: toRecord(call.metadata),
     payload,
   };

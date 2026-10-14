@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
-import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { writeOutcomeEvent } from "@/lib/outcomes-server";
 import { resolveLeadOutcomeSourceChannel } from "@/lib/outcomes";
 import { normalizePhone } from "@/lib/voice/service";
+import { startLeadQualificationCall } from "@/lib/voice/lead-call";
+import { isValidTimeZone } from "@/lib/voice/calling-window";
+import { CALL_CONSENT_TEXT, CALL_CONSENT_VERSION } from "@/lib/voice/consent";
 import {
   ALLOWED_RESUME_MIME_TYPES,
   getResumeExtension,
@@ -24,6 +26,7 @@ type MarketingLeadPayload = {
   source?: string;
   offer_code?: string;
   linkedin_url?: string;
+  timezone?: string;
   resume_raw_text?: string;
   resume_parsed?: ParsedResume | string;
 };
@@ -52,6 +55,7 @@ type ParsedSubmission = {
   resumeRawText: string | null;
   resumeParsed: ParsedResume | null;
   resumeFile: File | null;
+  timezone: string | null;
 };
 
 const RESUME_BUCKET = "resumes";
@@ -203,6 +207,7 @@ async function parseRequest(request: Request): Promise<ParsedSubmission> {
       resumeRawText: toText(formData.get("resume_raw_text")),
       resumeParsed: parseResumePayload(formData.get("resume_parsed")),
       resumeFile,
+      timezone: toText(formData.get("timezone")),
     };
   }
 
@@ -222,6 +227,7 @@ async function parseRequest(request: Request): Promise<ParsedSubmission> {
     resumeRawText: toText(payload.resume_raw_text),
     resumeParsed: parseResumePayload(payload.resume_parsed),
     resumeFile: null,
+    timezone: toText(payload.timezone),
   };
 }
 
@@ -249,26 +255,6 @@ async function findExistingLead(email: string | null, phone: string | null) {
   return null;
 }
 
-async function loadLeadQualificationPlaybook() {
-  const { data } = await supabaseServer
-    .from("voice_playbooks")
-    .select("id, assistant_goal, system_prompt, max_retry_attempts")
-    .eq("call_type", "lead_qualification")
-    .eq("is_active", true)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return data as
-    | {
-        id: string;
-        assistant_goal: string | null;
-        system_prompt: string;
-        max_retry_attempts: number | null;
-      }
-    | null;
-}
-
 export async function POST(request: Request) {
   let parsedRequest: ParsedSubmission;
   try {
@@ -292,7 +278,9 @@ export async function POST(request: Request) {
     resumeRawText,
     resumeParsed,
     resumeFile,
+    timezone,
   } = parsedRequest;
+  const leadTimezone = isValidTimeZone(timezone) ? timezone : null;
 
   let uploadedResume: ResumeUploadMetadata | null = null;
 
@@ -352,6 +340,13 @@ export async function POST(request: Request) {
     resume: uploadedResume,
     resume_text: resumeRawText ? resumeRawText.slice(0, 50000) : null,
     parsed_resume: resumeParsed,
+    // Proof of prior express written consent for automated calls.
+    call_consent: {
+      version: CALL_CONSENT_VERSION,
+      text: CALL_CONSENT_TEXT,
+      agreed_at: new Date().toISOString(),
+      source_route: "/api/marketing/lead",
+    },
   });
 
   const nowIso = new Date().toISOString();
@@ -372,6 +367,7 @@ export async function POST(request: Request) {
         consent_marketing: consentMarketing,
         metadata,
         status: "new",
+        timezone: leadTimezone ?? undefined,
         next_call_due_at: nowIso,
         updated_at: nowIso,
       })
@@ -391,6 +387,7 @@ export async function POST(request: Request) {
         consent_voice: true,
         consent_marketing: consentMarketing,
         metadata,
+        timezone: leadTimezone,
         next_call_due_at: nowIso,
       })
       .select("id")
@@ -411,51 +408,15 @@ export async function POST(request: Request) {
     metadata,
   });
 
-  let voiceCallId: string | null = null;
-  const playbook = await loadLeadQualificationPlaybook();
-  if (playbook) {
-    const task =
-      String(playbook.assistant_goal ?? "").trim() ||
-      String(playbook.system_prompt ?? "").trim();
-
-    if (task) {
-      const { data: voiceCall } = await supabaseServer
-        .from("voice_calls")
-        .insert({
-          provider: "retell",
-          direction: "outbound",
-          call_type: "lead_qualification",
-          status: "queued",
-          lead_submission_id: leadId,
-          playbook_id: playbook.id,
-          from_number: process.env.RETELL_DEFAULT_FROM_NUMBER ?? null,
-          to_number: phone,
-          contact_name: fullName,
-          task,
-          max_retries: playbook.max_retry_attempts ?? 3,
-          request_payload: {
-            dispatch_source: metadata.submitted_via ?? "marketing_form",
-          },
-          response_payload: {},
-        })
-        .select("id")
-        .single();
-
-      voiceCallId = (voiceCall?.id as string | undefined) ?? null;
-
-      if (voiceCallId) {
-        await enqueueBackgroundJob(
-          "VOICE_DISPATCH",
-          {
-            voice_call_id: voiceCallId,
-            lead_submission_id: leadId,
-            call_type: "lead_qualification",
-          },
-          { maxAttempts: 1 }
-        );
-      }
-    }
-  }
+  // Emi calls straight away (inside the lead's calling hours, else at the next window).
+  const started = await startLeadQualificationCall({
+    leadId,
+    phone,
+    fullName,
+    dispatchSource: String(metadata.submitted_via ?? "marketing_form"),
+  });
+  const voiceCallId = started.voiceCallId;
+  const playbook = started.playbookId ? { id: started.playbookId } : null;
 
   const shadowWrites = [
     writeOutcomeEvent({

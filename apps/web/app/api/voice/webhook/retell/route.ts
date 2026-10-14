@@ -13,6 +13,7 @@ import {
   resolveAssignedAccountManagerId,
 } from "@/lib/voice/service";
 import { normalizeVoiceCallType, type VoiceCallType } from "@/lib/voice/types";
+import { applyLeadCallOutcome } from "@/lib/voice/lead-outcome";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -33,6 +34,7 @@ type VoiceCallRow = {
   from_number: string | null;
   to_number: string;
   playbook_id: string | null;
+  task?: string | null;
   call_started_at?: string | null;
   voice_playbooks: VoicePlaybookJoin | VoicePlaybookJoin[] | null;
 };
@@ -49,6 +51,7 @@ const VOICE_CALL_SELECT = `
   from_number,
   to_number,
   playbook_id,
+  task,
   call_started_at,
   voice_playbooks (
     id,
@@ -295,16 +298,32 @@ export async function POST(request: Request) {
     });
   }
 
-  // Advance lead lifecycle for terminal lead-qualification calls.
+  // Emi: turn the finished call into a lead decision (answers, temperature,
+  // next action, follow-up call). Idempotent across webhook retries.
+  if (voiceCall.lead_submission_id && normalizedCallType === "lead_qualification") {
+    try {
+      await applyLeadCallOutcome({
+        call: {
+          id: voiceCall.id,
+          lead_submission_id: voiceCall.lead_submission_id,
+          playbook_id: voiceCall.playbook_id,
+          from_number: voiceCall.from_number,
+          to_number: voiceCall.to_number,
+          task: voiceCall.task ?? null,
+          account_manager_id: voiceCall.account_manager_id,
+        },
+        event: normalized,
+      });
+    } catch (error) {
+      console.error("[voice] lead outcome failed:", { voiceCallId: voiceCall.id, error });
+    }
+  }
+
   if (
     voiceCall.lead_submission_id &&
     normalizedCallType === "lead_qualification" &&
     isTerminalStatus(newStatus)
   ) {
-    await supabaseServer
-      .from("lead_intake_submissions")
-      .update({ last_call_at: nowIso, updated_at: nowIso })
-      .eq("id", voiceCall.lead_submission_id);
 
     try {
       await writeOutcomeEvent({

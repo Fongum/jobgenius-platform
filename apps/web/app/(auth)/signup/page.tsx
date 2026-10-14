@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
+import { CALL_CONSENT_TEXT } from "@/lib/voice/consent";
 import MultiCheckbox from "../../portal/components/MultiCheckbox";
 
 type UserType = "am" | "job_seeker";
@@ -301,6 +302,10 @@ function SignUpForm() {
             }
           : undefined,
         profile: buildJobSeekerProfilePrefill(),
+        contactConsent: {
+          voice: consentVoice,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
       }),
     });
 
@@ -1050,7 +1055,7 @@ function SignUpForm() {
                         className="mt-1 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                       />
                       <span>
-                        I agree to let JobGenius contact me by call or text about my job search and onboarding.
+                        {CALL_CONSENT_TEXT}
                       </span>
                     </label>
                   </div>

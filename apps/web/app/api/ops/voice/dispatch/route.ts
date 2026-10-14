@@ -68,12 +68,25 @@ async function autoTargetsForLeadQualification(limit: number): Promise<DispatchT
     .select("id, full_name, phone, owner_account_manager_id")
     .in("status", ["new", "nurture"])
     .eq("consent_voice", true)
+    .eq("handled_by", "emi")
     .not("phone", "is", null)
     .or(`next_call_due_at.is.null,next_call_due_at.lte.${nowIso}`)
     .order("created_at", { ascending: true })
     .limit(limit);
 
+  // Skip leads that already have a call waiting or in flight (Emi schedules her own retries).
+  const ids = (rows ?? []).map((row) => row.id as string);
+  const { data: activeCalls } = ids.length
+    ? await supabaseServer
+        .from("voice_calls")
+        .select("lead_submission_id")
+        .in("lead_submission_id", ids)
+        .in("status", ["queued", "initiated", "ringing", "in_progress"])
+    : { data: [] };
+  const busy = new Set((activeCalls ?? []).map((c) => c.lead_submission_id as string));
+
   return (rows ?? [])
+    .filter((row) => !busy.has(row.id as string))
     .map((row) => ({
       jobSeekerId: null,
       leadSubmissionId: (row.id as string | undefined) ?? null,

@@ -4,6 +4,10 @@ import { supabaseAdmin } from "@/lib/auth";
 import type { UserType } from "@/lib/auth";
 import { normalizeOfferCode } from "@/lib/offers";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { normalizePhone } from "@/lib/voice/service";
+import { isValidTimeZone } from "@/lib/voice/calling-window";
+import { startLeadQualificationCall } from "@/lib/voice/lead-call";
+import { CALL_CONSENT_TEXT, CALL_CONSENT_VERSION } from "@/lib/voice/consent";
 
 const ACCESS_TOKEN_COOKIE = "jg_access_token";
 const REFRESH_TOKEN_COOKIE = "jg_refresh_token";
@@ -14,6 +18,12 @@ const COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
+};
+
+type ContactConsentPayload = {
+  voice?: boolean;
+  text?: string;
+  timezone?: string;
 };
 
 type ResumePrefillPayload = {
@@ -65,6 +75,7 @@ type SignUpPayload = {
   offerCode?: string;
   resume?: ResumePrefillPayload;
   profile?: JobSeekerProfilePrefill;
+  contactConsent?: ContactConsentPayload;
 };
 
 function toText(value: unknown): string | null {
@@ -303,6 +314,11 @@ export async function POST(request: Request) {
 
   if (result.user?.userType === "job_seeker") {
     const nowIso = new Date().toISOString();
+    const contactConsent = payload.contactConsent;
+    const leadPhone = normalizePhone(profile?.phone ?? null);
+    // Only the server's own consent text counts as proof of what was agreed to.
+    const voiceConsent = contactConsent?.voice === true && Boolean(leadPhone);
+    const leadTimezone = isValidTimeZone(contactConsent?.timezone) ? contactConsent?.timezone : null;
     try {
       const { data: existingLead, error: existingLeadError } = await supabaseAdmin
         .from("lead_intake_submissions")
@@ -314,25 +330,51 @@ export async function POST(request: Request) {
       if (existingLeadError && !isLeadIntakeMissingError(existingLeadError)) {
         console.error("Lead intake lookup failed:", existingLeadError);
       } else if (!existingLead?.id) {
-        const { error: insertLeadError } = await supabaseAdmin
+        const { data: insertedLead, error: insertLeadError } = await supabaseAdmin
           .from("lead_intake_submissions")
           .insert({
             source: "signup",
             status: "new",
             full_name: name?.trim() || null,
             email: email.toLowerCase(),
-            phone: null,
-            consent_voice: false,
+            phone: leadPhone || null,
+            consent_voice: voiceConsent,
             consent_marketing: false,
+            timezone: leadTimezone,
+            linked_job_seeker_id: result.user.id,
             metadata: {
               source_route: "/api/auth/signup",
+              ...(voiceConsent
+                ? {
+                    call_consent: {
+                      version: CALL_CONSENT_VERSION,
+                      text: CALL_CONSENT_TEXT,
+                      agreed_at: nowIso,
+                      source_route: "/api/auth/signup",
+                    },
+                  }
+                : {}),
             },
             created_at: nowIso,
             updated_at: nowIso,
-          });
+          })
+          .select("id")
+          .maybeSingle();
 
         if (insertLeadError && !isLeadIntakeMissingError(insertLeadError)) {
           console.error("Lead intake insert failed:", insertLeadError);
+        } else if (insertedLead?.id && voiceConsent) {
+          // Emi calls within minutes. Never block or fail the signup on it.
+          try {
+            await startLeadQualificationCall({
+              leadId: insertedLead.id as string,
+              phone: leadPhone,
+              fullName: name?.trim() || null,
+              dispatchSource: "signup",
+            });
+          } catch (callError) {
+            console.error("Emi first call on signup failed (non-fatal):", callError);
+          }
         }
       }
     } catch (err) {
