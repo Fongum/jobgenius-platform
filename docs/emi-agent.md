@@ -176,6 +176,46 @@ salary (15), timeline (15), setup-fee comfort (15). Unknown answers score mid-ra
 | Nurture | Lower score, or not interested but happy to hear from us | `nurture_email` |
 | Disqualified | Not authorized to work, not interested, wrong person, do-not-call | `closed` (do-not-call also opts the number out) |
 
+## Roadmap
+
+Emi is the single client- and prospect-facing assistant: one name and voice, a
+separate Retell agent (and prompt) per call type via `voice_playbooks.retell_agent_id`.
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1. Qualify leads | Instant first call, caller brief, categorisation, retries/callbacks, opt-out, admin view | Built (PR #13) |
+| 2. Cal.com | Emi books Fidelis's strategy call live (Retell Cal.com tools, `founder_call_booked`); "Intro call with Emi" booking link for LinkedIn leads → Cal.com webhook creates the lead with background and schedules Emi at the booked time; founder-booked calls get an emailed brief | Next |
+| 3. Nurture + alerts | Email sequence for no-phone / unanswered / nurture leads (Resend, booking link); email to Fidelis for hot leads and new bookings | Planned |
+| 4. Client interview calls | See below | Planned |
+
+### Phase 4: Emi for clients' interviews
+
+Builds on what exists: an `interview_warmup` call is already queued 24h before an
+interview once the prep pack is ready (`app/api/background/run/route.ts`), and the
+signup consent covers calls about the job search.
+
+- **Interview brief**: company, role, interview time and format, interviewer if known,
+  prep-pack highlights, and the client's weak spots from earlier practice scores.
+- **Reminder + warm-up call** (5–10 min): confirm time, link and logistics; two or three
+  role-specific practice questions with quick feedback; push to the full portal mock
+  interview for deep prep (OpenAI Realtime, scored). Deep prep stays in the portal.
+- **Outcome capture** (post-call fields): `confirmed_attending`, `logistics_issue`,
+  `readiness_1_10`, `needs_am_help` → AM alert when attendance or readiness is at risk.
+- **Debrief call** a few hours after the interview: how it went, next round expected,
+  thank-you note sent → feeds the client's timeline and the AM.
+- **No-show / reschedule follow-up** when the interview status changes.
+- Same rules as lead calls: calling window, opt-out, never promise outcomes.
+- Before relying on it: run one real portal mock interview end to end (the realtime
+  scoring path has never run against real data).
+
+### Not Emi: account manager performance
+
+Emi does not call AMs. Performance feedback is delivered by a person: AI drafts each
+AM's coaching notes from the productivity data (what improved, what slipped, two or
+three concrete actions) and Fidelis runs the conversation. Routine operational nudges
+("3 seekers had no applications this week", missed clock-in) go by WhatsApp or the
+dashboard, not voice, under a different name if a persona is wanted.
+
 ## Go-live checklist
 
 1. Apply migration `125_emi_lead_qualification.sql` in production **before** deploying
