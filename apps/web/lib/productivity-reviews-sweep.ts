@@ -16,6 +16,7 @@ import {
 } from "@/lib/activity-sheet";
 import { watDate } from "@/lib/attendance";
 import { buildProductivity, type ShiftRow } from "@/lib/am-productivity";
+import { attachActivity } from "@/lib/attendance-activity";
 import {
   LOOKBACK_WEEKS,
   PRODUCTIVITY_REVIEW_CATEGORY,
@@ -68,7 +69,7 @@ export async function sweepProductivityReviews(
         .lte("entry_date", rangeEnd),
       db
         .from("attendance_days")
-        .select("id, account_manager_id, work_date, signed_in_at, signed_out_at")
+        .select("id, account_manager_id, work_date, signed_in_at, signed_out_at, adjusted_at")
         .gte("work_date", firstWeek)
         .lte("work_date", rangeEnd),
     ]);
@@ -141,15 +142,20 @@ export async function sweepProductivityReviews(
     ...coerceCounts(record),
   }));
 
-  const allShifts: ShiftRow[] = shiftRecords.map((day) => ({
-    id: day.id as string,
-    account_manager_id: day.account_manager_id as string,
-    am_name: nameById.get(day.account_manager_id as string) ?? "",
-    work_date: day.work_date as string,
-    signed_in_at: day.signed_in_at as string,
-    signed_out_at: (day.signed_out_at as string | null) ?? null,
-    breaks: breaksByDay.get(day.id as string) ?? [],
-  }));
+  const allShifts: ShiftRow[] = await attachActivity(
+    db,
+    shiftRecords.map((day) => ({
+      id: day.id as string,
+      account_manager_id: day.account_manager_id as string,
+      am_name: nameById.get(day.account_manager_id as string) ?? "",
+      work_date: day.work_date as string,
+      signed_in_at: day.signed_in_at as string,
+      signed_out_at: (day.signed_out_at as string | null) ?? null,
+      adjusted_at: (day.adjusted_at as string | null) ?? null,
+      breaks: breaksByDay.get(day.id as string) ?? [],
+    })),
+    new Date()
+  );
 
   // One pass per week: pace is relative to that week's team median, so
   // the weeks cannot be assessed together.

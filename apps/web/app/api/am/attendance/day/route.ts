@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { isPeopleManagerRole } from "@/lib/auth/roles";
 import { watDate, type AttendanceDay } from "@/lib/attendance";
+import { attachActivity } from "@/lib/attendance-activity";
 
 // GET /api/am/attendance/day?date=YYYY-MM-DD
 // The whole team's attendance for one WAT day. Every AM sees every AM —
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   const { data: days, error: daysError } = await supabaseAdmin
     .from("attendance_days")
     .select(
-      "id, account_manager_id, work_date, signed_in_at, signed_out_at, adjusted_by, adjusted_at, adjustment_note"
+      "id, account_manager_id, work_date, signed_in_at, signed_out_at, adjusted_by, adjusted_at, adjustment_note, close_source, requested_sign_out_at, requested_at, request_note"
     )
     .eq("work_date", workDate)
     .order("signed_in_at", { ascending: true });
@@ -92,14 +93,22 @@ export async function GET(request: Request) {
     adjusted_by_name: day.adjusted_by
       ? nameById.get(day.adjusted_by as string) ?? null
       : null,
+    close_source: (day.close_source as AttendanceDay["close_source"]) ?? null,
+    requested_sign_out_at: (day.requested_sign_out_at as string | null) ?? null,
+    requested_at: (day.requested_at as string | null) ?? null,
+    request_note: (day.request_note as string | null) ?? null,
     breaks: breaksByDay.get(day.id as string) ?? [],
   }));
+
+  // Activity is what the Worked column credits; the board shows both it
+  // and clock time so nobody has to take the number on trust.
+  const withActivity = await attachActivity(supabaseAdmin, rows);
 
   return NextResponse.json({
     work_date: workDate,
     server_time: new Date().toISOString(),
     my_account_manager_id: auth.user.id,
     can_adjust: isPeopleManagerRole(auth.user.role),
-    rows,
+    rows: withActivity,
   });
 }

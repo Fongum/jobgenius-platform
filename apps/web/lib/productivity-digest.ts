@@ -24,6 +24,7 @@ import {
   type SheetRow,
 } from "@/lib/activity-sheet";
 import { watDate } from "@/lib/attendance";
+import { attachActivity } from "@/lib/attendance-activity";
 import {
   MIN_RATED_HOURS,
   buildProductivity,
@@ -209,7 +210,7 @@ export async function sendWeeklyProductivityDigests(
       .lte("entry_date", end),
     supabaseAdmin
       .from("attendance_days")
-      .select("id, account_manager_id, work_date, signed_in_at, signed_out_at")
+      .select("id, account_manager_id, work_date, signed_in_at, signed_out_at, adjusted_at")
       .gte("work_date", start)
       .lte("work_date", end),
   ]);
@@ -269,15 +270,20 @@ export async function sendWeeklyProductivityDigests(
     ...coerceCounts(record),
   }));
 
-  const shifts: ShiftRow[] = shiftRecords.map((day) => ({
-    id: day.id as string,
-    account_manager_id: day.account_manager_id as string,
-    am_name: "",
-    work_date: day.work_date as string,
-    signed_in_at: day.signed_in_at as string,
-    signed_out_at: (day.signed_out_at as string | null) ?? null,
-    breaks: breaksByDay.get(day.id as string) ?? [],
-  }));
+  const shifts: ShiftRow[] = await attachActivity(
+    supabaseAdmin,
+    shiftRecords.map((day) => ({
+      id: day.id as string,
+      account_manager_id: day.account_manager_id as string,
+      am_name: "",
+      work_date: day.work_date as string,
+      signed_in_at: day.signed_in_at as string,
+      signed_out_at: (day.signed_out_at as string | null) ?? null,
+      adjusted_at: (day.adjusted_at as string | null) ?? null,
+      breaks: breaksByDay.get(day.id as string) ?? [],
+    })),
+    new Date()
+  );
 
   const { managers, team } = buildProductivity(rows, shifts, new Date());
 

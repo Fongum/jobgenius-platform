@@ -34,6 +34,25 @@ export type AttendanceDay = {
   long_shift_alerted_at?: string | null;
   /** Migration 117 — when the worker was asked if they forgot to sign out. */
   self_nudge_sent_at?: string | null;
+  /** Migration 127 — how the shift was closed; null on older rows. */
+  close_source?: CloseSource | null;
+  /** Migration 127 — a later sign-out the worker asked a manager to approve. */
+  requested_sign_out_at?: string | null;
+  requested_at?: string | null;
+  request_note?: string | null;
+  /**
+   * Dashboard activity inside this shift's window, when the caller loaded
+   * it (lib/attendance-activity.ts). Absent or empty means "no evidence",
+   * and every calculation falls back to clock time.
+   */
+  activity?: ActivitySession[] | null;
+};
+
+export type CloseSource = "self" | "activity_confirmed" | "self_reported" | "admin";
+
+export type ActivitySession = {
+  started_at: string;
+  last_seen_at: string;
 };
 
 export type AttendanceStatus = "off" | "working" | "on_break" | "done";
@@ -331,6 +350,220 @@ export function validateAdjustedSignOut(
 
   return { ok: true, iso: new Date(time).toISOString() };
 }
+
+// ─── Activity-credited time (migration 127) ──────────────────────────────
+//
+// Clock time is sign-out minus sign-in, so it is only as good as two
+// button presses — and in practice a third of shifts were never signed
+// out, and some were signed in after midnight. The dashboard knows when
+// someone was actually using it, so a shift is credited with the part of
+// it that activity covers:
+//
+//   * sessions closer together than IDLE_GAP_MINUTES are one stretch of
+//     work (a call, WhatsApp, a short break without pressing Break),
+//   * each stretch runs ACTIVITY_GRACE_MINUTES past its last heartbeat,
+//     because the heartbeat is periodic rather than continuous,
+//   * the result is clipped to the shift and recorded breaks are taken off.
+//
+// A forgotten sign-out therefore stops counting at the last activity, and
+// a 00:05 sign-in followed by nothing until 08:00 counts from 08:00.
+// Computed on read, never written, so these numbers can change later
+// without touching anyone's records.
+
+/** Silence after which the heartbeat starts a new session (server write). */
+export const SESSION_SPLIT_MINUTES = 10;
+/** Gaps up to this long between sessions still count as work. */
+export const IDLE_GAP_MINUTES = 60;
+/** Credit after the last heartbeat of a stretch. */
+export const ACTIVITY_GRACE_MINUTES = 15;
+
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 3_600_000;
+
+type Interval = [number, number];
+
+/** True when there is activity evidence to credit the shift from. */
+export function hasActivityRecord(day: AttendanceDay): boolean {
+  return Array.isArray(day.activity) && day.activity.length > 0;
+}
+
+/** Sessions merged into stretches of work, grace included, sorted. */
+export function activityBlocks(sessions: ActivitySession[]): Interval[] {
+  const parsed: Interval[] = [];
+  for (const session of sessions) {
+    const start = ms(session.started_at);
+    const end = ms(session.last_seen_at);
+    if (start === null || end === null || end < start) continue;
+    parsed.push([start, end]);
+  }
+  parsed.sort((a, b) => a[0] - b[0]);
+
+  const merged: Interval[] = [];
+  for (const [start, end] of parsed) {
+    const last = merged[merged.length - 1];
+    // The gap is measured between raw heartbeats, before grace is added.
+    if (last && start - last[1] <= IDLE_GAP_MINUTES * MINUTE_MS) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+  return merged.map(([start, end]) => [start, end + ACTIVITY_GRACE_MINUTES * MINUTE_MS]);
+}
+
+/** Where a shift's window ends: sign-out, or now (capped at a day). */
+function windowEnd(day: AttendanceDay, start: number, now: Date): number {
+  return ms(day.signed_out_at) ?? Math.min(now.getTime(), start + DAY_MS);
+}
+
+function clippedBlocks(day: AttendanceDay, now: Date): Interval[] {
+  const start = ms(day.signed_in_at);
+  if (start === null || !hasActivityRecord(day)) return [];
+  const end = windowEnd(day, start, now);
+  const blocks: Interval[] = [];
+  for (const [a, b] of activityBlocks(day.activity ?? [])) {
+    // A shift nobody signed out of must not absorb the next morning's work:
+    // a stretch that starts on a later WAT day belongs to another shift.
+    // One that started on the day and ran past midnight still counts.
+    if (!day.signed_out_at && watDate(new Date(a)) > day.work_date) continue;
+    const s = Math.max(a, start);
+    const e = Math.min(b, end);
+    if (e > s) blocks.push([s, e]);
+  }
+  return blocks;
+}
+
+/**
+ * Worked time backed by activity, breaks removed, or null when there is
+ * no activity record for the shift (rows from before migration 127).
+ */
+export function creditedMs(day: AttendanceDay, now: Date = new Date()): number | null {
+  if (!hasActivityRecord(day)) return null;
+  const start = ms(day.signed_in_at);
+  if (start === null) return 0;
+  const end = windowEnd(day, start, now);
+  const blocks = clippedBlocks(day, now);
+
+  let covered = 0;
+  for (const [s, e] of blocks) covered += e - s;
+
+  let onBreak = 0;
+  for (const entry of day.breaks) {
+    const bs = ms(entry.started_at);
+    if (bs === null) continue;
+    const be = Math.min(ms(entry.ended_at) ?? end, end);
+    for (const [s, e] of blocks) {
+      const overlap = Math.min(be, e) - Math.max(bs, s);
+      if (overlap > 0) onBreak += overlap;
+    }
+  }
+
+  return Math.max(0, covered - onBreak);
+}
+
+/**
+ * The hours a shift counts for in reports, or null when the record cannot
+ * support a number.
+ *
+ *   * corrected by a people manager — their time stands, clock maths,
+ *   * activity on record — credited time,
+ *   * neither — clock time, except a shift left open past its day, which
+ *     is a forgotten sign-out rather than an eighteen-hour day.
+ */
+export function creditedWorkedMs(
+  day: AttendanceDay,
+  now: Date = new Date()
+): number | null {
+  if (day.adjusted_at && day.signed_out_at) return workedMs(day, now);
+  const credited = creditedMs(day, now);
+  if (credited !== null) return credited;
+  return isStale(day, now) ? null : workedMs(day, now);
+}
+
+/** Last heartbeat the shift is credited with, as ISO, or null. */
+export function lastActivityAt(day: AttendanceDay, now: Date = new Date()): string | null {
+  const blocks = clippedBlocks(day, now);
+  if (blocks.length === 0) return null;
+  const [s, e] = blocks[blocks.length - 1];
+  // The block's end carries the grace period; the heartbeat itself was
+  // that much earlier (unless the shift window clipped it first).
+  return new Date(Math.max(s, e - ACTIVITY_GRACE_MINUTES * MINUTE_MS)).toISOString();
+}
+
+/**
+ * The sign-out time activity supports for a forgotten shift: the end of
+ * the last stretch of work, grace included. Null without activity.
+ */
+export function suggestedSignOutAt(
+  day: AttendanceDay,
+  now: Date = new Date()
+): string | null {
+  const blocks = clippedBlocks(day, now);
+  if (blocks.length === 0) return null;
+  return new Date(blocks[blocks.length - 1][1]).toISOString();
+}
+
+/** Open shifts from earlier days that nobody has asked to fix yet. */
+export function unresolvedShifts<T extends AttendanceDay>(
+  days: T[],
+  now: Date = new Date()
+): T[] {
+  const today = watDate(now);
+  return days
+    .filter(
+      (day) => !day.signed_out_at && day.work_date < today && !day.requested_sign_out_at
+    )
+    .sort((a, b) => (a.work_date < b.work_date ? 1 : -1));
+}
+
+export type ForgottenSignOutDecision =
+  | { ok: true; kind: "close"; iso: string; source: "activity_confirmed" | "self_reported" }
+  | { ok: true; kind: "request"; iso: string }
+  | { ok: false; error: string };
+
+/**
+ * What happens when a worker says when they left a shift they forgot to
+ * sign out of. Up to what their activity shows, it is their call and the
+ * shift closes; anything later is a claim on hours with no evidence, so
+ * it waits for a people manager.
+ */
+export function decideForgottenSignOut(
+  day: AttendanceDay,
+  value: unknown,
+  now: Date = new Date()
+): ForgottenSignOutDecision {
+  if (day.signed_out_at) return { ok: false, error: "That shift is already signed out." };
+  if (day.work_date >= watDate(now)) {
+    return { ok: false, error: "Today's shift is still running — use Sign Out." };
+  }
+  if (day.requested_sign_out_at) {
+    return { ok: false, error: "A manager is already reviewing your time for that day." };
+  }
+
+  const check = validateAdjustedSignOut(day, value, now);
+  if (!check.ok) return check;
+
+  const chosen = new Date(check.iso).getTime();
+  const suggested = suggestedSignOutAt(day, now);
+  const suggestedMs = suggested ? new Date(suggested).getTime() : null;
+
+  if (suggestedMs !== null && chosen <= suggestedMs + MINUTE_MS) {
+    return {
+      ok: true,
+      kind: "close",
+      iso: check.iso,
+      source: Math.abs(chosen - suggestedMs) <= MINUTE_MS ? "activity_confirmed" : "self_reported",
+    };
+  }
+  return { ok: true, kind: "request", iso: check.iso };
+}
+
+export const CLOSE_SOURCE_LABELS: Record<CloseSource, string> = {
+  self: "Signed out",
+  activity_confirmed: "Confirmed from activity",
+  self_reported: "Reported by them",
+  admin: "Set by a manager",
+};
 
 export const STATUS_LABELS: Record<AttendanceStatus, string> = {
   off: "Not signed in",
