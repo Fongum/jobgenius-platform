@@ -62,7 +62,9 @@ export function composeLongShiftMessage(alert: LongShiftAlert): {
       "",
       "Most likely they lost power or closed the laptop without signing out. Nothing has been closed automatically, because guessing an end time would put a wrong number into their hours.",
       "",
-      "Check what time they actually left, then set it on the attendance board. Until you do, the day is left out of the productivity report rather than counted as an overnight shift.",
+      "You probably do not need to do anything. Their hours for the day stop at their last activity on the dashboard, and they will be asked to confirm when they left the next time they open it. Anything later than their activity comes to you for approval.",
+      "",
+      "If you already know what time they left, you can set it on the attendance board.",
     ].join("\n"),
   };
 }
@@ -88,9 +90,11 @@ export function composeSelfNudgeMessage(alert: LongShiftAlert): {
       "",
       "If you are still working, ignore this and sign out when you leave.",
       "",
-      "If you already left — power cut, laptop died, or you simply forgot — tell a people manager what time you actually finished and they will set it. You cannot backdate it yourself, which is deliberate: hours records are only changed by someone other than the person they belong to.",
+      "If you already left — power cut, laptop died, or you simply forgot — open the dashboard. The clock in the header shows your last activity and asks when you left. Confirming that time, or an earlier one, fixes it straight away.",
       "",
-      `Left open, this day is dropped from your productivity numbers rather than counted, so it is worth fixing — and after ${LONG_SHIFT_HOURS} hours your manager is told about it automatically.`,
+      "A later time goes to a people manager to approve, because you cannot backdate past what was recorded yourself: hours records are only extended by someone other than the person they belong to.",
+      "",
+      `Until then your hours stop at your last activity on the dashboard, and after ${LONG_SHIFT_HOURS} hours your manager is told the shift is still open.`,
     ].join("\n"),
   };
 }

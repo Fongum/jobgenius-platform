@@ -126,6 +126,7 @@ export async function PATCH(
       adjusted_by: auth.user.id,
       adjusted_at: now.toISOString(),
       adjustment_note: note,
+      close_source: "admin",
     })
     .eq("id", day.id)
     // Someone else may have corrected it between the load and the write.

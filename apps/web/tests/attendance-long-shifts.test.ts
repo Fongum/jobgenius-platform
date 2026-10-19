@@ -210,8 +210,8 @@ describe("composeSelfNudgeMessage", () => {
     expect(body).toContain("You signed in at 08:00");
     expect(body).toContain("If you are still working");
     expect(body).toContain("If you already left");
-    // It must not imply they can fix a past time themselves — they cannot.
-    expect(body).toContain("cannot backdate it yourself");
+    // It must not imply they can add hours past their activity themselves.
+    expect(body).toContain("cannot backdate past what was recorded yourself");
     expect(body).toContain(`after ${LONG_SHIFT_HOURS} hours`);
   });
 

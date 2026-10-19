@@ -1,0 +1,524 @@
+// ============================================================
+// Activity-credited attendance (migration 127).
+//
+// The cases here are the real failure shapes from production's first two
+// months: shifts never signed out, a sign-in just after midnight counted
+// as a 17-hour day, and the next morning's work leaking into a shift
+// somebody forgot to close.
+// ============================================================
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  ACTIVITY_GRACE_MINUTES,
+  activeSince,
+  activityBlocks,
+  creditedMs,
+  creditedWorkedMs,
+  decideForgottenSignOut,
+  lastActivityAt,
+  suggestedSignOutAt,
+  unresolvedShifts,
+  workedMs,
+  type AttendanceDay,
+} from "@/lib/attendance";
+import { attachActivity, recordActivity } from "@/lib/attendance-activity";
+import {
+  authAs,
+  createSupabaseMock,
+  filteredOn,
+  type ResultMap,
+} from "./helpers/supabase-mock";
+
+const H = 3_600_000;
+const M = 60_000;
+
+/** Signed in 09:00 WAT (08:00 UTC) on Tue 13 Oct, never signed out. */
+function shift(overrides: Partial<AttendanceDay> = {}): AttendanceDay {
+  return {
+    id: "day-1",
+    account_manager_id: "am-1",
+    work_date: "2026-10-13",
+    signed_in_at: "2026-10-13T08:00:00Z",
+    signed_out_at: null,
+    breaks: [],
+    ...overrides,
+  };
+}
+
+const session = (start: string, end: string) => ({ started_at: start, last_seen_at: end });
+
+/** The morning after, 10:00 WAT. */
+const NEXT_MORNING = new Date("2026-10-14T09:00:00Z");
+
+describe("activityBlocks", () => {
+  it("joins sessions up to an hour apart and adds the grace period", () => {
+    const blocks = activityBlocks([
+      session("2026-10-13T08:00:00Z", "2026-10-13T10:00:00Z"),
+      session("2026-10-13T10:50:00Z", "2026-10-13T12:00:00Z"), // 50m gap: joined
+      session("2026-10-13T14:00:00Z", "2026-10-13T15:00:00Z"), // 2h gap: split
+    ]);
+    expect(blocks).toHaveLength(2);
+    expect(new Date(blocks[0][1]).toISOString()).toBe(
+      new Date(Date.parse("2026-10-13T12:00:00Z") + ACTIVITY_GRACE_MINUTES * M).toISOString()
+    );
+  });
+
+  it("ignores malformed sessions", () => {
+    expect(activityBlocks([session("nope", "2026-10-13T10:00:00Z")])).toEqual([]);
+    expect(
+      activityBlocks([session("2026-10-13T10:00:00Z", "2026-10-13T09:00:00Z")])
+    ).toEqual([]);
+  });
+});
+
+describe("credited time", () => {
+  it("stops a forgotten sign-out at the last activity instead of dropping the day", () => {
+    const day = shift({
+      activity: [session("2026-10-13T08:00:00Z", "2026-10-13T16:40:00Z")], // to 17:40 WAT
+    });
+    // Old behaviour: a stale open shift is unmeasurable.
+    expect(creditedWorkedMs({ ...day, activity: [] }, NEXT_MORNING)).toBeNull();
+    // New: 08:00 → 16:40 UTC plus 15 minutes grace.
+    expect(creditedWorkedMs(day, NEXT_MORNING)).toBe(8 * H + 55 * M);
+    expect(lastActivityAt(day, NEXT_MORNING)).toBe("2026-10-13T16:40:00.000Z");
+    expect(suggestedSignOutAt(day, NEXT_MORNING)).toBe("2026-10-13T16:55:00.000Z");
+  });
+
+  it("counts a midnight sign-in only from the start of working hours", () => {
+    // Production's 00:05 → 17:03 "17-hour day".
+    const day = shift({
+      work_date: "2026-09-09",
+      signed_in_at: "2026-09-08T23:05:00Z", // 00:05 WAT
+      signed_out_at: "2026-09-09T16:03:00Z", // 17:03 WAT
+      activity: [
+        session("2026-09-08T23:05:00Z", "2026-09-08T23:06:00Z"),
+        session("2026-09-09T07:00:00Z", "2026-09-09T16:03:00Z"),
+      ],
+    });
+    expect(workedMs(day)).toBe(16 * H + 58 * M);
+    // 09:00–17:03 WAT; the 00:05 blip is outside working hours.
+    expect(creditedWorkedMs(day)).toBe(8 * H + 3 * M);
+    // Even with no activity record, clock time is clipped the same way.
+    expect(creditedWorkedMs({ ...day, activity: [] })).toBe(8 * H + 3 * M);
+  });
+
+  it("takes recorded breaks off only where they overlap counted time", () => {
+    const day = shift({
+      signed_out_at: "2026-10-13T16:00:00Z",
+      activity: [
+        session("2026-10-13T08:00:00Z", "2026-10-13T11:00:00Z"),
+        session("2026-10-13T13:00:00Z", "2026-10-13T16:00:00Z"),
+      ],
+      breaks: [
+        { id: "b1", started_at: "2026-10-13T11:00:00Z", ended_at: "2026-10-13T13:00:00Z" },
+      ],
+    });
+    // Blocks: 08:00–11:15 and 13:00–16:00. Break overlaps 11:00–11:15 only.
+    expect(creditedMs(day)).toBe(3 * H + 15 * M + 3 * H - 15 * M);
+  });
+
+  it("does not let the next morning's work extend a forgotten shift", () => {
+    const day = shift({
+      activity: [
+        session("2026-10-13T08:00:00Z", "2026-10-13T16:00:00Z"),
+        // Next WAT day, before signing in again.
+        session("2026-10-14T07:50:00Z", "2026-10-14T08:00:00Z"),
+      ],
+    });
+    expect(suggestedSignOutAt(day, NEXT_MORNING)).toBe("2026-10-13T16:15:00.000Z");
+    expect(creditedMs(day, NEXT_MORNING)).toBe(8 * H + 15 * M);
+  });
+
+  it("starts an early arrival at 09:00 and stops at 18:00", () => {
+    const day = shift({
+      signed_in_at: "2026-10-13T07:15:00Z", // 08:15 WAT
+      signed_out_at: "2026-10-13T19:30:00Z", // 20:30 WAT
+      activity: [session("2026-10-13T07:15:00Z", "2026-10-13T19:30:00Z")],
+    });
+    expect(creditedWorkedMs(day)).toBe(9 * H);
+  });
+
+  it("caps a forgotten sign-out's suggestion at the end of the working day", () => {
+    const day = shift({
+      activity: [session("2026-10-13T08:00:00Z", "2026-10-13T19:00:00Z")], // to 20:00 WAT
+    });
+    expect(suggestedSignOutAt(day, NEXT_MORNING)).toBe("2026-10-13T17:00:00.000Z"); // 18:00 WAT
+    expect(creditedWorkedMs(day, NEXT_MORNING)).toBe(9 * H);
+  });
+
+  it("falls back to clock time without an activity record", () => {
+    const closed = shift({ signed_out_at: "2026-10-13T16:00:00Z" });
+    expect(creditedMs(closed)).toBeNull();
+    expect(creditedWorkedMs(closed)).toBe(8 * H);
+  });
+
+  it("trusts a manager's correction over activity", () => {
+    const day = shift({
+      signed_out_at: "2026-10-13T17:00:00Z",
+      adjusted_at: "2026-10-14T09:00:00Z",
+      activity: [session("2026-10-13T08:00:00Z", "2026-10-13T09:00:00Z")],
+    });
+    expect(creditedWorkedMs(day)).toBe(9 * H);
+  });
+});
+
+describe("decideForgottenSignOut", () => {
+  const withActivity = shift({
+    activity: [session("2026-10-13T08:00:00Z", "2026-10-13T16:40:00Z")],
+  });
+
+  it("closes at the suggested time as confirmed from activity", () => {
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T16:55:00Z", NEXT_MORNING);
+    expect(result).toMatchObject({ ok: true, kind: "close", source: "activity_confirmed" });
+  });
+
+  it("closes at an earlier time as self-reported", () => {
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T15:00:00Z", NEXT_MORNING);
+    expect(result).toMatchObject({ ok: true, kind: "close", source: "self_reported" });
+  });
+
+  it("turns a later time into a request for a manager", () => {
+    // 17:58 WAT: after the last activity, still inside working hours.
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T16:58:00Z", NEXT_MORNING);
+    expect(result).toMatchObject({ ok: true, kind: "request" });
+  });
+
+  it("refuses a time after working hours instead of asking a manager", () => {
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T17:30:00Z", NEXT_MORNING);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/18:00/);
+  });
+
+  it("sends any time to a manager when there is no activity to check", () => {
+    const result = decideForgottenSignOut(shift(), "2026-10-13T12:00:00Z", NEXT_MORNING);
+    expect(result).toMatchObject({ ok: true, kind: "request" });
+  });
+
+  it("refuses today's running shift, closed shifts and pending requests", () => {
+    const today = new Date("2026-10-13T12:00:00Z");
+    expect(decideForgottenSignOut(shift(), "2026-10-13T11:00:00Z", today).ok).toBe(false);
+    expect(
+      decideForgottenSignOut(
+        shift({ signed_out_at: "2026-10-13T16:00:00Z" }),
+        "2026-10-13T15:00:00Z",
+        NEXT_MORNING
+      ).ok
+    ).toBe(false);
+    expect(
+      decideForgottenSignOut(
+        shift({ requested_sign_out_at: "2026-10-13T18:00:00Z" }),
+        "2026-10-13T15:00:00Z",
+        NEXT_MORNING
+      ).ok
+    ).toBe(false);
+  });
+
+  it("still applies the hand-entered time rules", () => {
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T07:00:00Z", NEXT_MORNING);
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("unresolvedShifts", () => {
+  it("lists earlier open shifts without a pending request, newest first", () => {
+    const list = unresolvedShifts(
+      [
+        shift({ id: "a", work_date: "2026-10-09" }),
+        shift({ id: "b", work_date: "2026-10-12" }),
+        shift({ id: "c", work_date: "2026-10-13", requested_sign_out_at: "x" }),
+        shift({ id: "d", work_date: "2026-10-14" }), // today
+        shift({ id: "e", work_date: "2026-10-08", signed_out_at: "2026-10-08T16:00:00Z" }),
+      ],
+      NEXT_MORNING
+    );
+    expect(list.map((d) => d.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("attachActivity", () => {
+  it("trims sessions to each shift and bounds an open shift by the next sign-in", async () => {
+    const mock = createSupabaseMock({
+      attendance_activity_sessions: {
+        data: [
+          { account_manager_id: "am-1", ...session("2026-10-13T07:30:00Z", "2026-10-13T16:00:00Z") },
+          { account_manager_id: "am-1", ...session("2026-10-14T06:30:00Z", "2026-10-14T07:30:00Z") },
+          { account_manager_id: "am-2", ...session("2026-10-13T08:00:00Z", "2026-10-13T09:00:00Z") },
+        ],
+      },
+    });
+    const [first, second] = await attachActivity(
+      mock.client as never,
+      [
+        shift(),
+        shift({ id: "day-2", work_date: "2026-10-14", signed_in_at: "2026-10-14T07:00:00Z" }),
+      ],
+      new Date("2026-10-14T10:00:00Z")
+    );
+    // Starts at sign-in, not 07:30; tomorrow's session stops at the next sign-in.
+    expect(first.activity).toEqual([
+      session("2026-10-13T08:00:00.000Z", "2026-10-13T16:00:00.000Z"),
+      session("2026-10-14T06:30:00.000Z", "2026-10-14T07:00:00.000Z"),
+    ]);
+    expect(second.activity).toEqual([
+      session("2026-10-14T07:00:00.000Z", "2026-10-14T07:30:00.000Z"),
+    ]);
+    // And the pure layer still keeps tomorrow out of the forgotten shift.
+    expect(suggestedSignOutAt(first, new Date("2026-10-14T10:00:00Z"))).toBe(
+      "2026-10-13T16:15:00.000Z"
+    );
+  });
+
+  it("falls back to no activity when the lookup fails", async () => {
+    const mock = createSupabaseMock({
+      attendance_activity_sessions: { error: { message: "boom" } },
+    });
+    const [day] = await attachActivity(mock.client as never, [shift()], NEXT_MORNING);
+    expect(day.activity).toEqual([]);
+  });
+});
+
+describe("recordActivity", () => {
+  const NOW = new Date("2026-10-13T10:00:00Z");
+
+  it("stretches the latest session after a short silence", async () => {
+    const mock = createSupabaseMock({
+      attendance_activity_sessions: {
+        data: { id: "s1", last_seen_at: "2026-10-13T09:55:00Z" },
+      },
+    });
+    await recordActivity(mock.client as never, "am-1", NOW);
+    const update = mock.callsFor("attendance_activity_sessions", "update")[0];
+    expect(update.payload).toEqual({ last_seen_at: NOW.toISOString() });
+    expect(filteredOn(update, "eq", "id", "s1")).toBe(true);
+  });
+
+  it("starts a new session after more than ten minutes", async () => {
+    const mock = createSupabaseMock({
+      attendance_activity_sessions: {
+        data: { id: "s1", last_seen_at: "2026-10-13T09:30:00Z" },
+      },
+    });
+    await recordActivity(mock.client as never, "am-1", NOW);
+    expect(mock.payloadFor("attendance_activity_sessions", "insert")).toEqual({
+      account_manager_id: "am-1",
+      started_at: NOW.toISOString(),
+      last_seen_at: NOW.toISOString(),
+    });
+  });
+
+  it("skips the write when the last heartbeat was under a minute ago", async () => {
+    const mock = createSupabaseMock({
+      attendance_activity_sessions: {
+        data: { id: "s1", last_seen_at: "2026-10-13T09:59:30Z" },
+      },
+    });
+    await recordActivity(mock.client as never, "am-1", NOW);
+    expect(mock.callsFor("attendance_activity_sessions", "update")).toHaveLength(0);
+    expect(mock.callsFor("attendance_activity_sessions", "insert")).toHaveLength(0);
+  });
+});
+
+// ─── POST /api/am/attendance/resolve ─────────────────────────────────────
+
+const auth = vi.hoisted(() => ({ current: null as unknown }));
+const db = vi.hoisted(() => ({ current: null as unknown }));
+const sent = vi.hoisted(() => ({ list: [] as unknown[] }));
+
+vi.mock("@/lib/auth", () => ({
+  requireAM: async () => auth.current,
+  get supabaseAdmin() {
+    return (db.current as { client: unknown }).client;
+  },
+}));
+
+vi.mock("@/lib/notify", () => ({
+  NOTIFICATION_CATEGORIES: { attendance_sign_out_request: "attendance_sign_out_request" },
+  sendNotification: async (input: unknown) => {
+    sent.list.push(input);
+    return { id: "n1", channel: "both" };
+  },
+}));
+
+import { POST as resolve } from "@/app/api/am/attendance/resolve/route";
+
+function setupResolve(results: ResultMap = {}) {
+  const mock = createSupabaseMock({
+    attendance_days: {
+      data: {
+        id: "day-1",
+        account_manager_id: "am-1",
+        work_date: "2026-10-13",
+        signed_in_at: "2026-10-13T08:00:00Z",
+        signed_out_at: null,
+        requested_sign_out_at: null,
+      },
+    },
+    attendance_breaks: { data: [] },
+    attendance_activity_sessions: {
+      data: [{ account_manager_id: "am-1", ...session("2026-10-13T08:00:00Z", "2026-10-13T16:40:00Z") }],
+    },
+    account_managers: {
+      data: [
+        { id: "am-1", role: "am" },
+        { id: "boss", role: "ops_manager" },
+      ],
+    },
+    ...results,
+  });
+  db.current = mock;
+  return mock;
+}
+
+function post(body: unknown) {
+  return resolve(
+    new Request("http://localhost/api/am/attendance/resolve", {
+      method: "POST",
+      body: JSON.stringify(body),
+    })
+  );
+}
+
+describe("resolve route", () => {
+  beforeEach(() => {
+    auth.current = authAs("am-1", "am");
+    sent.list = [];
+    vi.useFakeTimers();
+    vi.setSystemTime(NEXT_MORNING);
+  });
+
+  it("closes the shift when the worker confirms their last activity", async () => {
+    const mock = setupResolve();
+    const res = await post({ day_id: "day-1", signed_out_at: "2026-10-13T16:55:00Z" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).outcome).toBe("closed");
+    const update = mock.callsFor("attendance_days", "update")[0];
+    expect(update.payload).toMatchObject({
+      signed_out_at: "2026-10-13T16:55:00.000Z",
+      close_source: "activity_confirmed",
+    });
+    expect(filteredOn(update, "is", "signed_out_at", null)).toBe(true);
+    expect(sent.list).toHaveLength(0);
+  });
+
+  it("stores a later time as a request and tells the people managers", async () => {
+    const mock = setupResolve();
+    const res = await post({
+      day_id: "day-1",
+      signed_out_at: "2026-10-13T16:58:00Z",
+      note: "client calls",
+    });
+    expect((await res.json()).outcome).toBe("requested");
+    const update = mock.callsFor("attendance_days", "update")[0];
+    expect(update.payload).toMatchObject({
+      requested_sign_out_at: "2026-10-13T16:58:00.000Z",
+      request_note: "client calls",
+    });
+    expect((update.payload as Record<string, unknown>).signed_out_at).toBeUndefined();
+    expect(sent.list).toHaveLength(1);
+    expect(sent.list[0]).toMatchObject({ userId: "boss" });
+  });
+
+  it("will not touch someone else's shift", async () => {
+    auth.current = authAs("am-2", "am");
+    const mock = setupResolve();
+    const res = await post({ day_id: "day-1", signed_out_at: "2026-10-13T16:55:00Z" });
+    expect(res.status).toBe(404);
+    expect(mock.callsFor("attendance_days", "update")).toHaveLength(0);
+  });
+});
+
+// ─── Forgotten sign-in ───────────────────────────────────────────────────
+
+describe("activeSince", () => {
+  const NOW = new Date("2026-10-13T08:30:00Z"); // 09:30 WAT
+
+  it("is when the current stretch of work began", () => {
+    expect(
+      activeSince(
+        [
+          session("2026-10-13T06:00:00Z", "2026-10-13T06:30:00Z"), // then a 1h40 gap
+          session("2026-10-13T08:10:00Z", "2026-10-13T08:29:00Z"), // 09:10 WAT
+        ],
+        NOW
+      )
+    ).toBe("2026-10-13T08:10:00.000Z");
+  });
+
+  it("is null once they have gone quiet, or have only just started", () => {
+    expect(activeSince([session("2026-10-13T07:00:00Z", "2026-10-13T08:00:00Z")], NOW)).toBeNull();
+    expect(activeSince([session("2026-10-13T08:25:00Z", "2026-10-13T08:29:00Z")], NOW)).toBeNull();
+    expect(activeSince([session("2026-10-13T08:00:00Z", "2026-10-13T08:00:00Z")], NOW)).toBeNull();
+    expect(activeSince([], NOW)).toBeNull();
+  });
+
+  it("never reaches back before working hours start", () => {
+    const early = [session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]; // from 08:40 WAT
+    expect(activeSince(early, NOW)).toBe("2026-10-13T08:00:00.000Z"); // 09:00 WAT
+    // Before 09:10 WAT there is nothing to backdate yet.
+    expect(activeSince(early, new Date("2026-10-13T08:05:00Z"))).toBeNull();
+    // A late night on the dashboard never starts the next day's shift.
+    expect(
+      activeSince(
+        [session("2026-10-12T22:00:00Z", "2026-10-12T23:29:00Z")],
+        new Date("2026-10-12T23:30:00Z")
+      )
+    ).toBeNull();
+  });
+});
+
+import { POST as clockPost } from "@/app/api/am/attendance/route";
+
+describe("sign in from activity", () => {
+  const NOW = new Date("2026-10-13T08:30:00Z");
+
+  function setupClock(sessions: unknown[]) {
+    const mock = createSupabaseMock({
+      attendance_days: { data: null },
+      attendance_breaks: { data: [] },
+      attendance_activity_sessions: { data: sessions },
+    });
+    db.current = mock;
+    return mock;
+  }
+
+  function signIn(body: Record<string, unknown>) {
+    return clockPost(
+      new Request("http://localhost/api/am/attendance", {
+        method: "POST",
+        body: JSON.stringify({ action: "sign_in", ...body }),
+      })
+    );
+  }
+
+  beforeEach(() => {
+    auth.current = authAs("am-1", "am");
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  it("starts the shift when activity began, recomputed on the server", async () => {
+    const mock = setupClock([session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]);
+    await signIn({ from_activity: true, signed_in_at: "2026-10-13T05:00:00Z" });
+    // Activity from 08:40 WAT; the shift starts when working hours do.
+    expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
+      signed_in_at: "2026-10-13T08:00:00.000Z",
+      sign_in_source: "activity",
+    });
+  });
+
+  it("signs in now when asked to, or when there is no activity to go on", async () => {
+    let mock = setupClock([session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]);
+    await signIn({});
+    expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
+      signed_in_at: NOW.toISOString(),
+      sign_in_source: null,
+    });
+
+    mock = setupClock([]);
+    await signIn({ from_activity: true });
+    expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
+      signed_in_at: NOW.toISOString(),
+      sign_in_source: null,
+    });
+  });
+});

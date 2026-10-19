@@ -47,7 +47,7 @@ import {
   type ActivityCounts,
   type SheetRow,
 } from "./activity-sheet";
-import { isStale, workedMs, type AttendanceDay } from "./attendance";
+import { creditedWorkedMs, type AttendanceDay } from "./attendance";
 import {
   rosterForRange,
   summariseAttendance,
@@ -219,13 +219,14 @@ const MS_PER_HOUR = 3_600_000;
 
 /**
  * Measured worked time for a shift, or null when the record cannot support
- * a number: a shift left open past its own day is a forgotten sign-out, not
- * an eighteen-hour shift, and reporting it as one would be a lie in the
+ * a number. Credited from dashboard activity where there is any, so a
+ * forgotten sign-out stops at the last sign of work; without activity, a
+ * shift left open past its own day is a forgotten sign-out, not an
+ * eighteen-hour shift, and reporting it as one would be a lie in the
  * direction that flatters the person who forgot.
  */
 function measuredMs(shift: ShiftRow, now: Date): number | null {
-  if (isStale(shift, now)) return null;
-  return workedMs(shift, now);
+  return creditedWorkedMs(shift, now);
 }
 
 type Bucket = {

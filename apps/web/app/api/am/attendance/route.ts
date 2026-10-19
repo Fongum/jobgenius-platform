@@ -2,17 +2,82 @@ import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import {
   actionRejectionReason,
+  activeSince,
   canPerform,
   deriveStatus,
   isAttendanceAction,
+  lastActivityAt,
   openBreak,
+  suggestedSignOutAt,
+  unresolvedShifts,
   watDate,
+  watDayStart,
   type AttendanceDay,
 } from "@/lib/attendance";
+import { attachActivity, loadSessionsSince, recordActivity } from "@/lib/attendance-activity";
 
 const DAY_COLUMNS =
-  "id, account_manager_id, work_date, signed_in_at, signed_out_at";
+  "id, account_manager_id, work_date, signed_in_at, signed_out_at, sign_in_source";
 const BREAK_COLUMNS = "id, attendance_day_id, started_at, ended_at";
+
+/** When the caller's current stretch of activity began today, or null. */
+async function currentActiveSince(accountManagerId: string, now: Date) {
+  const sessions = await loadSessionsSince(supabaseAdmin, accountManagerId, watDayStart(now));
+  return activeSince(sessions, now);
+}
+
+/** How far back a forgotten sign-out is still offered for fixing. */
+const UNRESOLVED_LOOKBACK_DAYS = 30;
+
+/**
+ * The caller's most recent earlier shift left open, with what their
+ * activity says about when they left — shown by the header clock so the
+ * worker fixes it while they still remember. Null when there is none.
+ */
+async function loadUnresolved(accountManagerId: string, now: Date) {
+  const since = new Date(now.getTime() - UNRESOLVED_LOOKBACK_DAYS * 86_400_000);
+  const { data: rows, error } = await supabaseAdmin
+    .from("attendance_days")
+    .select(`${DAY_COLUMNS}, requested_sign_out_at`)
+    .eq("account_manager_id", accountManagerId)
+    .is("signed_out_at", null)
+    .lt("work_date", watDate(now))
+    .gte("work_date", watDate(since))
+    .order("work_date", { ascending: false });
+
+  if (error) {
+    console.error("[attendance:unresolved]", error);
+    return { unresolved: null, pending_requests: 0 };
+  }
+
+  const days = (rows ?? []).map((row) => ({
+    id: row.id as string,
+    account_manager_id: row.account_manager_id as string,
+    work_date: row.work_date as string,
+    signed_in_at: row.signed_in_at as string,
+    signed_out_at: null,
+    requested_sign_out_at: (row.requested_sign_out_at as string | null) ?? null,
+    breaks: [] as AttendanceDay["breaks"],
+  }));
+  const pending = days.filter((d) => d.requested_sign_out_at).length;
+  const open = unresolvedShifts(days, now);
+  if (open.length === 0) return { unresolved: null, pending_requests: pending };
+
+  const target = open[0];
+  const full = await loadDay(accountManagerId, target.work_date);
+  if (!full) return { unresolved: null, pending_requests: pending };
+  const [withActivity] = await attachActivity(supabaseAdmin, [full], now);
+
+  return {
+    unresolved: {
+      day: { ...withActivity, activity: undefined },
+      last_active_at: lastActivityAt(withActivity, now),
+      suggested_sign_out_at: suggestedSignOutAt(withActivity, now),
+      others: open.length - 1,
+    },
+    pending_requests: pending,
+  };
+}
 
 /** The caller's shift for a WAT date, breaks included. */
 async function loadDay(
@@ -40,6 +105,7 @@ async function loadDay(
     work_date: day.work_date as string,
     signed_in_at: day.signed_in_at as string,
     signed_out_at: (day.signed_out_at as string | null) ?? null,
+    sign_in_source: day.sign_in_source === "activity" ? "activity" : null,
     breaks: (breaks ?? []).map((entry) => ({
       id: entry.id as string,
       started_at: entry.started_at as string,
@@ -55,14 +121,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const workDate = watDate();
-  const day = await loadDay(auth.user.id, workDate);
+  const now = new Date();
+  const workDate = watDate(now);
+  const [day, unresolved] = await Promise.all([
+    loadDay(auth.user.id, workDate),
+    loadUnresolved(auth.user.id, now),
+  ]);
+  const status = deriveStatus(day);
 
   return NextResponse.json({
     work_date: workDate,
-    server_time: new Date().toISOString(),
-    status: deriveStatus(day),
+    server_time: now.toISOString(),
+    status,
     day,
+    ...unresolved,
+    // Working without having signed in: when the current stretch began.
+    active_since: status === "off" ? await currentActiveSince(auth.user.id, now) : null,
   });
 }
 
@@ -97,6 +171,9 @@ export async function POST(request: Request) {
   const nowIso = now.toISOString();
   const workDate = watDate(now);
 
+  // Pressing a clock button is activity like any other.
+  await recordActivity(supabaseAdmin, auth.user.id, now);
+
   const existing = await loadDay(auth.user.id, workDate);
   const status = deriveStatus(existing);
 
@@ -108,10 +185,16 @@ export async function POST(request: Request) {
   }
 
   if (action === "sign_in") {
+    // A forgotten sign-in may start from when today's activity began —
+    // recomputed here, never taken from the browser, and only as far back
+    // as the recorded activity goes.
+    const since =
+      body.from_activity === true ? await currentActiveSince(auth.user.id, now) : null;
     const { error } = await supabaseAdmin.from("attendance_days").insert({
       account_manager_id: auth.user.id,
       work_date: workDate,
-      signed_in_at: nowIso,
+      signed_in_at: since ?? nowIso,
+      sign_in_source: since ? "activity" : null,
     });
     if (error) {
       // 23505 = the unique (account_manager_id, work_date) index; a double
@@ -167,7 +250,7 @@ export async function POST(request: Request) {
     }
     const { error } = await supabaseAdmin
       .from("attendance_days")
-      .update({ signed_out_at: nowIso })
+      .update({ signed_out_at: nowIso, close_source: "self" })
       .eq("id", existing.id);
     if (error) {
       console.error("[attendance:sign_out]", error);

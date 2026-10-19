@@ -5,11 +5,17 @@ import {
   WAT_LABEL,
   STATUS_LABELS,
   LONG_SHIFT_HOURS,
+  CLOSE_SOURCE_LABELS,
+  WORK_DAY_END,
+  WORK_DAY_START,
   breakMs,
+  creditedWorkedMs,
   deriveStatus,
   formatDuration,
+  hasActivityRecord,
   isLongOpenShift,
   isStale,
+  lastActivityAt,
   watDate,
   watDateLabel,
   watTime,
@@ -113,10 +119,12 @@ export default function AttendanceBoardClient({
     setAdjusting(row.id);
     setAdjustError(null);
     setAdjustNote("");
-    // Seeded with the sign-in time rather than "now": the whole point is
-    // that nobody knows when they left, so an obviously-wrong default is
-    // safer than a plausible one somebody accepts without thinking.
-    setAdjustTime(watTime(row.signed_in_at));
+    // Seeded with the time the worker asked for when there is one — that is
+    // what is being approved. Otherwise the sign-in time rather than "now":
+    // nobody knows when they left, so an obviously-wrong default is safer
+    // than a plausible one somebody accepts without thinking.
+    setAdjustTime(watTime(row.requested_sign_out_at ?? row.signed_in_at));
+    if (row.request_note) setAdjustNote(`Approved their request: ${row.request_note}`);
   }
 
   async function submitAdjustment(row: BoardRow) {
@@ -153,9 +161,12 @@ export default function AttendanceBoardClient({
 
   const rows = data?.rows ?? [];
   const canAdjust = data?.can_adjust ?? false;
-  const totalWorked = rows.reduce((sum, row) => sum + workedMs(row, now), 0);
+  const totalWorked = rows.reduce((sum, row) => sum + (creditedWorkedMs(row, now) ?? 0), 0);
   const present = rows.filter((row) => deriveStatus(row) !== "done").length;
   const openTooLong = rows.filter((row) => isLongOpenShift(row, now)).length;
+  const pendingRequests = rows.filter(
+    (row) => !row.signed_out_at && row.requested_sign_out_at
+  ).length;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -164,7 +175,9 @@ export default function AttendanceBoardClient({
           <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
           <p className="text-sm text-gray-500 mt-1">
             Sign in and out from the clock in the header. All times are{" "}
-            {WAT_LABEL} and recorded by the server.
+            {WAT_LABEL} and recorded by the server. Working hours are{" "}
+            {WORK_DAY_START}–{WORK_DAY_END}: only time inside them counts, and only
+            the part with dashboard activity (gaps up to an hour still count).
           </p>
         </div>
 
@@ -211,11 +224,20 @@ export default function AttendanceBoardClient({
       {openTooLong > 0 && (
         <div className="p-3 rounded-lg text-sm bg-amber-50 text-amber-900 border border-amber-200">
           <strong>{openTooLong}</strong> shift{openTooLong === 1 ? " has" : "s have"}{" "}
-          been open more than {LONG_SHIFT_HOURS} hours. Nothing is closed
-          automatically — a power cut is not a sign-out.{" "}
+          been open more than {LONG_SHIFT_HOURS} hours. Their worked time stops
+          at their last activity, and they are asked to confirm when they left
+          the next time they open the dashboard.
+        </div>
+      )}
+
+      {pendingRequests > 0 && (
+        <div className="p-3 rounded-lg text-sm bg-violet-50 text-violet-900 border border-violet-200">
+          <strong>{pendingRequests}</strong> sign-out time
+          {pendingRequests === 1 ? " is" : "s are"} waiting for approval — later
+          than the activity on record.{" "}
           {canAdjust
-            ? "Set the time they actually left using Adjust."
-            : "A people manager needs to set the real sign-out time."}
+            ? "Use Approve to accept or change it."
+            : "A people manager needs to approve it."}
         </div>
       )}
 
@@ -285,12 +307,20 @@ export default function AttendanceBoardClient({
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-700">
                         {watTime(row.signed_in_at)}
+                        {row.sign_in_source === "activity" && (
+                          <span
+                            className="ml-1 text-amber-600 cursor-help"
+                            title="Forgot to sign in — started from when their dashboard activity began"
+                          >
+                            †
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-700">
                         {row.signed_out_at ? (
                           <>
                             {watTime(row.signed_out_at)}
-                            {row.adjusted_at && (
+                            {row.adjusted_at ? (
                               <span
                                 className="ml-1 text-violet-600 cursor-help"
                                 title={`Set by ${row.adjusted_by_name ?? "a people manager"}${
@@ -299,8 +329,26 @@ export default function AttendanceBoardClient({
                               >
                                 *
                               </span>
-                            )}
+                            ) : row.close_source && row.close_source !== "self" ? (
+                              <span
+                                className="ml-1 text-amber-600 cursor-help"
+                                title={`${CLOSE_SOURCE_LABELS[row.close_source]} the next day${
+                                  row.request_note ? ` — ${row.request_note}` : ""
+                                }`}
+                              >
+                                †
+                              </span>
+                            ) : null}
                           </>
+                        ) : row.requested_sign_out_at ? (
+                          <span
+                            className="text-violet-700"
+                            title={`They asked for ${watTime(row.requested_sign_out_at)}${
+                              row.request_note ? ` — ${row.request_note}` : ""
+                            }`}
+                          >
+                            asked {watTime(row.requested_sign_out_at)}
+                          </span>
                         ) : longOpen || stale ? (
                           <span
                             className="text-amber-600"
@@ -320,7 +368,33 @@ export default function AttendanceBoardClient({
                           : `${row.breaks.length} · ${formatDuration(breakMs(row, now))}`}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums font-semibold text-gray-900">
-                        {stale ? "—" : formatDuration(workedMs(row, now))}
+                        {(() => {
+                          const credited = creditedWorkedMs(row, now);
+                          if (credited === null) return "—";
+                          const clock = stale ? null : workedMs(row, now);
+                          const last = lastActivityAt(row, now);
+                          const fromActivity = hasActivityRecord(row) && !row.adjusted_at;
+                          const title = fromActivity
+                            ? [
+                                clock !== null ? `On the clock ${formatDuration(clock)}` : "Never signed out",
+                                `credited ${formatDuration(credited)} from dashboard activity`,
+                                last ? `last active ${watTime(last)}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
+                            : "Clock time — no activity record for this shift";
+                          const trimmed = clock !== null && clock - credited >= 15 * 60_000;
+                          return (
+                            <span className="cursor-help" title={title}>
+                              {formatDuration(credited)}
+                              {(trimmed || clock === null) && fromActivity && (
+                                <span className="block text-[11px] font-normal text-gray-500">
+                                  {clock === null ? "to last activity" : `clock ${formatDuration(clock)}`}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
                       {canAdjust && (
                         <td className="px-4 py-2 text-right">
@@ -331,7 +405,7 @@ export default function AttendanceBoardClient({
                               }
                               className="px-2 py-1 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-50"
                             >
-                              {editing ? "Cancel" : "Adjust"}
+                              {editing ? "Cancel" : row.requested_sign_out_at ? "Approve" : "Adjust"}
                             </button>
                           )}
                         </td>
