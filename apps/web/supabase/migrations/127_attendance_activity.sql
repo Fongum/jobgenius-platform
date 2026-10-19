@@ -23,6 +23,10 @@
 --     left. Confirming that time, or an earlier one, closes the shift; a
 --     later time is stored as a request for a people manager to approve.
 --
+--   * The mirror image for a forgotten sign-in: someone working without
+--     having signed in is offered "sign in from <when activity began>".
+--     Only as far back as recorded activity, so no approval is needed.
+--
 -- Additive only; safe to run twice.
 -- ============================================================
 
@@ -62,7 +66,17 @@ alter table public.attendance_days
   -- as the record of what was asked for.
   add column if not exists requested_sign_out_at timestamptz,
   add column if not exists requested_at timestamptz,
-  add column if not exists request_note text;
+  add column if not exists request_note text,
+  -- 'activity' when the worker forgot to sign in and, when they did, chose
+  -- to start the shift from when their dashboard activity began. Null
+  -- means signed_in_at is the moment they pressed Sign In.
+  add column if not exists sign_in_source text;
+
+alter table public.attendance_days
+  drop constraint if exists chk_attendance_days_sign_in_source;
+alter table public.attendance_days
+  add constraint chk_attendance_days_sign_in_source
+  check (sign_in_source is null or sign_in_source in ('activity'));
 
 alter table public.attendance_days
   drop constraint if exists chk_attendance_days_close_source;

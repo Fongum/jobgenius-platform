@@ -54,6 +54,9 @@ export default function AttendanceClock() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
+  // Working without having signed in today: when that stretch began.
+  const [activeSince, setActiveSince] = useState<string | null>(null);
+
   // A previous shift left open, and the worker's own fix for it.
   const [unresolved, setUnresolved] = useState<Unresolved | null>(null);
   const [fixOpen, setFixOpen] = useState(false);
@@ -70,6 +73,7 @@ export default function AttendanceClock() {
       setDay(data.day ?? null);
       setStatus(data.status ?? "off");
       setUnresolved(data.unresolved ?? null);
+      setActiveSince(data.active_since ?? null);
     } catch {
       // Transient — the widget simply keeps its last known state.
     } finally {
@@ -172,14 +176,15 @@ export default function AttendanceClock() {
     }
   }
 
-  async function perform(action: AttendanceAction) {
+  async function perform(action: AttendanceAction, fromActivity = false) {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/am/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        // The server recomputes the backdated start; this only asks for it.
+        body: JSON.stringify({ action, from_activity: fromActivity }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -302,6 +307,30 @@ export default function AttendanceClock() {
 
       {loading ? (
         <span className="text-xs text-gray-400 px-2">…</span>
+      ) : status === "off" && activeSince ? (
+        // Forgot to sign in. Starting from when activity began is the
+        // obvious choice, so it is the big button; "now" stays available
+        // for anyone who was on the dashboard before their shift started.
+        <div className="flex items-center gap-2">
+          <span className="hidden lg:inline text-xs text-amber-800">
+            Working since {watTime(activeSince)}, not signed in
+          </span>
+          <button
+            onClick={() => perform("sign_in", true)}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 ring-2 ring-amber-300 animate-pulse"
+            title={`You have been active on the dashboard since ${watTime(activeSince)} without signing in`}
+          >
+            {busy ? "…" : `Sign in from ${watTime(activeSince)}`}
+          </button>
+          <button
+            onClick={() => perform("sign_in")}
+            disabled={busy}
+            className="text-xs text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
+          >
+            from now
+          </button>
+        </div>
       ) : status === "off" ? (
         <button
           onClick={() => perform("sign_in")}

@@ -304,6 +304,14 @@ export default function AttendanceBoardClient({
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-700">
                         {watTime(row.signed_in_at)}
+                        {row.sign_in_source === "activity" && (
+                          <span
+                            className="ml-1 text-amber-600 cursor-help"
+                            title="Forgot to sign in — started from when their dashboard activity began"
+                          >
+                            †
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-700">
                         {row.signed_out_at ? (

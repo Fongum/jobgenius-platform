@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   ACTIVITY_GRACE_MINUTES,
+  activeSince,
   activityBlocks,
   creditedMs,
   creditedWorkedMs,
@@ -405,5 +406,92 @@ describe("resolve route", () => {
     const res = await post({ day_id: "day-1", signed_out_at: "2026-10-13T16:55:00Z" });
     expect(res.status).toBe(404);
     expect(mock.callsFor("attendance_days", "update")).toHaveLength(0);
+  });
+});
+
+// ─── Forgotten sign-in ───────────────────────────────────────────────────
+
+describe("activeSince", () => {
+  const NOW = new Date("2026-10-13T08:30:00Z"); // 09:30 WAT
+
+  it("is when the current stretch of work began", () => {
+    expect(
+      activeSince(
+        [
+          session("2026-10-13T05:00:00Z", "2026-10-13T05:30:00Z"), // 06:00 WAT, then 2h gap
+          session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z"),
+        ],
+        NOW
+      )
+    ).toBe("2026-10-13T07:40:00.000Z");
+  });
+
+  it("is null once they have gone quiet, or have only just started", () => {
+    expect(activeSince([session("2026-10-13T07:00:00Z", "2026-10-13T08:00:00Z")], NOW)).toBeNull();
+    expect(activeSince([session("2026-10-13T08:25:00Z", "2026-10-13T08:29:00Z")], NOW)).toBeNull();
+    expect(activeSince([], NOW)).toBeNull();
+  });
+
+  it("never reaches back before WAT midnight", () => {
+    const late = new Date("2026-10-12T23:30:00Z"); // 00:30 WAT on the 13th
+    expect(
+      activeSince([session("2026-10-12T22:00:00Z", "2026-10-12T23:29:00Z")], late)
+    ).toBe("2026-10-12T23:00:00.000Z"); // 00:00 WAT
+  });
+});
+
+import { POST as clockPost } from "@/app/api/am/attendance/route";
+
+describe("sign in from activity", () => {
+  const NOW = new Date("2026-10-13T08:30:00Z");
+
+  function setupClock(sessions: unknown[]) {
+    const mock = createSupabaseMock({
+      attendance_days: { data: null },
+      attendance_breaks: { data: [] },
+      attendance_activity_sessions: { data: sessions },
+    });
+    db.current = mock;
+    return mock;
+  }
+
+  function signIn(body: Record<string, unknown>) {
+    return clockPost(
+      new Request("http://localhost/api/am/attendance", {
+        method: "POST",
+        body: JSON.stringify({ action: "sign_in", ...body }),
+      })
+    );
+  }
+
+  beforeEach(() => {
+    auth.current = authAs("am-1", "am");
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  it("starts the shift when activity began, recomputed on the server", async () => {
+    const mock = setupClock([session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]);
+    await signIn({ from_activity: true, signed_in_at: "2026-10-13T05:00:00Z" });
+    expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
+      signed_in_at: "2026-10-13T07:40:00.000Z",
+      sign_in_source: "activity",
+    });
+  });
+
+  it("signs in now when asked to, or when there is no activity to go on", async () => {
+    let mock = setupClock([session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]);
+    await signIn({});
+    expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
+      signed_in_at: NOW.toISOString(),
+      sign_in_source: null,
+    });
+
+    mock = setupClock([]);
+    await signIn({ from_activity: true });
+    expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
+      signed_in_at: NOW.toISOString(),
+      sign_in_source: null,
+    });
   });
 });

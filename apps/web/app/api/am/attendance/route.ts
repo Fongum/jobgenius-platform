@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import {
   actionRejectionReason,
+  activeSince,
   canPerform,
   deriveStatus,
   isAttendanceAction,
@@ -10,13 +11,20 @@ import {
   suggestedSignOutAt,
   unresolvedShifts,
   watDate,
+  watDayStart,
   type AttendanceDay,
 } from "@/lib/attendance";
-import { attachActivity, recordActivity } from "@/lib/attendance-activity";
+import { attachActivity, loadSessionsSince, recordActivity } from "@/lib/attendance-activity";
 
 const DAY_COLUMNS =
-  "id, account_manager_id, work_date, signed_in_at, signed_out_at";
+  "id, account_manager_id, work_date, signed_in_at, signed_out_at, sign_in_source";
 const BREAK_COLUMNS = "id, attendance_day_id, started_at, ended_at";
+
+/** When the caller's current stretch of activity began today, or null. */
+async function currentActiveSince(accountManagerId: string, now: Date) {
+  const sessions = await loadSessionsSince(supabaseAdmin, accountManagerId, watDayStart(now));
+  return activeSince(sessions, now);
+}
 
 /** How far back a forgotten sign-out is still offered for fixing. */
 const UNRESOLVED_LOOKBACK_DAYS = 30;
@@ -97,6 +105,7 @@ async function loadDay(
     work_date: day.work_date as string,
     signed_in_at: day.signed_in_at as string,
     signed_out_at: (day.signed_out_at as string | null) ?? null,
+    sign_in_source: day.sign_in_source === "activity" ? "activity" : null,
     breaks: (breaks ?? []).map((entry) => ({
       id: entry.id as string,
       started_at: entry.started_at as string,
@@ -118,13 +127,16 @@ export async function GET(request: Request) {
     loadDay(auth.user.id, workDate),
     loadUnresolved(auth.user.id, now),
   ]);
+  const status = deriveStatus(day);
 
   return NextResponse.json({
     work_date: workDate,
     server_time: now.toISOString(),
-    status: deriveStatus(day),
+    status,
     day,
     ...unresolved,
+    // Working without having signed in: when the current stretch began.
+    active_since: status === "off" ? await currentActiveSince(auth.user.id, now) : null,
   });
 }
 
@@ -173,10 +185,16 @@ export async function POST(request: Request) {
   }
 
   if (action === "sign_in") {
+    // A forgotten sign-in may start from when today's activity began —
+    // recomputed here, never taken from the browser, and only as far back
+    // as the recorded activity goes.
+    const since =
+      body.from_activity === true ? await currentActiveSince(auth.user.id, now) : null;
     const { error } = await supabaseAdmin.from("attendance_days").insert({
       account_manager_id: auth.user.id,
       work_date: workDate,
-      signed_in_at: nowIso,
+      signed_in_at: since ?? nowIso,
+      sign_in_source: since ? "activity" : null,
     });
     if (error) {
       // 23505 = the unique (account_manager_id, work_date) index; a double

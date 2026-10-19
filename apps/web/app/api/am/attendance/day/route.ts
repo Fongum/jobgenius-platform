@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const { data: days, error: daysError } = await supabaseAdmin
     .from("attendance_days")
     .select(
-      "id, account_manager_id, work_date, signed_in_at, signed_out_at, adjusted_by, adjusted_at, adjustment_note, close_source, requested_sign_out_at, requested_at, request_note"
+      "id, account_manager_id, work_date, signed_in_at, signed_out_at, adjusted_by, adjusted_at, adjustment_note, close_source, requested_sign_out_at, requested_at, request_note, sign_in_source"
     )
     .eq("work_date", workDate)
     .order("signed_in_at", { ascending: true });
@@ -86,6 +86,7 @@ export async function GET(request: Request) {
     work_date: day.work_date as string,
     signed_in_at: day.signed_in_at as string,
     signed_out_at: (day.signed_out_at as string | null) ?? null,
+    sign_in_source: day.sign_in_source === "activity" ? "activity" : null,
     adjusted_by: (day.adjusted_by as string | null) ?? null,
     adjusted_at: (day.adjusted_at as string | null) ?? null,
     adjustment_note: (day.adjustment_note as string | null) ?? null,

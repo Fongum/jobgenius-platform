@@ -34,6 +34,8 @@ export type AttendanceDay = {
   long_shift_alerted_at?: string | null;
   /** Migration 117 — when the worker was asked if they forgot to sign out. */
   self_nudge_sent_at?: string | null;
+  /** Migration 127 — 'activity' when the sign-in was backdated to when work began. */
+  sign_in_source?: "activity" | null;
   /** Migration 127 — how the shift was closed; null on older rows. */
   close_source?: CloseSource | null;
   /** Migration 127 — a later sign-out the worker asked a manager to approve. */
@@ -501,6 +503,38 @@ export function suggestedSignOutAt(
   const blocks = clippedBlocks(day, now);
   if (blocks.length === 0) return null;
   return new Date(blocks[blocks.length - 1][1]).toISOString();
+}
+
+/** Working this long without signing in before the clock says so. */
+export const FORGOT_SIGN_IN_MINUTES = 10;
+
+/** WAT midnight at the start of the instant's WAT day. */
+export function watDayStart(instant: Date = new Date()): Date {
+  return new Date(`${watDate(instant)}T00:00:00+01:00`);
+}
+
+/**
+ * When the stretch of work someone is in right now began, for a person who
+ * has not signed in today — or null when they are not currently active, or
+ * have only just started. Never earlier than WAT midnight, so a late night
+ * on the dashboard cannot start today's shift.
+ *
+ * This is the earliest a forgotten sign-in may be backdated to: recorded
+ * activity is the evidence, so it needs nobody's approval.
+ */
+export function activeSince(
+  sessions: ActivitySession[],
+  now: Date = new Date()
+): string | null {
+  const blocks = activityBlocks(sessions);
+  const current = blocks[blocks.length - 1];
+  if (!current) return null;
+  const [start, end] = current;
+  // Still in it: the last heartbeat is within the grace period.
+  if (end < now.getTime()) return null;
+  const since = Math.max(start, watDayStart(now).getTime());
+  if (now.getTime() - since < FORGOT_SIGN_IN_MINUTES * MINUTE_MS) return null;
+  return new Date(since).toISOString();
 }
 
 /** Open shifts from earlier days that nobody has asked to fix yet. */

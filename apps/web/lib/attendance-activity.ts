@@ -179,3 +179,23 @@ export async function attachActivity<T extends ShiftLike>(
     return { ...shift, activity };
   });
 }
+
+/** One person's sessions that were still running at or after `since`. */
+export async function loadSessionsSince(
+  db: SupabaseClient,
+  accountManagerId: string,
+  since: Date
+): Promise<ActivitySession[]> {
+  const { data, error } = await db
+    .from("attendance_activity_sessions")
+    .select("started_at, last_seen_at")
+    .eq("account_manager_id", accountManagerId)
+    .gte("last_seen_at", since.toISOString())
+    .order("started_at", { ascending: true })
+    .limit(500);
+  if (error) {
+    console.error("[attendance:activity] session lookup failed", error);
+    return [];
+  }
+  return (data ?? []) as ActivitySession[];
+}
