@@ -84,7 +84,7 @@ describe("credited time", () => {
     expect(suggestedSignOutAt(day, NEXT_MORNING)).toBe("2026-10-13T16:55:00.000Z");
   });
 
-  it("does not count the hours between a midnight sign-in and the real start", () => {
+  it("counts a midnight sign-in only from the start of working hours", () => {
     // Production's 00:05 → 17:03 "17-hour day".
     const day = shift({
       work_date: "2026-09-09",
@@ -96,8 +96,10 @@ describe("credited time", () => {
       ],
     });
     expect(workedMs(day)).toBe(16 * H + 58 * M);
-    // 00:05–00:21 (1m + 15m grace) and 08:00–17:03 (clipped at sign-out).
-    expect(creditedWorkedMs(day)).toBe(16 * M + 9 * H + 3 * M);
+    // 09:00–17:03 WAT; the 00:05 blip is outside working hours.
+    expect(creditedWorkedMs(day)).toBe(8 * H + 3 * M);
+    // Even with no activity record, clock time is clipped the same way.
+    expect(creditedWorkedMs({ ...day, activity: [] })).toBe(8 * H + 3 * M);
   });
 
   it("takes recorded breaks off only where they overlap counted time", () => {
@@ -127,12 +129,21 @@ describe("credited time", () => {
     expect(creditedMs(day, NEXT_MORNING)).toBe(8 * H + 15 * M);
   });
 
-  it("still credits a stretch that started on the day and ran past midnight", () => {
+  it("starts an early arrival at 09:00 and stops at 18:00", () => {
     const day = shift({
-      signed_in_at: "2026-10-13T20:00:00Z", // 21:00 WAT
-      activity: [session("2026-10-13T20:00:00Z", "2026-10-13T23:30:00Z")], // 00:30 WAT
+      signed_in_at: "2026-10-13T07:15:00Z", // 08:15 WAT
+      signed_out_at: "2026-10-13T19:30:00Z", // 20:30 WAT
+      activity: [session("2026-10-13T07:15:00Z", "2026-10-13T19:30:00Z")],
     });
-    expect(creditedMs(day, NEXT_MORNING)).toBe(3 * H + 45 * M);
+    expect(creditedWorkedMs(day)).toBe(9 * H);
+  });
+
+  it("caps a forgotten sign-out's suggestion at the end of the working day", () => {
+    const day = shift({
+      activity: [session("2026-10-13T08:00:00Z", "2026-10-13T19:00:00Z")], // to 20:00 WAT
+    });
+    expect(suggestedSignOutAt(day, NEXT_MORNING)).toBe("2026-10-13T17:00:00.000Z"); // 18:00 WAT
+    expect(creditedWorkedMs(day, NEXT_MORNING)).toBe(9 * H);
   });
 
   it("falls back to clock time without an activity record", () => {
@@ -167,8 +178,15 @@ describe("decideForgottenSignOut", () => {
   });
 
   it("turns a later time into a request for a manager", () => {
-    const result = decideForgottenSignOut(withActivity, "2026-10-13T18:00:00Z", NEXT_MORNING);
+    // 17:58 WAT: after the last activity, still inside working hours.
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T16:58:00Z", NEXT_MORNING);
     expect(result).toMatchObject({ ok: true, kind: "request" });
+  });
+
+  it("refuses a time after working hours instead of asking a manager", () => {
+    const result = decideForgottenSignOut(withActivity, "2026-10-13T17:30:00Z", NEXT_MORNING);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/18:00/);
   });
 
   it("sends any time to a manager when there is no activity to check", () => {
@@ -386,13 +404,13 @@ describe("resolve route", () => {
     const mock = setupResolve();
     const res = await post({
       day_id: "day-1",
-      signed_out_at: "2026-10-13T18:30:00Z",
+      signed_out_at: "2026-10-13T16:58:00Z",
       note: "client calls",
     });
     expect((await res.json()).outcome).toBe("requested");
     const update = mock.callsFor("attendance_days", "update")[0];
     expect(update.payload).toMatchObject({
-      requested_sign_out_at: "2026-10-13T18:30:00.000Z",
+      requested_sign_out_at: "2026-10-13T16:58:00.000Z",
       request_note: "client calls",
     });
     expect((update.payload as Record<string, unknown>).signed_out_at).toBeUndefined();
@@ -418,25 +436,33 @@ describe("activeSince", () => {
     expect(
       activeSince(
         [
-          session("2026-10-13T05:00:00Z", "2026-10-13T05:30:00Z"), // 06:00 WAT, then 2h gap
-          session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z"),
+          session("2026-10-13T06:00:00Z", "2026-10-13T06:30:00Z"), // then a 1h40 gap
+          session("2026-10-13T08:10:00Z", "2026-10-13T08:29:00Z"), // 09:10 WAT
         ],
         NOW
       )
-    ).toBe("2026-10-13T07:40:00.000Z");
+    ).toBe("2026-10-13T08:10:00.000Z");
   });
 
   it("is null once they have gone quiet, or have only just started", () => {
     expect(activeSince([session("2026-10-13T07:00:00Z", "2026-10-13T08:00:00Z")], NOW)).toBeNull();
     expect(activeSince([session("2026-10-13T08:25:00Z", "2026-10-13T08:29:00Z")], NOW)).toBeNull();
+    expect(activeSince([session("2026-10-13T08:00:00Z", "2026-10-13T08:00:00Z")], NOW)).toBeNull();
     expect(activeSince([], NOW)).toBeNull();
   });
 
-  it("never reaches back before WAT midnight", () => {
-    const late = new Date("2026-10-12T23:30:00Z"); // 00:30 WAT on the 13th
+  it("never reaches back before working hours start", () => {
+    const early = [session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]; // from 08:40 WAT
+    expect(activeSince(early, NOW)).toBe("2026-10-13T08:00:00.000Z"); // 09:00 WAT
+    // Before 09:10 WAT there is nothing to backdate yet.
+    expect(activeSince(early, new Date("2026-10-13T08:05:00Z"))).toBeNull();
+    // A late night on the dashboard never starts the next day's shift.
     expect(
-      activeSince([session("2026-10-12T22:00:00Z", "2026-10-12T23:29:00Z")], late)
-    ).toBe("2026-10-12T23:00:00.000Z"); // 00:00 WAT
+      activeSince(
+        [session("2026-10-12T22:00:00Z", "2026-10-12T23:29:00Z")],
+        new Date("2026-10-12T23:30:00Z")
+      )
+    ).toBeNull();
   });
 });
 
@@ -473,8 +499,9 @@ describe("sign in from activity", () => {
   it("starts the shift when activity began, recomputed on the server", async () => {
     const mock = setupClock([session("2026-10-13T07:40:00Z", "2026-10-13T08:29:00Z")]);
     await signIn({ from_activity: true, signed_in_at: "2026-10-13T05:00:00Z" });
+    // Activity from 08:40 WAT; the shift starts when working hours do.
     expect(mock.payloadFor("attendance_days", "insert")).toMatchObject({
-      signed_in_at: "2026-10-13T07:40:00.000Z",
+      signed_in_at: "2026-10-13T08:00:00.000Z",
       sign_in_source: "activity",
     });
   });

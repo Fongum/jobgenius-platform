@@ -7,7 +7,10 @@ import {
   formatDuration,
   watDateLabel,
   watTime,
-  workedMs,
+  WORK_DAY_END,
+  officeClockMs,
+  officeHours,
+  watDate,
   type AttendanceAction,
   type AttendanceDay,
   type AttendanceStatus,
@@ -204,7 +207,12 @@ export default function AttendanceClock() {
   }
 
   const clock = watTime(now);
-  const worked = day ? formatDuration(workedMs(day, now)) : null;
+  // Counted time: only inside working hours, so an 08:15 sign-in shows 0m
+  // until 09:00 and the counter stops at 18:00.
+  const worked = day ? formatDuration(officeClockMs(day, now)) : null;
+  // Still signed in after the working day: the cue to sign out.
+  const pastEndOfDay =
+    Boolean(day) && !day?.signed_out_at && now.getTime() >= officeHours(watDate(now))[1];
 
   const suggested = unresolved?.suggested_sign_out_at
     ? watTime(unresolved.suggested_sign_out_at)
@@ -356,10 +364,22 @@ export default function AttendanceClock() {
           >
             {status === "on_break" ? "End Break" : "Break"}
           </button>
+          {pastEndOfDay && (
+            <span className="hidden lg:inline text-xs text-amber-800">
+              It&apos;s past {WORK_DAY_END}
+            </span>
+          )}
           <button
             onClick={() => perform("sign_out")}
             disabled={busy}
-            className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+            className={`px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 ${
+              pastEndOfDay ? "ring-2 ring-amber-300 animate-pulse" : ""
+            }`}
+            title={
+              pastEndOfDay
+                ? `Working hours ended at ${WORK_DAY_END}. Time after that is not counted.`
+                : undefined
+            }
           >
             Sign Out
           </button>

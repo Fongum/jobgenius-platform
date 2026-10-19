@@ -29,7 +29,7 @@ function row(
 }
 
 function shift(amId: string, date: string, hours: number | null): ShiftRow {
-  const signedIn = new Date(`${date}T07:00:00Z`);
+  const signedIn = new Date(`${date}T08:00:00Z`); // 09:00 WAT
   return {
     id: `${amId}-${date}`,
     account_manager_id: amId,

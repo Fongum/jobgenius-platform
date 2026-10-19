@@ -372,6 +372,23 @@ export function validateAdjustedSignOut(
 // Computed on read, never written, so these numbers can change later
 // without touching anyone's records.
 
+/**
+ * Working hours, WAT. Only time inside them counts: arriving early starts
+ * the count at WORK_DAY_START, and staying late — or forgetting to sign
+ * out — adds nothing after WORK_DAY_END.
+ */
+export const WORK_DAY_START = "09:00";
+export const WORK_DAY_END = "18:00";
+
+/** [start, end] of working hours on a WAT date, as epoch ms. */
+export function officeHours(workDate: string): [number, number] {
+  // WAT is UTC+1 with no daylight saving, so the offset is a constant.
+  return [
+    Date.parse(`${workDate}T${WORK_DAY_START}:00+01:00`),
+    Date.parse(`${workDate}T${WORK_DAY_END}:00+01:00`),
+  ];
+}
+
 /** Silence after which the heartbeat starts a new session (server write). */
 export const SESSION_SPLIT_MINUTES = 10;
 /** Gaps up to this long between sessions still count as work. */
@@ -441,31 +458,52 @@ function clippedBlocks(day: AttendanceDay, now: Date): Interval[] {
  */
 export function creditedMs(day: AttendanceDay, now: Date = new Date()): number | null {
   if (!hasActivityRecord(day)) return null;
+  const [officeStart, officeEnd] = officeHours(day.work_date);
+  const counted: Interval[] = [];
+  for (const [s, e] of clippedBlocks(day, now)) {
+    const cs = Math.max(s, officeStart);
+    const ce = Math.min(e, officeEnd);
+    if (ce > cs) counted.push([cs, ce]);
+  }
+  return countedMinusBreaks(day, counted);
+}
+
+/**
+ * Clock time inside working hours: sign-in to sign-out (or now), clipped
+ * to WORK_DAY_START–WORK_DAY_END, breaks removed. The fallback for shifts
+ * without an activity record, and for a manager's correction.
+ */
+export function officeClockMs(day: AttendanceDay, now: Date = new Date()): number {
   const start = ms(day.signed_in_at);
   if (start === null) return 0;
-  const end = windowEnd(day, start, now);
-  const blocks = clippedBlocks(day, now);
+  const [officeStart, officeEnd] = officeHours(day.work_date);
+  const s = Math.max(start, officeStart);
+  const e = Math.min(ms(day.signed_out_at) ?? now.getTime(), officeEnd);
+  return e > s ? countedMinusBreaks(day, [[s, e]]) : 0;
+}
 
+function countedMinusBreaks(day: AttendanceDay, counted: Interval[]): number {
   let covered = 0;
-  for (const [s, e] of blocks) covered += e - s;
+  for (const [s, e] of counted) covered += e - s;
 
+  const lastEnd = counted.length > 0 ? counted[counted.length - 1][1] : 0;
   let onBreak = 0;
   for (const entry of day.breaks) {
     const bs = ms(entry.started_at);
     if (bs === null) continue;
-    const be = Math.min(ms(entry.ended_at) ?? end, end);
-    for (const [s, e] of blocks) {
+    // A break nobody ended runs to the end of counted time, not forever.
+    const be = ms(entry.ended_at) ?? lastEnd;
+    for (const [s, e] of counted) {
       const overlap = Math.min(be, e) - Math.max(bs, s);
       if (overlap > 0) onBreak += overlap;
     }
   }
-
   return Math.max(0, covered - onBreak);
 }
 
 /**
  * The hours a shift counts for in reports, or null when the record cannot
- * support a number.
+ * support a number. Only time inside working hours ever counts.
  *
  *   * corrected by a people manager — their time stands, clock maths,
  *   * activity on record — credited time,
@@ -476,10 +514,10 @@ export function creditedWorkedMs(
   day: AttendanceDay,
   now: Date = new Date()
 ): number | null {
-  if (day.adjusted_at && day.signed_out_at) return workedMs(day, now);
+  if (day.adjusted_at && day.signed_out_at) return officeClockMs(day, now);
   const credited = creditedMs(day, now);
   if (credited !== null) return credited;
-  return isStale(day, now) ? null : workedMs(day, now);
+  return isStale(day, now) ? null : officeClockMs(day, now);
 }
 
 /** Last heartbeat the shift is credited with, as ISO, or null. */
@@ -494,7 +532,9 @@ export function lastActivityAt(day: AttendanceDay, now: Date = new Date()): stri
 
 /**
  * The sign-out time activity supports for a forgotten shift: the end of
- * the last stretch of work, grace included. Null without activity.
+ * the last stretch of work, grace included, but no later than the end of
+ * the working day — time after that does not count anyway. Null without
+ * activity.
  */
 export function suggestedSignOutAt(
   day: AttendanceDay,
@@ -502,7 +542,9 @@ export function suggestedSignOutAt(
 ): string | null {
   const blocks = clippedBlocks(day, now);
   if (blocks.length === 0) return null;
-  return new Date(blocks[blocks.length - 1][1]).toISOString();
+  const signedIn = ms(day.signed_in_at) ?? 0;
+  const latest = Math.max(officeHours(day.work_date)[1], signedIn);
+  return new Date(Math.min(blocks[blocks.length - 1][1], latest)).toISOString();
 }
 
 /** Working this long without signing in before the clock says so. */
@@ -532,7 +574,8 @@ export function activeSince(
   const [start, end] = current;
   // Still in it: the last heartbeat is within the grace period.
   if (end < now.getTime()) return null;
-  const since = Math.max(start, watDayStart(now).getTime());
+  // Never before WAT midnight, nor before the working day starts.
+  const since = Math.max(start, watDayStart(now).getTime(), officeHours(watDate(now))[0]);
   if (now.getTime() - since < FORGOT_SIGN_IN_MINUTES * MINUTE_MS) return null;
   return new Date(since).toISOString();
 }
@@ -578,6 +621,15 @@ export function decideForgottenSignOut(
   if (!check.ok) return check;
 
   const chosen = new Date(check.iso).getTime();
+  const officeEnd = officeHours(day.work_date)[1];
+  // Time after the working day does not count, so asking a manager to
+  // approve it would only create work. Say so instead.
+  if (chosen > officeEnd + MINUTE_MS && (ms(day.signed_in_at) ?? 0) < officeEnd) {
+    return {
+      ok: false,
+      error: `Hours count until ${WORK_DAY_END}. If you stayed to the end of the day, enter ${WORK_DAY_END}.`,
+    };
+  }
   const suggested = suggestedSignOutAt(day, now);
   const suggestedMs = suggested ? new Date(suggested).getTime() : null;
 

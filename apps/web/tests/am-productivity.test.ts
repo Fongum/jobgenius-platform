@@ -32,14 +32,14 @@ function row(
   };
 }
 
-/** A closed shift of `hours` starting 08:00 WAT on `date`. */
+/** A closed shift of `hours` starting 09:00 WAT (start of working hours) on `date`. */
 function shift(
   amId: string,
   date: string,
   hours: number | null,
   breaks: ShiftRow["breaks"] = []
 ): ShiftRow {
-  const signedIn = new Date(`${date}T07:00:00Z`); // 08:00 WAT
+  const signedIn = new Date(`${date}T08:00:00Z`); // 09:00 WAT
   return {
     id: `${amId}-${date}`,
     account_manager_id: amId,

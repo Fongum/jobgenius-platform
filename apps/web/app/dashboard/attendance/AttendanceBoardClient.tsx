@@ -6,6 +6,8 @@ import {
   STATUS_LABELS,
   LONG_SHIFT_HOURS,
   CLOSE_SOURCE_LABELS,
+  WORK_DAY_END,
+  WORK_DAY_START,
   breakMs,
   creditedWorkedMs,
   deriveStatus,
@@ -173,8 +175,9 @@ export default function AttendanceBoardClient({
           <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
           <p className="text-sm text-gray-500 mt-1">
             Sign in and out from the clock in the header. All times are{" "}
-            {WAT_LABEL} and recorded by the server. Worked time counts the part
-            of the shift with dashboard activity; gaps up to an hour still count.
+            {WAT_LABEL} and recorded by the server. Working hours are{" "}
+            {WORK_DAY_START}–{WORK_DAY_END}: only time inside them counts, and only
+            the part with dashboard activity (gaps up to an hour still count).
           </p>
         </div>
 
