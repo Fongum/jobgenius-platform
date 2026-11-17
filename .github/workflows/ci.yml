@@ -68,7 +68,7 @@ jobs:
   # regressions that the jsdom suites in apps/web can only approximate.
   extension-browser:
     name: Extension — Playwright fixtures
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
       run:
@@ -106,7 +106,7 @@ jobs:
   # error-banner validation, wizard traversal) in headless Chromium.
   runner-browser:
     name: Cloud runner — Workday fixture
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 6
     defaults:
       run:
