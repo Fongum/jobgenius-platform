@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 129: Recurring plan ($150/month, 3.5% success fee)
+-- Migration 131: Recurring plan ($150/month, 3.5% success fee)
 --
 -- Adds a third campaign tier to the AM-managed path (job_seekers.campaign_tier
 -- + the Client Collaboration Agreement). Recurring has no setup fee; it is a
