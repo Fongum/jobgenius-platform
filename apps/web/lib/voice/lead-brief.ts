@@ -188,6 +188,8 @@ export function buildLeadCallBrief(params: {
       : "Standard pricing.",
     success_fee_terms:
       "5% of first-year base salary plus guaranteed cash, only after they accept an offer, due within two months of their start date.",
+    interview_guarantee:
+      "Essentials and Premium include an interview guarantee. If they haven't had an interview within 90 days of activating their campaign, we review their targets, resume and outreach with them and keep working at no extra cost until they do. Any recruiter screen or employer interview for a specific role counts. It does not guarantee a number of interviews, an offer, or a timeline, and it does not make the setup fee refundable. Recurring does not include it. Fidelis explains the full conditions in the agreement.",
     recurring_price: `$${RECURRING_PLAN.monthlyFeeUsd} per month`,
     recurring_terms:
       "No setup fee and no promotion. 3.5% of first-year base salary plus guaranteed cash for each offer they accept that JobGenius worked on, due within two months of that job's start date. They can stop anytime; the fee still applies to offers accepted within 12 months after stopping that came from JobGenius's work. Suggest it only for people deliberately pursuing more than one offer.",

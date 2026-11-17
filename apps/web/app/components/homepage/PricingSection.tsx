@@ -4,6 +4,7 @@ import ScrollReveal from "../ScrollReveal";
 import {
   CAMPAIGN_FEE_LABEL,
   FREE_ACCOUNT_PRICING_MESSAGE,
+  INTERVIEW_GUARANTEE_SUMMARY,
   LAUNCH_PRICING_END_LABEL,
   LIST_PRICING_START_LABEL,
   PRICING_PLANS,
@@ -253,6 +254,10 @@ export default function PricingSection({
             <p>
               <strong className="text-gray-900">Success fee for Recurring:</strong>{" "}
               {RECURRING_SUCCESS_FEE_SUMMARY}
+            </p>
+            <p>
+              <strong className="text-gray-900">Interview guarantee:</strong>{" "}
+              {INTERVIEW_GUARANTEE_SUMMARY}
             </p>
             <p className="text-gray-400">
               No accepted offer, no success fee. Account creation and strategy review happen before

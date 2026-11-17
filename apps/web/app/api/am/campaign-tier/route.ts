@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/auth";
 import { requireAMAccessToSeeker } from "@/lib/am-access";
+import { computeInterviewGuarantee } from "@/lib/interview-guarantee";
 import {
   PRICING_PLANS,
   RECURRING_PLAN,
@@ -10,7 +11,8 @@ import {
 } from "@/app/components/homepage/marketingContent";
 
 /**
- * GET    /api/am/campaign-tier?job_seeker_id=…  → Recurring monthly payments recorded for the client.
+ * GET    /api/am/campaign-tier?job_seeker_id=…  → Recurring monthly payments recorded for the client,
+ *                                                  plus the Interview Guarantee status.
  * POST   /api/am/campaign-tier    → assign the client's plan (Essentials/Premium/Recurring)
  *                                    and snapshot its setup fee (or monthly fee) onto the seeker.
  * PATCH  /api/am/campaign-tier    → Essentials/Premium: mark the setup fee as paid.
@@ -41,17 +43,33 @@ export async function GET(request: Request) {
   const access = await requireAMAccessToSeeker(request.headers, jobSeekerId);
   if (!access.ok) return access.response;
 
-  const { data, error } = await supabaseAdmin
-    .from("subscription_payments")
-    .select("id, period_start, amount_usd, paid_at")
-    .eq("job_seeker_id", jobSeekerId)
-    .order("period_start", { ascending: false })
-    .limit(24);
+  const [{ data, error }, { data: seeker }, { data: interviews }] = await Promise.all([
+    supabaseAdmin
+      .from("subscription_payments")
+      .select("id, period_start, amount_usd, paid_at")
+      .eq("job_seeker_id", jobSeekerId)
+      .order("period_start", { ascending: false })
+      .limit(24),
+    supabaseAdmin
+      .from("job_seekers")
+      .select("campaign_tier, setup_fee_paid_at")
+      .eq("id", jobSeekerId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("interviews")
+      .select("scheduled_at, status")
+      .eq("job_seeker_id", jobSeekerId),
+  ]);
   if (error) {
     console.error("Subscription payments lookup failed:", error);
     return NextResponse.json({ error: "Failed to load monthly payments." }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, payments: data ?? [] });
+  const interviewGuarantee = computeInterviewGuarantee({
+    tier: seeker?.campaign_tier,
+    activatedAt: seeker?.setup_fee_paid_at,
+    interviews: interviews ?? [],
+  });
+  return NextResponse.json({ ok: true, payments: data ?? [], interview_guarantee: interviewGuarantee });
 }
 
 export async function POST(request: Request) {
