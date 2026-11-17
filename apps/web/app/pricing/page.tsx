@@ -25,9 +25,9 @@ function pricingCopy() {
   const e = currentSetupFeeUsd(essentials);
   const p = currentSetupFeeUsd(premium);
   const launch = isLaunchPricingActive();
-  const title = `Pricing: Essentials $${e} / Premium $${p}${launch ? " Launch Pricing" : ""} + 5% Success Fee`;
+  const title = `Pricing: Essentials $${e} / Premium $${p}${launch ? " (20% Off)" : ""} + 5% Success Fee`;
   const description = `Transparent JobGenius pricing. Creating an account is free. Activate Essentials at $${e} or Premium at $${p}${
-    launch ? ` (launch pricing through ${LAUNCH_PRICING_END_LABEL})` : ""
+    launch ? ` (20% off through ${LAUNCH_PRICING_END_LABEL})` : ""
   }, with a 5% success fee only after you receive and accept an offer.`;
   return { title, description, launch };
 }
