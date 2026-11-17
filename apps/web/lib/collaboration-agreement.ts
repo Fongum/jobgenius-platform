@@ -19,6 +19,7 @@ import {
   CAMPAIGN_FEE_LABEL,
   currentSetupFeeUsd,
   successFeeRateForTier,
+  INTERVIEW_GUARANTEE_DAYS,
   type CampaignTier,
 } from "@/app/components/homepage/marketingContent";
 
@@ -91,6 +92,15 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
     : section(6, "Campaign Setup & Execution Fee", `
     <p class="fee">Client agrees to pay JobGenius a one-time, non-refundable ${CAMPAIGN_FEE_LABEL} of <strong>${setupFeeLine}</strong>, due at the time Client activates a paid Job Search Campaign. This fee covers campaign setup, positioning, and execution of the selected plan, and is separate from and in addition to the placement fee described in Section 7.</p>`);
 
+  // Interview Guarantee: Essentials/Premium only (and the plan-not-yet-chosen preview,
+  // which shows those two plans). Recurring keeps the plain no-guarantee sentence.
+  const days = INTERVIEW_GUARANTEE_DAYS;
+  const scopeGuaranteeText = isRecurring
+    ? `<p>JobGenius does not guarantee interviews, job offers, salary levels, employer decisions, work authorization outcomes, or employment.</p>`
+    : `<p><strong>Interview Guarantee (Essentials and Premium plans).</strong> If Client has not had at least one Qualifying Interview within ninety (${days}) days after Campaign Activation, JobGenius will, at no additional charge: (a) complete a documented review of Client's role targets, resume, and outreach approach with Client within ten (10) business days; and (b) continue providing the services of Client's plan, and not end active services under Section 11, until Client's first Qualifying Interview. This is Client's sole remedy if no Qualifying Interview occurs; it does not make the ${CAMPAIGN_FEE_LABEL} refundable.</p>
+    <p>"Qualifying Interview" means an interview or screening call (including a recruiter screen) scheduled with an employer or recruiter for a specific role, whether or not Client attends it or receives an offer. "Campaign Activation" means the date JobGenius confirms receipt of the ${CAMPAIGN_FEE_LABEL} in full. The ${days}-day period does not run while Client has paused the search, has not provided requested information or approvals, or is not meeting the responsibilities in Sections 3, 4, 5 and 10. JobGenius may still end services under Section 11 for Client's material breach of this Agreement.</p>
+    <p>Except for this Interview Guarantee, JobGenius does not guarantee interviews, job offers, salary levels, employer decisions, work authorization outcomes, or employment.</p>`;
+
   const recurringPlacementNote = isRecurring
     ? `<p>Under the Recurring plan, the placement fee applies to each Accepted Placement, including where Client accepts more than one offer.</p>`
     : "";
@@ -123,7 +133,7 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
 
   ${section(1, "Scope of Collaboration", `
     <p>JobGenius may provide resume optimization, LinkedIn optimization, job-search coordination, application support, recruiter outreach, interview scheduling, interview preparation, portfolio guidance, follow-up support, and related career services. Client and JobGenius agree to work as a coordinated team toward securing suitable employment opportunities.</p>
-    <p>JobGenius does not guarantee interviews, job offers, salary levels, employer decisions, work authorization outcomes, or employment.</p>`)}
+    ${scopeGuaranteeText}`)}
 
   ${section(2, "Designated Communication Channels", `
     <p>Client agrees that the designated job-search email account approved by JobGenius will be used for applications, recruiter communications, interview invitations, employer updates, background-check coordination, and offer-related correspondence whenever reasonably possible.</p>

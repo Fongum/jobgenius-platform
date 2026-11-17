@@ -27,6 +27,7 @@ export const WHY_TRUST_POINTS = [
   "7-day strategy preview before paid execution",
   "Clear service agreement before campaign activation",
   "Human account manager support",
+  "Interview guarantee on Essentials and Premium",
   "Transparent success-fee structure",
   "Real client success stories",
   "No job-offer guarantees or misleading promises",
@@ -171,6 +172,20 @@ export const RECURRING_PLAN = {
 
 export const RECURRING_SUCCESS_FEE_SUMMARY =
   "3.5% of first-year base salary plus guaranteed cash compensation for each offer you accept that JobGenius worked on, due within two months of that job's start date. Stop anytime; the fee still applies to offers accepted within 12 months after stopping that came from JobGenius's work.";
+
+// ─── Interview guarantee (Essentials + Premium) ─────────────────
+// Owner decision 2026-11-17: no interview count is promised. If the client has no
+// Qualifying Interview within 90 days of activation, JobGenius keeps working at no
+// extra charge, reviews the strategy, and won't end the service until the first
+// interview. Full terms: Collaboration Agreement section 1.
+export const INTERVIEW_GUARANTEE_DAYS = 90;
+
+export const INTERVIEW_GUARANTEE_SUMMARY =
+  "Essentials and Premium include an interview guarantee: if you haven't had an interview within 90 days of activating your campaign, we review your strategy with you and keep working at no extra cost until you do. Conditions apply; see the service agreement.";
+
+export function hasInterviewGuarantee(tier: string | null | undefined): boolean {
+  return tier === "essentials" || tier === "premium";
+}
 
 export type CampaignTier = "essentials" | "premium" | "recurring";
 export const CAMPAIGN_TIERS: readonly CampaignTier[] = ["essentials", "premium", "recurring"];

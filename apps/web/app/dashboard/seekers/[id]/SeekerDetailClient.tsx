@@ -20,6 +20,7 @@ import {
   currentSetupFeeUsd,
   type CampaignTier,
 } from "@/app/components/homepage/marketingContent";
+import type { InterviewGuaranteeStatus } from "@/lib/interview-guarantee";
 import type { ClientDeliveryCaseBundle } from "@/lib/client-delivery";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
 
@@ -906,6 +907,41 @@ function ResumeTemplateCard({ seeker }: { seeker: SeekerData }) {
   );
 }
 
+function InterviewGuaranteeBanner({ status }: { status: InterviewGuaranteeStatus }) {
+  const date = status.guaranteeDate
+    ? new Date(`${status.guaranteeDate}T00:00:00`).toLocaleDateString()
+    : null;
+  const first = status.firstQualifyingInterviewAt
+    ? new Date(status.firstQualifyingInterviewAt).toLocaleDateString()
+    : "";
+  const view: Record<InterviewGuaranteeStatus["state"], { cls: string; text: string } | null> = {
+    not_applicable: null,
+    not_activated: {
+      cls: "border-gray-200 bg-gray-50 text-gray-600",
+      text: "Interview guarantee: the 90 days start once the setup fee is marked paid.",
+    },
+    met: {
+      cls: "border-green-200 bg-green-50 text-green-800",
+      text: `Interview guarantee met: first interview ${first}.`,
+    },
+    on_track: {
+      cls: "border-gray-200 bg-gray-50 text-gray-700",
+      text: `Interview guarantee: day ${status.daysElapsed} of 90, no interview logged yet (deadline ${date}).`,
+    },
+    at_risk: {
+      cls: "border-amber-200 bg-amber-50 text-amber-800",
+      text: `Interview guarantee at risk: ${status.daysRemaining} days left (deadline ${date}) and no interview logged. Log any interview, or plan the strategy review.`,
+    },
+    triggered: {
+      cls: "border-red-200 bg-red-50 text-red-800",
+      text: `Interview guarantee triggered on ${date}: no interview logged. The client is owed a strategy review within 10 business days, and service cannot be ended (except for client breach) until their first interview. Days the client paused or did not respond extend the deadline.`,
+    },
+  };
+  const v = view[status.state];
+  if (!v) return null;
+  return <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${v.cls}`}>{v.text}</div>;
+}
+
 type SubscriptionPayment = { id: string; period_start: string; amount_usd: number; paid_at: string };
 
 function CampaignTierCard({
@@ -922,23 +958,26 @@ function CampaignTierCard({
   const [paidAt, setPaidAt] = useState<string | null>(seeker.setup_fee_paid_at ?? null);
   const [stoppedAt, setStoppedAt] = useState<string | null>(seeker.subscription_cancelled_at ?? null);
   const [payments, setPayments] = useState<SubscriptionPayment[]>([]);
+  const [guarantee, setGuarantee] = useState<InterviewGuaranteeStatus | null>(null);
   const [periodStart, setPeriodStart] = useState<string>(() => new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState<"tier" | "paid" | "stop" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tier !== "recurring") return;
+    if (!tier) return;
     let cancelled = false;
     fetch(`/api/am/campaign-tier?job_seeker_id=${encodeURIComponent(seeker.id)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled && data?.ok) setPayments(data.payments ?? []);
+        if (cancelled || !data?.ok) return;
+        setPayments(data.payments ?? []);
+        setGuarantee(data.interview_guarantee ?? null);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [tier, seeker.id]);
+  }, [tier, seeker.id, paidAt]);
 
   const call = async (method: "POST" | "PATCH" | "DELETE", extra: Record<string, unknown> = {}) => {
     const res = await fetch("/api/am/campaign-tier", {
@@ -1072,6 +1111,8 @@ function CampaignTierCard({
           )}
         </div>
       )}
+
+      {tier && tier !== "recurring" && guarantee && <InterviewGuaranteeBanner status={guarantee} />}
 
       {tier === "recurring" && (
         <div className="mt-3 space-y-3 rounded-lg border border-gray-200 px-3 py-3">
