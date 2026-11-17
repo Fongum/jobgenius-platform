@@ -148,3 +148,38 @@ export function isLaunchPricingActive(now: Date = new Date()): boolean {
 export function currentSetupFeeUsd(plan: PricingPlan, now: Date = new Date()): number {
   return isLaunchPricingActive(now) ? plan.launchSetupFeeUsd : plan.listSetupFeeUsd;
 }
+
+// ─── Recurring plan ─────────────────────────────────────────────
+// Monthly subscription for clients deliberately pursuing multiple offers. No setup fee.
+// The 20% registration promotion does NOT apply (owner has not approved a monthly
+// discount), so the price is fixed at the list rate.
+export const RECURRING_PLAN = {
+  name: "Recurring",
+  badge: "Ongoing search",
+  monthlyFeeUsd: 150,
+  successFeeRate: 0.035,
+  description: "An ongoing managed search, billed monthly, for clients pursuing multiple offers.",
+  features: [
+    "Ongoing role-matched applications while subscribed",
+    "Built for pursuing more than one offer",
+    "Dedicated account manager support",
+    "Portal with real-time visibility",
+    "Stop anytime with written notice",
+  ],
+  exclusions: [] as string[],
+} as const;
+
+export const RECURRING_SUCCESS_FEE_SUMMARY =
+  "3.5% of first-year base salary plus guaranteed cash compensation for each offer you accept that JobGenius worked on, due within two months of that job's start date. Stop anytime; the fee still applies to offers accepted within 12 months after stopping that came from JobGenius's work.";
+
+export type CampaignTier = "essentials" | "premium" | "recurring";
+export const CAMPAIGN_TIERS: readonly CampaignTier[] = ["essentials", "premium", "recurring"];
+
+export function isCampaignTier(value: unknown): value is CampaignTier {
+  return typeof value === "string" && (CAMPAIGN_TIERS as readonly string[]).includes(value);
+}
+
+/** Success (placement) fee rate for a plan: 5% Essentials/Premium, 3.5% Recurring. */
+export function successFeeRateForTier(tier: string | null | undefined): number {
+  return tier === "recurring" ? RECURRING_PLAN.successFeeRate : 0.05;
+}

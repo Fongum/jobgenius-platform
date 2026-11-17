@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAM, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
+import { resolveCommissionRate } from "@/lib/billing/commission-rate";
 
 export async function POST(request: Request) {
   const auth = await requireAM(request);
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
       role,
       base_salary: baseSalary,
       guaranteed_compensation: guaranteed,
+      commission_rate: await resolveCommissionRate(jobSeekerId),
       reported_by: "am",
       reported_by_user_id: auth.user.id,
       offer_accepted_at: offerAcceptedAt,

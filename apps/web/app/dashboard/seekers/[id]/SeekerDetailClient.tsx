@@ -14,7 +14,12 @@ import {
   type JobGeniusReport,
 } from "@/lib/jobgenius/report";
 import { RESUME_TEMPLATES, type ResumeTemplateId } from "@/lib/resume-templates/types";
-import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
+import {
+  PRICING_PLANS,
+  RECURRING_PLAN,
+  currentSetupFeeUsd,
+  type CampaignTier,
+} from "@/app/components/homepage/marketingContent";
 import type { ClientDeliveryCaseBundle } from "@/lib/client-delivery";
 import { buildMatchExplanation } from "@/lib/matching/explanations";
 
@@ -65,9 +70,11 @@ interface SeekerData {
   email: string;
   collaboration_agreement_requested_at?: string | null;
   collaboration_agreement_signed_at?: string | null;
-  campaign_tier?: "essentials" | "premium" | null;
+  campaign_tier?: CampaignTier | null;
   setup_fee_usd?: number | null;
   setup_fee_paid_at?: string | null;
+  monthly_fee_usd?: number | null;
+  subscription_cancelled_at?: string | null;
   resume_template_id?: ResumeTemplateId | null;
   phone: string | null;
   location: string | null;
@@ -899,39 +906,69 @@ function ResumeTemplateCard({ seeker }: { seeker: SeekerData }) {
   );
 }
 
+type SubscriptionPayment = { id: string; period_start: string; amount_usd: number; paid_at: string };
+
 function CampaignTierCard({
   seeker,
   tier,
   onTierChange,
 }: {
   seeker: SeekerData;
-  tier: "essentials" | "premium" | null;
-  onTierChange: (tier: "essentials" | "premium", setupFeeUsd: number) => void;
+  tier: CampaignTier | null;
+  onTierChange: (tier: CampaignTier) => void;
 }) {
   const [setupFeeUsd, setSetupFeeUsd] = useState<number | null>(seeker.setup_fee_usd ?? null);
+  const [monthlyFeeUsd, setMonthlyFeeUsd] = useState<number | null>(seeker.monthly_fee_usd ?? null);
   const [paidAt, setPaidAt] = useState<string | null>(seeker.setup_fee_paid_at ?? null);
-  const [saving, setSaving] = useState<"tier" | "paid" | null>(null);
+  const [stoppedAt, setStoppedAt] = useState<string | null>(seeker.subscription_cancelled_at ?? null);
+  const [payments, setPayments] = useState<SubscriptionPayment[]>([]);
+  const [periodStart, setPeriodStart] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [saving, setSaving] = useState<"tier" | "paid" | "stop" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const selectTier = async (value: "essentials" | "premium") => {
+  useEffect(() => {
+    if (tier !== "recurring") return;
+    let cancelled = false;
+    fetch(`/api/am/campaign-tier?job_seeker_id=${encodeURIComponent(seeker.id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data?.ok) setPayments(data.payments ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [tier, seeker.id]);
+
+  const call = async (method: "POST" | "PATCH" | "DELETE", extra: Record<string, unknown> = {}) => {
+    const res = await fetch("/api/am/campaign-tier", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_seeker_id: seeker.id, ...extra }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  };
+
+  const selectTier = async (value: CampaignTier) => {
+    if (value === "recurring" && tier !== "recurring") {
+      const ok = window.confirm(
+        `Switch this client to the Recurring plan ($${RECURRING_PLAN.monthlyFeeUsd}/month, 3.5% success fee)?`
+      );
+      if (!ok) return;
+    }
     setError(null);
     setSaving("tier");
     try {
-      const res = await fetch("/api/am/campaign-tier", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_seeker_id: seeker.id, tier: value }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        setError(data.error || "Failed to set the campaign tier.");
-        return;
-      }
+      const data = await call("POST", { tier: value });
       setSetupFeeUsd(data.setup_fee_usd);
+      setMonthlyFeeUsd(data.monthly_fee_usd);
       setPaidAt(null);
-      onTierChange(data.campaign_tier, data.setup_fee_usd);
-    } catch {
-      setError("Failed to set the campaign tier.");
+      setStoppedAt(null);
+      onTierChange(data.campaign_tier);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to set the campaign tier.");
     } finally {
       setSaving(null);
     }
@@ -941,35 +978,61 @@ function CampaignTierCard({
     setError(null);
     setSaving("paid");
     try {
-      const res = await fetch("/api/am/campaign-tier", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_seeker_id: seeker.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        setError(data.error || "Failed to mark the setup fee as paid.");
-        return;
+      if (tier === "recurring") {
+        const data = await call("PATCH", { period_start: periodStart });
+        setPayments((prev) =>
+          [data.payment as SubscriptionPayment, ...prev].sort((a, b) =>
+            b.period_start.localeCompare(a.period_start)
+          )
+        );
+      } else {
+        const data = await call("PATCH");
+        setPaidAt(data.setup_fee_paid_at);
       }
-      setPaidAt(data.setup_fee_paid_at);
-    } catch {
-      setError("Failed to mark the setup fee as paid.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to record the payment.");
     } finally {
       setSaving(null);
     }
   };
 
+  const stopSubscription = async () => {
+    if (!window.confirm("Record that this client stopped their Recurring subscription?")) return;
+    setError(null);
+    setSaving("stop");
+    try {
+      const data = await call("DELETE");
+      setStoppedAt(data.subscription_cancelled_at);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to stop the subscription.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const options: { value: CampaignTier; name: string; price: string }[] = [
+    ...PRICING_PLANS.map((plan) => ({
+      value: plan.name.toLowerCase() as CampaignTier,
+      name: plan.name,
+      price: `$${currentSetupFeeUsd(plan).toLocaleString()} setup fee · 5%`,
+    })),
+    {
+      value: "recurring",
+      name: RECURRING_PLAN.name,
+      price: `$${RECURRING_PLAN.monthlyFeeUsd}/month · 3.5%`,
+    },
+  ];
+
   return (
-    <Section title="Campaign Plan & Setup Fee">
-      <div className="flex gap-2">
-        {PRICING_PLANS.map((plan) => {
-          const value = plan.name.toLowerCase() as "essentials" | "premium";
-          const isActive = tier === value;
+    <Section title="Campaign Plan & Fees">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {options.map((option) => {
+          const isActive = tier === option.value;
           return (
             <button
-              key={value}
+              key={option.value}
               type="button"
-              onClick={() => selectTier(value)}
+              onClick={() => selectTier(option.value)}
               disabled={saving === "tier"}
               className={`flex-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50 ${
                 isActive
@@ -977,16 +1040,14 @@ function CampaignTierCard({
                   : "border-gray-200 text-gray-600 hover:border-gray-300"
               }`}
             >
-              <span className="font-medium">{plan.name}</span>
-              <span className="block text-xs text-gray-400">
-                ${currentSetupFeeUsd(plan).toLocaleString()} setup fee
-              </span>
+              <span className="font-medium">{option.name}</span>
+              <span className="block text-xs text-gray-400">{option.price}</span>
             </button>
           );
         })}
       </div>
 
-      {tier && (
+      {tier && tier !== "recurring" && (
         <div className="mt-3 flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
           <div className="text-sm text-gray-600">
             Setup fee:{" "}
@@ -1011,6 +1072,72 @@ function CampaignTierCard({
           )}
         </div>
       )}
+
+      {tier === "recurring" && (
+        <div className="mt-3 space-y-3 rounded-lg border border-gray-200 px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+            <span>
+              Monthly fee:{" "}
+              <span className="font-medium text-gray-900">
+                ${(monthlyFeeUsd ?? RECURRING_PLAN.monthlyFeeUsd).toLocaleString()}
+              </span>
+              {stoppedAt ? (
+                <span className="ml-2 text-xs text-gray-500">
+                  Stopped {new Date(stoppedAt).toLocaleDateString()}
+                </span>
+              ) : (
+                <span className="ml-2 text-xs text-green-600">Active</span>
+              )}
+            </span>
+            {!stoppedAt && (
+              <button
+                type="button"
+                onClick={stopSubscription}
+                disabled={saving === "stop"}
+                className="px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs rounded-lg disabled:opacity-50"
+              >
+                {saving === "stop" ? "Saving…" : "Client stopped subscription"}
+              </button>
+            )}
+          </div>
+
+          {!stoppedAt && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-gray-500" htmlFor="period-start">
+                Month starting
+              </label>
+              <input
+                id="period-start"
+                type="date"
+                value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+              />
+              <button
+                type="button"
+                onClick={markPaid}
+                disabled={saving === "paid" || !periodStart}
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg disabled:opacity-50"
+              >
+                {saving === "paid" ? "Saving…" : "Record month as paid"}
+              </button>
+            </div>
+          )}
+
+          {payments.length > 0 ? (
+            <ul className="divide-y divide-gray-100 text-xs text-gray-600">
+              {payments.map((p) => (
+                <li key={p.id} className="flex justify-between py-1">
+                  <span>Month from {new Date(`${p.period_start}T00:00:00`).toLocaleDateString()}</span>
+                  <span className="font-medium text-gray-900">${Number(p.amount_usd).toLocaleString()} paid</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-amber-600">No monthly payments recorded yet.</p>
+          )}
+        </div>
+      )}
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </Section>
   );
@@ -1020,7 +1147,7 @@ function AgreementPushCard({ seeker }: { seeker: SeekerData }) {
   const [requestedAt, setRequestedAt] = useState<string | null>(
     seeker.collaboration_agreement_requested_at ?? null
   );
-  const [tier, setTier] = useState<"essentials" | "premium" | null>(seeker.campaign_tier ?? null);
+  const [tier, setTier] = useState<CampaignTier | null>(seeker.campaign_tier ?? null);
   const signedAt = seeker.collaboration_agreement_signed_at ?? null;
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);

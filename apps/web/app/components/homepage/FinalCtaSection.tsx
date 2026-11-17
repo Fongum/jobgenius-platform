@@ -1,7 +1,7 @@
 import Link from "next/link";
 import CapacityNotice, { type CapacityNoticeSummary } from "../CapacityNotice";
 import ScrollReveal from "../ScrollReveal";
-import { PRICING_PLANS, currentSetupFeeUsd } from "./marketingContent";
+import { PRICING_PLANS, RECURRING_PLAN, currentSetupFeeUsd } from "./marketingContent";
 
 export default function FinalCtaSection({
   capacitySummary,
@@ -30,7 +30,7 @@ export default function FinalCtaSection({
           <p className="text-lg text-gray-400 mb-8 max-w-xl mx-auto">
             Upload your resume, tell us your targets, and let a dedicated
             search owner take it from there. Creating an account is free, and
-            paid campaign activation starts at ${currentSetupFeeUsd(PRICING_PLANS[0])} with the success fee only
+            paid plans start at ${currentSetupFeeUsd(PRICING_PLANS[0])} one-time or ${RECURRING_PLAN.monthlyFeeUsd}/month, with the success fee only
             due after an accepted offer.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">

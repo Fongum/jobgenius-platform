@@ -32,6 +32,10 @@ export const FAQS = [
     a: "The success fee is 5% of your first-year base salary plus any guaranteed cash compensation, such as a signing bonus. It only applies after you receive and accept an offer, and it is due within two months of your employment start date. If you do not accept an offer, no success fee is charged.",
   },
   {
+    q: "Is there a monthly option?",
+    a: "Yes. The Recurring plan is $150 a month with no setup fee, for clients who want an ongoing search and may pursue more than one offer. Its success fee is 3.5% of first-year base salary plus guaranteed cash for each offer you accept that JobGenius worked on, due within two months of that job's start date. You can stop anytime with written notice; the fee still applies to offers accepted within 12 months after stopping that came from JobGenius's work.",
+  },
+  {
     q: "Can I pause or stop if my plans change?",
     a: "Yes. You can pause your search at any time by contacting your account manager. We work around your timeline, whether you need time before interviews or you are targeting a specific start date.",
   },

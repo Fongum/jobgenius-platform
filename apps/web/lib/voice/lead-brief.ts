@@ -5,6 +5,7 @@
 import {
   LAUNCH_PRICING_END_LABEL,
   PRICING_PLANS,
+  RECURRING_PLAN,
   currentSetupFeeUsd,
   isLaunchPricingActive,
 } from "@/app/components/homepage/marketingContent";
@@ -187,5 +188,8 @@ export function buildLeadCallBrief(params: {
       : "Standard pricing.",
     success_fee_terms:
       "5% of first-year base salary plus guaranteed cash, only after they accept an offer, due within two months of their start date.",
+    recurring_price: `$${RECURRING_PLAN.monthlyFeeUsd} per month`,
+    recurring_terms:
+      "No setup fee and no promotion. 3.5% of first-year base salary plus guaranteed cash for each offer they accept that JobGenius worked on, due within two months of that job's start date. They can stop anytime; the fee still applies to offers accepted within 12 months after stopping that came from JobGenius's work. Suggest it only for people deliberately pursuing more than one offer.",
   };
 }

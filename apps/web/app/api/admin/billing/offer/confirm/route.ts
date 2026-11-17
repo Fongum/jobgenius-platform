@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/auth";
 import { sendAndLogEmail } from "@/lib/messaging/send-and-log";
 import { computePlacementFee } from "@/lib/billing/commission";
+import { resolveCommissionRate } from "@/lib/billing/commission-rate";
 
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -55,16 +56,23 @@ export async function POST(request: Request) {
   const amConfirmed = offer.am_confirmed_at || updateFields.am_confirmed_at;
 
   if (seekerConfirmed && amConfirmed) {
+    // Rate snapshotted when the offer was reported; older offers fall back to the signed rate.
+    const rate =
+      Number(offer.commission_rate) > 0
+        ? Number(offer.commission_rate)
+        : await resolveCommissionRate(offer.job_seeker_id);
     const fee = computePlacementFee({
       baseSalary: Number(offer.base_salary),
       guaranteedCompensation: offer.guaranteed_compensation,
       startDate: offer.start_date,
       offerAcceptedAt: offer.offer_accepted_at,
+      rate,
     });
 
     Object.assign(updateFields, {
       status: "accepted",
       commission_amount: fee.commissionAmount,
+      commission_rate: fee.rate,
       commission_due_date: fee.dueDate,
       commission_extended_due_date: fee.extendedDueDate,
       commission_status: "pending",
