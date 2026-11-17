@@ -2,7 +2,6 @@ import { getCurrentUser, supabaseAdmin } from "@/lib/auth";
 import {
   generateCollaborationAgreementHTML,
   AGREEMENT_VERSION,
-  DEFAULT_COMMISSION_RATE,
 } from "@/lib/collaboration-agreement";
 import AgreementClient from "./AgreementClient";
 
@@ -12,7 +11,7 @@ export default async function AgreementPage() {
 
   const { data: seeker } = await supabaseAdmin
     .from("job_seekers")
-    .select("full_name, email, collaboration_agreement_requested_at")
+    .select("full_name, email, collaboration_agreement_requested_at, campaign_tier, setup_fee_usd, monthly_fee_usd")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -31,7 +30,10 @@ export default async function AgreementPage() {
     generateCollaborationAgreementHTML({
       clientName,
       clientEmail,
-      commissionRatePercent: DEFAULT_COMMISSION_RATE * 100,
+      // Show the client their own plan terms (rate, setup or monthly fee) before signing.
+      campaignTier: seeker?.campaign_tier ?? null,
+      setupFeeUsd: seeker?.setup_fee_usd ?? null,
+      monthlyFeeUsd: seeker?.monthly_fee_usd ?? null,
     });
 
   return (

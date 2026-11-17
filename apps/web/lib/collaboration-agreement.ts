@@ -2,18 +2,24 @@
 // JobGenius — Client Collaboration, Communication, Offer Disclosure
 // & Placement Fee Agreement.
 //
-// Two-part fee structure: a one-time Campaign Setup & Execution Fee due at
-// campaign activation (amount set by the Client's selected plan, see
-// PRICING_PLANS), plus a 5% success fee on an Accepted Placement, due within
-// two months of the employment start date (extension up to three months).
+// Essentials/Premium: a one-time Campaign Setup & Execution Fee due at campaign
+// activation (amount set by the Client's selected plan, see PRICING_PLANS), plus
+// a 5% success fee on an Accepted Placement.
+// Recurring: a monthly subscription fee (RECURRING_PLAN, no setup fee), plus a
+// 3.5% success fee on each Accepted Placement.
+// Success fees are due within two months of the employment start date
+// (extension up to three months).
 // Bump AGREEMENT_VERSION whenever the legal text changes so prior
 // acceptances stay auditable.
 // ============================================================
 
 import {
   PRICING_PLANS,
+  RECURRING_PLAN,
   CAMPAIGN_FEE_LABEL,
   currentSetupFeeUsd,
+  successFeeRateForTier,
+  type CampaignTier,
 } from "@/app/components/homepage/marketingContent";
 
 export const AGREEMENT_VERSION = "2026-07-collaboration-v2";
@@ -24,16 +30,18 @@ export interface CollaborationAgreementParams {
   clientEmail: string;
   /** ISO date the agreement takes effect (defaults to today). */
   effectiveDate?: string;
-  /** Placement fee as a percentage, e.g. 5. */
+  /** Placement fee as a percentage, e.g. 5. Defaults to the rate for campaignTier. */
   commissionRatePercent?: number;
   /** The typed e-signature (client full name). Present once signed. */
   signatureName?: string | null;
   /** ISO timestamp of acceptance. Present once signed. */
   agreedDate?: string | null;
   /** Client's selected plan (job_seekers.campaign_tier). Unset shows both plan fees as a range. */
-  campaignTier?: "essentials" | "premium" | null;
+  campaignTier?: CampaignTier | null;
   /** Fee locked in when the tier was chosen (job_seekers.setup_fee_usd); wins over today's price. */
   setupFeeUsd?: number | null;
+  /** Recurring only: monthly fee locked in when the tier was chosen (job_seekers.monthly_fee_usd). */
+  monthlyFeeUsd?: number | null;
 }
 
 function esc(value: string): string {
@@ -54,7 +62,11 @@ function fmtDate(iso?: string | null): string {
 export function generateCollaborationAgreementHTML(params: CollaborationAgreementParams): string {
   const clientName = esc(params.clientName || "");
   const clientEmail = esc(params.clientEmail || "");
-  const pct = params.commissionRatePercent ?? DEFAULT_COMMISSION_RATE * 100;
+  const isRecurring = params.campaignTier === "recurring";
+  const pct =
+    params.commissionRatePercent ??
+    Math.round(successFeeRateForTier(params.campaignTier) * 1000) / 10;
+  const monthlyFee = params.monthlyFeeUsd ?? RECURRING_PLAN.monthlyFeeUsd;
   const effective = fmtDate(params.effectiveDate ?? new Date().toISOString());
   const signature = params.signatureName ? esc(params.signatureName) : "________________________________";
   const signedDate = params.agreedDate ? fmtDate(params.agreedDate) : "________________________________";
@@ -62,7 +74,7 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
   const section = (n: number, title: string, body: string) =>
     `<h2>${n}. ${title}</h2>${body}`;
 
-  const selectedPlan = params.campaignTier
+  const selectedPlan = params.campaignTier && !isRecurring
     ? PRICING_PLANS.find((plan) => plan.name.toLowerCase() === params.campaignTier)
     : undefined;
 
@@ -71,6 +83,17 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
     : PRICING_PLANS.map((plan) => `$${currentSetupFeeUsd(plan).toLocaleString()} (${plan.name} plan)`).join(
         " or "
       );
+
+  const feeSection = isRecurring
+    ? section(6, "Monthly Subscription Fee (Recurring Plan)", `
+    <p class="fee">Client agrees to pay JobGenius a Monthly Subscription Fee of <strong>$${monthlyFee.toLocaleString()} per month</strong> (Recurring plan), due at the start of each monthly service period, beginning when Client activates the Recurring plan. The Recurring plan has no ${CAMPAIGN_FEE_LABEL}.</p>
+    <p>Client may stop the subscription at any time by written notice to JobGenius. Services continue through the end of the monthly period already paid, and no further monthly fees are charged after that period. Monthly fees for periods that have started are non-refundable. Stopping the subscription does not end the placement-fee obligations in Sections 7, 8 and 11.</p>`)
+    : section(6, "Campaign Setup & Execution Fee", `
+    <p class="fee">Client agrees to pay JobGenius a one-time, non-refundable ${CAMPAIGN_FEE_LABEL} of <strong>${setupFeeLine}</strong>, due at the time Client activates a paid Job Search Campaign. This fee covers campaign setup, positioning, and execution of the selected plan, and is separate from and in addition to the placement fee described in Section 7.</p>`);
+
+  const recurringPlacementNote = isRecurring
+    ? `<p>Under the Recurring plan, the placement fee applies to each Accepted Placement, including where Client accepts more than one offer.</p>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8" />
@@ -123,13 +146,13 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
     <p>Client must notify JobGenius within twenty-four (24) hours of receiving any recruiter outreach, interview invitation, request for resume or references, compensation discussion, background-check update, rejection, withdrawal, verbal offer, or written offer.</p>
     <p>For every offer, Client must provide a complete copy, screenshot, or written summary showing the employer, position, employment type, base compensation, guaranteed compensation, anticipated start date, and any material conditions. This disclosure is required for transparency, service coordination, and placement-fee administration.</p>`)}
 
-  ${section(6, "Campaign Setup & Execution Fee", `
-    <p class="fee">Client agrees to pay JobGenius a one-time, non-refundable ${CAMPAIGN_FEE_LABEL} of <strong>${setupFeeLine}</strong>, due at the time Client activates a paid Job Search Campaign. This fee covers campaign setup, positioning, and execution of the selected plan, and is separate from and in addition to the placement fee described in Section 7.</p>`)}
+  ${feeSection}
 
   ${section(7, "Placement Fee and Fee Trigger", `
     <p class="fee">Client agrees to pay JobGenius a placement fee equal to <strong>${pct}% of the Client's gross first-year base salary plus guaranteed cash compensation</strong> for an Accepted Placement.</p>
     <p>"Accepted Placement" means an employment offer accepted by Client that results from, relates to, or is materially supported by JobGenius services, including applications, recruiter outreach, resume submission, LinkedIn optimization, referrals, interview preparation, career coaching, or job-search strategy.</p>
-    <p>The placement fee applies regardless of whether the employer, recruiter, or opportunity communicates with Client through a personal email address, LinkedIn account, phone number, job board, referral, or other channel.</p>`)}
+    <p>The placement fee applies regardless of whether the employer, recruiter, or opportunity communicates with Client through a personal email address, LinkedIn account, phone number, job board, referral, or other channel.</p>
+    ${recurringPlacementNote}`)}
 
   ${section(8, "Payment Timing and Approved Extension", `
     <p>The placement fee is due in full within two (2) months after Client's employment start date. JobGenius may approve a written payment extension of up to three (3) months after the employment start date. Any extension must document the agreed installment amounts and due dates.</p>`)}
@@ -141,7 +164,7 @@ export function generateCollaborationAgreementHTML(params: CollaborationAgreemen
     <p>Client agrees to provide accurate information, respond promptly to reasonable requests, attend scheduled interviews and preparation sessions, communicate professionally, and promptly advise JobGenius of changes to availability, job preferences, work authorization, compensation expectations, or search status.</p>`)}
 
   ${section(11, "Termination and Continuing Fee Obligation", `
-    <p>Either party may end active services by written notice. The Campaign Setup &amp; Execution Fee is non-refundable once campaign work has begun. The placement fee remains due if Client accepts an offer within twelve (12) months after termination where the opportunity was introduced, supported, applied to, submitted, referred, or materially advanced through JobGenius during the active service period.</p>`)}
+    <p>Either party may end active services by written notice. ${isRecurring ? "Monthly Subscription Fees for periods that have started are non-refundable." : "The Campaign Setup &amp; Execution Fee is non-refundable once campaign work has begun."} The placement fee remains due if Client accepts an offer within twelve (12) months after termination where the opportunity was introduced, supported, applied to, submitted, referred, or materially advanced through JobGenius during the active service period.</p>`)}
 
   ${section(12, "Privacy and Records", `
     <p>JobGenius will use Client information solely for agreed career services and will take reasonable steps to protect Client documents and personal information. Client authorizes JobGenius to maintain records of applications, recruiter communications, interview activity, and offer documentation for service-management, transparency, and payment-administration purposes.</p>`)}

@@ -1,7 +1,8 @@
 // ============================================================
-// Placement fee (commission) computation — Client Collaboration Agreement §6/§7.
+// Placement fee (commission) computation — Client Collaboration Agreement §7/§8.
 //
-//   fee  = 5% of (base salary + guaranteed cash compensation)
+//   fee  = rate × (base salary + guaranteed cash compensation)
+//          rate = 5% Essentials/Premium, 3.5% Recurring (the rate the client signed)
 //   due  = 2 months after the employment START date
 //   ext  = 3 months after the employment START date (approved extension)
 //
@@ -13,6 +14,8 @@ export const PLACEMENT_FEE_RATE = 0.05;
 
 export interface PlacementFee {
   commissionAmount: number;
+  /** Rate applied, e.g. 0.05. */
+  rate: number;
   /** ISO date (YYYY-MM-DD). */
   dueDate: string;
   /** ISO date (YYYY-MM-DD). */
@@ -26,9 +29,13 @@ export function computePlacementFee(input: {
   startDate?: string | null;
   /** Offer-acceptance date (fallback anchor). */
   offerAcceptedAt: string;
+  /** Success-fee rate the client signed. Defaults to 5%. */
+  rate?: number | null;
 }): PlacementFee {
   const guaranteed = Number(input.guaranteedCompensation) || 0;
-  const commissionAmount = (Number(input.baseSalary) + guaranteed) * PLACEMENT_FEE_RATE;
+  const rate = Number(input.rate) > 0 ? Number(input.rate) : PLACEMENT_FEE_RATE;
+  const commissionAmount =
+    Math.round((Number(input.baseSalary) + guaranteed) * rate * 100) / 100;
 
   const anchor = new Date(input.startDate ?? input.offerAcceptedAt);
   const dueDate = new Date(anchor);
@@ -38,7 +45,13 @@ export function computePlacementFee(input: {
 
   return {
     commissionAmount,
+    rate,
     dueDate: dueDate.toISOString().split("T")[0],
     extendedDueDate: extendedDueDate.toISOString().split("T")[0],
   };
+}
+
+/** "5%" / "3.5%" */
+export function formatFeeRate(rate: number): string {
+  return `${Math.round(rate * 1000) / 10}%`;
 }

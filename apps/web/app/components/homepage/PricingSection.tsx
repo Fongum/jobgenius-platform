@@ -7,6 +7,8 @@ import {
   LAUNCH_PRICING_END_LABEL,
   LIST_PRICING_START_LABEL,
   PRICING_PLANS,
+  RECURRING_PLAN,
+  RECURRING_SUCCESS_FEE_SUMMARY,
   SUCCESS_FEE_SUMMARY,
   currentSetupFeeUsd,
   isLaunchPricingActive,
@@ -210,10 +212,47 @@ export default function PricingSection({
             </div>
           </div>
 
+          <div className="mx-auto mt-8 max-w-4xl rounded-2xl border-2 border-gray-200 bg-white p-8 transition-all hover:border-violet-200 hover:shadow-lg">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="md:max-w-sm">
+                <div className="mb-3 inline-block rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                  {RECURRING_PLAN.badge}
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">{RECURRING_PLAN.name}</h3>
+                <p className="mt-1 text-sm text-gray-500">{RECURRING_PLAN.description}</p>
+                <p className="mt-4 text-4xl font-extrabold text-gray-900">
+                  {formatUsd(RECURRING_PLAN.monthlyFeeUsd)}
+                  <span className="text-base font-semibold text-gray-500"> / month</span>
+                </p>
+                <p className="mt-1 text-xs text-gray-500">No setup fee. Stop anytime.</p>
+                <p className="mt-3 text-sm font-medium text-violet-700">
+                  Success Fee: 3.5% of first-year base + guaranteed cash, per accepted offer
+                </p>
+              </div>
+              <div className="flex flex-1 flex-col">
+                <ul className="mb-6 flex-1 space-y-3">
+                  {RECURRING_PLAN.features.map((feature) => (
+                    <PricingItem key={feature} included text={feature} />
+                  ))}
+                </ul>
+                <Link
+                  href="/signup"
+                  className="block rounded-xl border-2 border-violet-600 px-6 py-3 text-center font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                >
+                  Start with Recurring
+                </Link>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-8 space-y-2 text-center text-sm text-gray-500">
             <p>
-              <strong className="text-gray-900">Success fee for both plans:</strong>{" "}
+              <strong className="text-gray-900">Success fee for Essentials and Premium:</strong>{" "}
               {SUCCESS_FEE_SUMMARY}
+            </p>
+            <p>
+              <strong className="text-gray-900">Success fee for Recurring:</strong>{" "}
+              {RECURRING_SUCCESS_FEE_SUMMARY}
             </p>
             <p className="text-gray-400">
               No accepted offer, no success fee. Account creation and strategy review happen before

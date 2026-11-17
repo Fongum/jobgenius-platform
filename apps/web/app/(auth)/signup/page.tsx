@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
+import { PRICING_PLANS, RECURRING_PLAN, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
 import { CALL_CONSENT_TEXT } from "@/lib/voice/consent";
 import MultiCheckbox from "../../portal/components/MultiCheckbox";
 
@@ -428,7 +428,8 @@ function SignUpForm() {
               <div className="mt-6 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4 text-sm text-orange-900">
                 Creating your account is free. Paid campaign activation starts at{" "}
                 <strong>${currentSetupFeeUsd(PRICING_PLANS[0])} for Essentials</strong> or{" "}
-                <strong>${currentSetupFeeUsd(PRICING_PLANS[1])} for Premium</strong>, and
+                <strong>${currentSetupFeeUsd(PRICING_PLANS[1])} for Premium</strong> (or{" "}
+                <strong>${RECURRING_PLAN.monthlyFeeUsd}/month for Recurring</strong>), and
                 that only happens after consultation, strategy review, and your decision to move
                 forward.
               </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProfileData } from "../OnboardingWizard";
-import { PRICING_PLANS, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
+import { PRICING_PLANS, RECURRING_PLAN, currentSetupFeeUsd } from "@/app/components/homepage/marketingContent";
 
 // ─── Profile Score ─────────────────────────────────────────────
 
@@ -256,7 +256,7 @@ export default function ReviewFinishStep({
             <p className="mt-1 text-xs leading-relaxed text-gray-600">
               A one-time Campaign Setup &amp; Execution Fee (${currentSetupFeeUsd(PRICING_PLANS[0])} Essentials / ${currentSetupFeeUsd(PRICING_PLANS[1])} Premium) is due when
               you activate a paid Job Search Campaign, plus a 5% placement fee only when you accept a job
-              we help you land, due within two months of your start date. Your account manager will share
+              we help you land, due within two months of your start date. (On the Recurring plan it is ${RECURRING_PLAN.monthlyFeeUsd}/month with no setup fee and a 3.5% placement fee instead.) Your account manager will share
               the full service agreement for signature when the time is right.{" "}
               <a href="/portal/agreement" className="font-medium text-violet-700 hover:text-violet-900">
                 Preview the agreement

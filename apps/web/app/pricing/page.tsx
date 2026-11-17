@@ -16,6 +16,7 @@ import {
   LAUNCH_PRICING_END_LABEL,
   LAUNCH_PRICING_LAST_DAY_ISO,
   PRICING_PLANS,
+  RECURRING_PLAN,
   currentSetupFeeUsd,
   isLaunchPricingActive,
 } from "../components/homepage/marketingContent";
@@ -29,7 +30,7 @@ function pricingCopy() {
   const title = `Pricing: Essentials $${e} / Premium $${p}${launch ? " (20% Off)" : ""} + 5% Success Fee`;
   const description = `Transparent JobGenius pricing. Creating an account is free. Activate Essentials at $${e} or Premium at $${p}${
     launch ? ` (20% off through ${LAUNCH_PRICING_END_LABEL})` : ""
-  }, with a 5% success fee only after you receive and accept an offer.`;
+  }, with a 5% success fee only after you receive and accept an offer. Or choose Recurring at $${RECURRING_PLAN.monthlyFeeUsd}/month with a 3.5% success fee.`;
   return { title, description, launch };
 }
 
@@ -48,7 +49,8 @@ export const dynamic = "force-dynamic";
 
 const OFFER_DESCRIPTIONS: Record<string, string> = {
   "Essentials": "Consistent role-matched applications, guided outreach support, dedicated account manager support, and campaign visibility.",
-  "Premium": "Higher-touch campaign execution with priority outreach support, interview preparation, and dedicated account manager support."
+  "Premium": "Higher-touch campaign execution with priority outreach support, interview preparation, and dedicated account manager support.",
+  "Recurring": "An ongoing managed search billed monthly, for clients pursuing multiple offers. No setup fee; stop anytime."
 };
 
 function productJsonLd() {
@@ -59,7 +61,7 @@ function productJsonLd() {
     name: "JobGenius Managed Job Search",
     description,
     brand: { "@type": "Brand", name: "JobGenius" },
-    offers: PRICING_PLANS.map((plan) => ({
+    offers: PRICING_PLANS.map((plan): Record<string, string> => ({
       "@type": "Offer",
       name: plan.name,
       description: OFFER_DESCRIPTIONS[plan.name],
@@ -68,7 +70,17 @@ function productJsonLd() {
       ...(launch ? { priceValidUntil: LAUNCH_PRICING_LAST_DAY_ISO } : {}),
       url: "https://job-genius.com/pricing",
       availability: "https://schema.org/InStock",
-    })),
+    })).concat([
+      {
+        "@type": "Offer",
+        name: RECURRING_PLAN.name,
+        description: OFFER_DESCRIPTIONS[RECURRING_PLAN.name],
+        price: String(RECURRING_PLAN.monthlyFeeUsd),
+        priceCurrency: "USD",
+        url: "https://job-genius.com/pricing",
+        availability: "https://schema.org/InStock",
+      },
+    ]),
   };
 }
 

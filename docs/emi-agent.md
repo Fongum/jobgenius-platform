@@ -62,6 +62,7 @@ moves to the nurture email track (`next_action = nurture_email`).
 | `founder_name` | Fidelis |
 | `essentials_price`, `premium_price`, `pricing_note` | $400 · $800 · 20% registration promotion through January 31, 2027… |
 | `success_fee_terms` | 5% of first-year base plus guaranteed cash, only after… |
+| `recurring_price`, `recurring_terms` | $150 per month · No setup fee and no promotion. 3.5% of first-year base… |
 
 ## Prompt
 
@@ -104,6 +105,8 @@ is recorded so Fidelis can review it. You {{how_they_came_to_us}}. Is now still 
    - Then a one-time campaign setup fee: Essentials {{essentials_price}} or Premium
      {{premium_price}}. {{pricing_note}}
    - Plus a success fee: {{success_fee_terms}}
+   - Only if they want to pursue more than one offer, or ask for a monthly option:
+     Recurring at {{recurring_price}}. {{recurring_terms}}
    - Ask whether the setup fee works for them. If money is the issue, find out whether
      it's no budget at all, timing, or a need to pay in two instalments.
 6. Concerns: acknowledge, ask what is behind it, then ask "If we cleared that up, would

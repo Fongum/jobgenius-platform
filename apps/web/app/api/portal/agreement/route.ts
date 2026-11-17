@@ -3,8 +3,8 @@ import { requireJobSeeker, supabaseAdmin } from "@/lib/auth";
 import {
   generateCollaborationAgreementHTML,
   AGREEMENT_VERSION,
-  DEFAULT_COMMISSION_RATE,
 } from "@/lib/collaboration-agreement";
+import { successFeeRateForTier } from "@/app/components/homepage/marketingContent";
 
 /**
  * GET  /api/portal/agreement   → current agreement HTML + this seeker's
@@ -16,7 +16,7 @@ import {
 async function loadSeeker(id: string) {
   const { data } = await supabaseAdmin
     .from("job_seekers")
-    .select("full_name, email, campaign_tier, setup_fee_usd")
+    .select("full_name, email, campaign_tier, setup_fee_usd, monthly_fee_usd")
     .eq("id", id)
     .maybeSingle();
   return data;
@@ -44,14 +44,14 @@ export async function GET(request: Request) {
     generateCollaborationAgreementHTML({
       clientName,
       clientEmail,
-      commissionRatePercent: DEFAULT_COMMISSION_RATE * 100,
       campaignTier: seeker?.campaign_tier ?? null,
       setupFeeUsd: seeker?.setup_fee_usd ?? null,
+      monthlyFeeUsd: seeker?.monthly_fee_usd ?? null,
     });
 
   return NextResponse.json({
     version: AGREEMENT_VERSION,
-    commission_rate: DEFAULT_COMMISSION_RATE,
+    commission_rate: successFeeRateForTier(seeker?.campaign_tier),
     signed: Boolean(signed),
     signed_at: signed?.agreed_at ?? null,
     signature_name: signed?.signature_name ?? null,
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
   const { data: gate } = await supabaseAdmin
     .from("job_seekers")
     .select(
-      "full_name, email, collaboration_agreement_requested_at, collaboration_agreement_signed_at, campaign_tier, setup_fee_usd"
+      "full_name, email, collaboration_agreement_requested_at, collaboration_agreement_signed_at, campaign_tier, setup_fee_usd, monthly_fee_usd"
     )
     .eq("id", auth.user.id)
     .maybeSingle();
@@ -117,11 +117,11 @@ export async function POST(request: Request) {
     clientName,
     clientEmail,
     effectiveDate: agreedAt,
-    commissionRatePercent: DEFAULT_COMMISSION_RATE * 100,
     signatureName,
     agreedDate: agreedAt,
     campaignTier: gate?.campaign_tier ?? null,
     setupFeeUsd: gate?.setup_fee_usd ?? null,
+    monthlyFeeUsd: gate?.monthly_fee_usd ?? null,
   });
 
   const { data: agreement, error } = await supabaseAdmin
@@ -133,9 +133,10 @@ export async function POST(request: Request) {
         agreement_html: html,
         signature_name: signatureName,
         client_email: clientEmail,
-        commission_rate: DEFAULT_COMMISSION_RATE,
+        commission_rate: successFeeRateForTier(gate?.campaign_tier),
         campaign_tier: gate?.campaign_tier ?? null,
         setup_fee_usd: gate?.setup_fee_usd ?? null,
+        monthly_fee_usd: gate?.monthly_fee_usd ?? null,
         effective_date: agreedAt.split("T")[0],
         agreed_at: agreedAt,
         agreed_ip: ip,

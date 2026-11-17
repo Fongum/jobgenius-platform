@@ -29,6 +29,8 @@ describe("buildLeadCallBrief", () => {
     expect(v.lead_background).toContain("Resume: GRC Consultant at Deloitte");
     expect(v.essentials_price).toBe("$400");
     expect(v.pricing_note).toContain("20% registration promotion");
+    expect(v.recurring_price).toBe("$150 per month");
+    expect(v.recurring_terms).toContain("3.5%");
     expect(v.lead_timezone).toBe("unknown");
     expect(v.current_time_local).toContain("October 14, 2026");
   });
