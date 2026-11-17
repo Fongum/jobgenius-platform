@@ -39,6 +39,8 @@ export const SUCCESS_FEE_SUMMARY =
 // automatically from Feb 1, 2027, so pages that show prices must render dynamically or revalidate.
 export const LAUNCH_PRICING_ENDS_AT = new Date("2027-02-01T05:00:00Z");
 export const LAUNCH_PRICING_END_LABEL = "January 31, 2027";
+/** Last promotional day (YYYY-MM-DD), e.g. for schema.org priceValidUntil. */
+export const LAUNCH_PRICING_LAST_DAY_ISO = "2027-01-31";
 export const LIST_PRICING_START_LABEL = "February 1, 2027";
 
 export const PRICING_PLANS = [
